@@ -1,0 +1,10 @@
+# Default-deny publication boundary. Add paths only after explicit publication review.
+/*
+!/.gitignore
+!/README.md
+!/AGENTS.md
+!/docs/
+/docs/*
+!/docs/roadmap.md
+!/docs/architecture.md
+!/docs/publication.md
