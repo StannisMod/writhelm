@@ -1,0 +1,29 @@
+## Navigation
+
+**Getting Started**
+- [Home](Home.md)
+- [Quick Start](quick-start.md)
+
+**Integration Guides**
+- [Overview](integration-guides/index.md)
+- [Bare MCP](integration-guides/bare-mcp.md)
+- [CLAUDE.md-Driven](integration-guides/claude-md-driven.md)
+- [Note Schemas](integration-guides/note-schemas.md)
+- [Plugin: Skills & Hooks](integration-guides/plugin-skills-hooks.md)
+- [Orchestration Mode](integration-guides/orchestration-mode.md)
+- [Self-Improving Workflow](integration-guides/self-improving-workflow.md)
+
+**Reference**
+- [API Reference](api-reference.md)
+- [REST API Reference](api-rest.md)
+- [Config Reference](config-reference.md)
+- [Workflow Guide](workflow-guide.md)
+
+**Operations**
+- [Fleet Deployment](fleet-deployment.md)
+- [Reporting](reporting.md)
+
+**Project**
+- [GitHub Repository](https://github.com/jpicklyk/task-orchestrator)
+- [Container Registry](https://github.com/jpicklyk/task-orchestrator/pkgs/container/task-orchestrator)
+- [Changelog](https://github.com/jpicklyk/task-orchestrator/blob/main/CHANGELOG.md)

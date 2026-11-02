@@ -1,0 +1,300 @@
+import java.util.Properties
+
+plugins {
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ktlint)
+}
+
+ktlint {
+    version.set("1.5.0")
+    android.set(false)
+    outputToConsole.set(true)
+    ignoreFailures.set(false)
+    filter {
+        exclude("**/generated/**")
+    }
+}
+
+// Load version from centralized version.properties
+val versionProps = Properties()
+file("../version.properties").inputStream().use { versionProps.load(it) }
+val vMajor = versionProps.getProperty("VERSION_MAJOR", "2")
+val vMinor = versionProps.getProperty("VERSION_MINOR", "0")
+val vPatch = versionProps.getProperty("VERSION_PATCH", "0")
+val baseVersion = "$vMajor.$vMinor.$vPatch"
+
+// On non-main CI builds, append run number as build portion (e.g. 2.0.0.142)
+val ciBuildNumber = System.getenv("CI_BUILD_NUMBER")?.takeIf { it.isNotEmpty() }
+version = if (ciBuildNumber != null) "$baseVersion.$ciBuildNumber" else baseVersion
+
+// For git tag validation — always the clean semver, never with build suffix
+tasks.register("printTagVersion") {
+    doLast { println(baseVersion) }
+}
+
+// Generate build-info resource so the app can read its version at runtime
+val generateBuildInfo =
+    tasks.register("generateBuildInfo") {
+        val outputDir = layout.buildDirectory.dir("generated/resources/build-info")
+        val versionValue = version.toString()
+        inputs.property("version", versionValue)
+        outputs.dir(outputDir)
+        doLast {
+            val dir = outputDir.get().asFile.resolve("build-info")
+            dir.mkdirs()
+            dir.resolve("version.properties").writeText("version=$versionValue\n")
+        }
+    }
+sourceSets.main { resources.srcDir(generateBuildInfo) }
+
+group = "io.github.jpicklyk"
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Kotlin standard library and coroutines
+    implementation(libs.kotlin.stdlib)
+    implementation(libs.kotlinx.coroutines)
+    implementation(libs.kotlinx.coroutines.slf4j)
+
+    // MCP SDK
+    implementation(libs.mcp.sdk)
+
+    // Database
+    implementation(libs.sqlite)
+    implementation(libs.exposed.core)
+    implementation(libs.exposed.dao)
+    implementation(libs.exposed.jdbc)
+    implementation(libs.exposed.java.time)
+    implementation(libs.hikaricp)
+
+    // Flyway migration
+    implementation(libs.flyway.core)
+
+    // Logging
+    implementation(libs.slf4j)
+    implementation(libs.logback)
+    // compileOnly: kotlin-logging-jvm is already on the runtime classpath transitively via the
+    // MCP SDK. This adds no new runtime artifact -- it only lets CurrentMain.kt reference
+    // KotlinLoggingConfiguration at compile time to suppress its System.out startup banner.
+    compileOnly(libs.kotlin.logging.jvm)
+
+    // JSON serialization/deserialization
+    implementation(libs.kotlinx.serialization.json)
+
+    // YAML parsing
+    implementation(libs.snakeyaml)
+
+    // JSON Schema 2020-12 structural validation of config documents (infrastructure adapter only). The Jackson BOM
+    // pins its transitive Jackson artifacts to a patched release (see libs.versions.toml).
+    implementation(platform(libs.jackson.bom))
+    implementation(libs.json.schema.validator)
+
+    // Ktor BOM — version-aligns all ktor-* artifacts with the SDK's transitive Ktor
+    implementation(platform(libs.ktor.bom))
+    // CIO engine — not provided transitively by the MCP SDK, must be declared explicitly
+    implementation(libs.ktor.server.cio)
+    // SSE (Server-Sent Events) routing — used by Phase 6 REST API SSE endpoint
+    implementation(libs.ktor.server.sse)
+    // CORS plugin — env-driven origin allowlist for REST API cross-origin requests
+    implementation(libs.ktor.server.cors)
+    // StatusPages — REST /api/v1 safety net: an uncaught exception becomes a 500 internal ErrorDto, never exception text
+    implementation(libs.ktor.server.status.pages)
+    // ContentNegotiation — installs before mcpStreamableHttp so MCP SDK sees CN already present
+    implementation(libs.ktor.server.content.negotiation)
+    // kotlinx-serialization JSON adapter for Ktor ContentNegotiation
+    implementation(libs.ktor.serialization.kotlinx.json)
+    // Ktor HTTP client — used by JwksKeySetProvider for JWKS URI and OIDC discovery fetching
+    implementation(libs.ktor.client.cio)
+
+    // JWT / JWKS — used by JwtVerifier for JWT validation against JWKS key sets
+    implementation(libs.nimbus.jose.jwt)
+    // Google Tink — required at runtime by nimbus Ed25519Verifier; Tink serves EdDSA (Ed25519) verification on the API path (JwtVerifier)
+    implementation(libs.google.tink)
+
+    // Testing
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.mcp.sdk.testing)
+    testImplementation(libs.mockk)
+    testImplementation(libs.junit.api)
+    testImplementation(libs.junit.params)
+    testRuntimeOnly(libs.junit.engine)
+
+    // Konsist — architecture layering test (LayeringTest.kt)
+    testImplementation(libs.konsist)
+
+    // ASM - bytecode reader for the request-field consumption guard (RequestFieldConsumptionGuardTest.kt); test classpath only
+    testImplementation(libs.asm)
+
+    // Compile-only access to KotlinLoggingConfiguration for KotlinLoggingBannerGuardTest.kt
+    // (O5 drift guard). Does NOT change test-runtime resolution: kotlin-logging-jvm still reaches
+    // the test classpath only transitively via the MCP SDK, same as production compileOnly above.
+    testCompileOnly(libs.kotlin.logging.jvm)
+
+    // Ktor mock engine for hermetic HTTP tests
+    testImplementation(libs.ktor.client.mock)
+
+    // Ktor test-host — enables testApplication { } integration tests for REST API routes
+    testImplementation(libs.ktor.server.test.host)
+
+    // Coroutines test support
+    testImplementation(libs.kotlinx.coroutines.test)
+
+    // Bouncy Castle — provides OctetKeyPair raw key generation in tests
+    testImplementation(libs.bouncycastle.provider)
+}
+
+// Shared by `test` and `serialTest` (same JVM settings and task inputs).
+tasks.withType<Test>().configureEach {
+    // Force the test JVM to UTC so Exposed's javatime.timestamp column and our DB-side
+    // datetime('now') SQL agree on time-of-day interpretation. Production Docker containers
+    // default to UTC; pinning the test JVM to UTC keeps test behaviour identical to production
+    // and avoids timezone-shift surprises on developer machines in non-UTC zones (see EXPOSED-731
+    // fix in Exposed 1.0.0-beta-5+ for the underlying serialization mechanics).
+    systemProperty("user.timezone", "UTC")
+    jvmArgs("-Duser.timezone=UTC")
+
+    // Gradle forks the test worker with a default 512 MB max heap regardless of how much
+    // physical RAM is free. The suite spins up many concurrent Ktor `testApplication`
+    // instances over file-backed SQLite databases (notably the REST API route tests).
+    // HEAP_PLACEHOLDER
+    maxHeapSize = "1g"
+
+    // Run test classes in parallel worker JVMs. Each fork owns its own SQLite template and temp
+    // database files (SqliteTestDatabase), so forks share no database state; the heap cap above
+    // applies per fork.
+    maxParallelForks = 4
+
+    // TierClassificationConsistencyTest reads the fragment + its consumers at runtime. Declare them
+    // as task inputs so a markdown-only edit (with no Kotlin change) invalidates the cached test
+    // result instead of reporting UP-TO-DATE — otherwise Gradle's incremental cache (and CI's
+    // setup-gradle cache) would let tier-block drift slip through the guard. The consumer set is
+    // read from the same manifest the test and generate.mjs use, so the three cannot diverge.
+    val tierFragmentsDir = rootProject.file("claude-plugins/task-orchestrator/_fragments")
+    val tierConsumersManifest = tierFragmentsDir.resolve("tier-classification.consumers.txt")
+    val tierConsumerFiles =
+        tierConsumersManifest
+            .readLines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+            .map { rootProject.file(it) }
+    inputs
+        .files(
+            tierConsumersManifest,
+            tierFragmentsDir.resolve("tier-classification.md"),
+            *tierConsumerFiles.toTypedArray(),
+        ).withPropertyName("docsConsistencyInputs")
+
+    // DistributionManifestConsistencyTest (and DockerHealthcheckTest) read these repo-root
+    // distribution manifests directly at runtime. None of them live under current/ (Gradle's
+    // default source-set inputs), so without this declaration a manifest-only edit (e.g. bumping
+    // server.json's version or adding a Dockerfile ENV) would leave :current:test UP-TO-DATE and
+    // silently skip re-verification.
+    inputs
+        .files(
+            rootProject.file("Dockerfile"),
+            rootProject.file("docker-compose.yml"),
+            rootProject.file("server.json"),
+            rootProject.file("smithery.yaml"),
+            rootProject.file("current/docs/fleet-deployment.md"),
+        ).withPropertyName("distributionManifestInputs")
+
+    // KotlinLoggingBannerGuardTest reads the `kotlinLogging` version pin directly out of the
+    // catalog file at runtime and compares it to the resolved jar on the classpath. Declare the
+    // catalog as a task input so a version-only bump (no Kotlin source change) invalidates the
+    // cached test result instead of reporting UP-TO-DATE and silently skipping re-verification.
+    inputs
+        .files(rootProject.file("gradle/libs.versions.toml"))
+        .withPropertyName("kotlinLoggingCatalogInput")
+}
+
+tasks.test {
+    // Wall-clock- and CPU-sensitive tests carry @Tag("serial") and run in `serialTest`, alone in a
+    // single fork, so a neighbouring fork (or a test that deliberately pins every core) cannot
+    // starve them.
+    useJUnitPlatform { excludeTags("serial") }
+    finalizedBy("serialTest")
+}
+
+val serialTest by tasks.registering(Test::class) {
+    description = "Runs the @Tag(\"serial\") timing-sensitive tests in a single fork."
+    group = "verification"
+    val testTask = tasks.test.get()
+    testClassesDirs = testTask.testClassesDirs
+    classpath = testTask.classpath
+    useJUnitPlatform { includeTags("serial") }
+    maxParallelForks = 1
+    shouldRunAfter(testTask)
+    // A targeted `:current:test --tests X` run must not drag in the whole serial set.
+    // Target a serial test directly with `:current:serialTest --tests X`.
+    onlyIf {
+        testTask.filter.includePatterns.isEmpty() &&
+            (testTask.filter as org.gradle.api.internal.tasks.testing.filter.DefaultTestFilter).commandLineIncludePatterns.isEmpty()
+    }
+}
+
+// Rewrites the per-tool 4.0 schema goldens (src/test/resources/golden/tools/<tool>.<profile>.json) from the
+// ToolSpec registry and deletes stale ones. Run after any intentional tool-schema change, then commit the files.
+tasks.register<Test>("regenerateToolGoldens") {
+    description = "Regenerates the 4.0 tool schema goldens from the ToolSpec registry."
+    group = "verification"
+    val testTask = tasks.test.get()
+    testClassesDirs = testTask.testClassesDirs
+    classpath = testTask.classpath
+    useJUnitPlatform()
+    environment("REGENERATE_TOOL_GOLDENS", "true")
+    filter { includeTestsMatching("*ToolGoldenGenerator*") }
+    outputs.upToDateWhen { false }
+}
+
+// Rewrites the generated tool and error-catalog blocks of docs/api-reference.md from the ToolSpec registry.
+// Run after any intentional request-class, @Doc, error-set, profile or capability change, then commit the file.
+tasks.register<Test>("regenerateApiReference") {
+    description = "Regenerates the generated blocks of docs/api-reference.md from the ToolSpec registry."
+    group = "verification"
+    val testTask = tasks.test.get()
+    testClassesDirs = testTask.testClassesDirs
+    classpath = testTask.classpath
+    useJUnitPlatform()
+    environment("REGENERATE_API_REFERENCE", "true")
+    filter { includeTestsMatching("*ApiReferenceGenerator*") }
+    outputs.upToDateWhen { false }
+}
+
+kotlin {
+    jvmToolchain(21)
+}
+
+// Store/claim writes are confined by compiler opt-in markers (WriteConfinement.kt, WriteConfinementTest).
+// ~185 tests call store writes directly, so TEST compilation opts in; main compilation never does.
+tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileTestKotlin") {
+    compilerOptions {
+        optIn.addAll(
+            "io.github.jpicklyk.mcptask.current.application.port.StoreWrite",
+            "io.github.jpicklyk.mcptask.current.application.port.ClaimWrite",
+        )
+    }
+}
+
+tasks.jar {
+    manifest {
+        attributes["Main-Class"] = "io.github.jpicklyk.mcptask.current.CurrentMainKt"
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from(sourceSets.main.get().output)
+
+    dependsOn(configurations.runtimeClasspath)
+    from({
+        configurations.runtimeClasspath
+            .get()
+            .filter { it.name.endsWith("jar") }
+            .map { zipTree(it) }
+    })
+
+    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
+    archiveBaseName.set("mcp-task-orchestrator-current")
+}

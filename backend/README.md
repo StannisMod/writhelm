@@ -1,0 +1,372 @@
+# MCP Task Orchestrator
+
+**Server-enforced workflow discipline for AI agents.**
+
+Prompt-based frameworks hope the LLM follows instructions. This one blocks the call if it doesn't.
+
+[![Version](https://img.shields.io/github/v/tag/jpicklyk/task-orchestrator?sort=semver)](https://github.com/jpicklyk/task-orchestrator/releases)
+[![CI](https://github.com/jpicklyk/task-orchestrator/actions/workflows/test.yml/badge.svg)](https://github.com/jpicklyk/task-orchestrator/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-purple)](https://modelcontextprotocol.io)
+
+Task Orchestrator is an [MCP server](https://modelcontextprotocol.io) that gives AI coding agents a persistent work item graph with quality gates enforced by the server, not the prompt. It is built for developers running multi-agent or multi-session coding workflows: an orchestrator dispatching sub-agents, a fresh session picking up yesterday's work, or an autonomous loop draining a backlog. It ships as a Docker image, works with any MCP client, and has an optional [Claude Code plugin](#claude-code-plugin) that adds skills and hooks on top.
+
+> **New here? Start with the [illustrated field guide](https://jpicklyk.github.io/task-orchestrator/field-guide/).** It explains the ideas on this page in short visual pages, several of them interactive: fire triggers at a phase gate, click a work breakdown through its dependencies, and watch a schema resolve.
+
+---
+
+## The Problem
+
+Multi-agent workflows need infrastructure the model doesn't provide. When an orchestrator dispatches sub-agents across sessions, there's no built-in way to enforce what documentation must exist before work starts, track which agent made which change, or guarantee dependency ordering across a work breakdown. These are structural concerns — they belong in the server, not in prompts.
+
+Task Orchestrator puts them in the server. If a required design note isn't filled, `advance` returns an error naming the missing note. If an upstream dependency isn't complete, the transition is blocked. Every transition and note records who made it. A new session recovers the full state in one call instead of replaying a conversation. And the rules are YAML config, not hardcoded prompts - change them without changing code.
+
+## What It Looks Like
+
+```
+Morning — new session, new agent, zero context:
+
+Agent: items_read(select="context")
+       → 2 items in work, 1 blocked, 1 stalled (missing implementation-notes)
+Agent: items_read(select="history", since="2026-01-14T17:00:00Z")
+       → Recent transitions show orchestrator-1 dispatched 3 sub-agents yesterday
+
+Agent: advance(ops=[{ op: "transition", itemId: "a3f28c01", trigger: "start" }])
+       -> gate_blocked: "Item a3f28c01-... is missing 1 required notes." (detail.missing: requirements)
+
+Agent: notes_write(ops=[{ op: "upsert", itemId: "a3f28c01", key: "requirements", role: "queue",
+         body: "Validate email format, enforce password complexity..." }])
+       -> results[0]: { ok: true, id: "...", version: 1, created: true }
+
+Agent: advance(ops=[{ op: "transition", itemId: "a3f28c01", trigger: "start" }])
+       → queue → work. Caller recorded. No context rebuilding.
+```
+
+---
+
+## Quick Start
+
+**Prerequisite**: [Docker](https://www.docker.com/products/docker-desktop/) installed and running.
+
+### 1. Register the server
+
+The simplest setup is a per-session STDIO container: no port, no daemon, no REST API. Add it to your project's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "mcp-task-orchestrator": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "-v", "mcp-task-data:/app/data",
+        "ghcr.io/jpicklyk/task-orchestrator:latest"
+      ]
+    }
+  }
+}
+```
+
+Claude Code users can register the same shape from the CLI instead:
+
+```bash
+claude mcp add-json mcp-task-orchestrator '{
+  "command": "docker",
+  "args": ["run", "--rm", "-i", "-v", "mcp-task-data:/app/data", "ghcr.io/jpicklyk/task-orchestrator:latest"]
+}'
+```
+
+Restart your client. The server creates its SQLite database on first run. Without a config file every tool works in schema-free mode: no gates, no required notes. Add schemas when you want enforcement.
+
+### 2. Enable workflow schemas
+
+Create `.taskorchestrator/config.yaml` in your project (see [Workflow Enforcement](#workflow-enforcement) for an example, or use the plugin's `/task-orchestrator:manage-schemas` skill) and mount that folder into the container:
+
+```json
+{
+  "mcpServers": {
+    "mcp-task-orchestrator": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "-v", "mcp-task-data:/app/data",
+        "-v", "/absolute/path/to/your/project/.taskorchestrator:/project/.taskorchestrator:ro",
+        "-e", "AGENT_CONFIG_DIR=/project",
+        "ghcr.io/jpicklyk/task-orchestrator:latest"
+      ]
+    }
+  }
+}
+```
+
+At every start the server imports the mounted file into its database (the `server-config-import` boot step) and then serves the stored copy; editing the file takes effect on the next restart. If several containers share one data volume but mount different files, the last one to boot wins; use step 3 for multi-project setups.
+
+Use an absolute host path. Claude Code's `.mcp.json` expands only environment variables (`${VAR}` and `${VAR:-default}`), so editor-style placeholders such as `${workspaceFolder}` are not substituted. Only the `.taskorchestrator/` folder is exposed; the server has no access to the rest of your project.
+
+### 3. Multi-project setup (HTTP + config-sync)
+
+If you work across several repositories, run one persistent server with the REST API enabled. Each project's `.taskorchestrator/config.yaml` then syncs into it automatically through the plugin's `config-sync` hook: no per-project container, no manual mount, and config changes hot-reload without a restart. The plugin's `/task-orchestrator:configure-server` skill renders this setup interactively; the manual equivalent is:
+
+```bash
+docker pull ghcr.io/jpicklyk/task-orchestrator:latest
+
+docker run -d --name mcp-task-orchestrator-http --restart unless-stopped \
+  -v mcp-task-data:/app/data \
+  -e MCP_TRANSPORT=http -e API_ENABLED=true -e API_AUTH_MODE=none -e API_ALLOW_UNAUTHENTICATED=true \
+  -p 127.0.0.1:3001:3001 \
+  ghcr.io/jpicklyk/task-orchestrator:latest
+```
+
+Register it in `.mcp.json` using the HTTP shape:
+
+```json
+{
+  "mcpServers": {
+    "mcp-task-orchestrator": {
+      "type": "http",
+      "url": "http://localhost:3001/mcp"
+    }
+  }
+}
+```
+
+And export the client-side variable that tells `config-sync` where the server is (without it, config-sync silently does nothing):
+
+```bash
+export TASK_ORCHESTRATOR_API_URL=http://localhost:3001
+```
+
+Alternatively, a `client.json` (`apiUrl` only, no token) supplies the URL. Project-mode `/task-orchestrator:init` writes it beside the project config, only for a loopback server and only as a bare origin with no path, query or fragment (add `.taskorchestrator/client.json` to `.gitignore`, the URL is machine-specific); `/task-orchestrator:init --user` writes the user-level file, which works for any host. The order is the environment variable, then the project-level file, then the user-level file. `/task-orchestrator:init` sets up a project root for the current directory, and `/task-orchestrator:init --user` creates a personal root that serves every directory without its own config.
+
+> **SECURITY:** unauthenticated mode (REST and `/mcp` alike) means anyone who can reach the port has full
+> read/write/delete access, as the single `local` principal. This is only safe because the port is published **loopback-only** (`-p 127.0.0.1:3001:3001`).
+> Never publish it on `0.0.0.0` or a wider interface. For shared or networked deployments use bearer
+> tokens or JWKS auth — see [Fleet Deployment](https://github.com/jpicklyk/task-orchestrator/wiki/fleet-deployment).
+
+Prefer to run without Docker? [CONTRIBUTING.md](CONTRIBUTING.md) covers building the fat JAR from source.
+
+---
+
+## Core Capabilities
+
+### The Phase Model
+
+Every work item has a **role**: `queue` (not started), `work` (in progress), `review` (optional, opt-in per schema), `blocked` (an upstream dependency is unmet), and `terminal` (done or cancelled). Each role maps to one or more configurable statuses. Agents move items with the `advance` tool's `transition` op rather than editing status directly, and that call is where every gate is checked. Schemas attach note requirements to roles: a note declared with `role: queue` must exist before the item can leave the queue phase.
+
+Illustrated: [Phase Gates](https://jpicklyk.github.io/task-orchestrator/field-guide/phase-gates.html) draws the roles and triggers as a track and includes a gate simulator.
+
+### Workflow Enforcement
+
+Schemas define what agents must produce at each phase, and the server blocks progression until it's done. They also set a **planning floor**: when an agent enters plan mode, the schema tells it what documentation must exist before implementation can start, shaping the plan itself.
+
+```yaml
+# .taskorchestrator/config.yaml
+work_item_schemas:
+  feature-task:
+    notes:
+      - key: requirements
+        role: queue
+        required: true
+        description: "Acceptance criteria before starting"
+        guidance: "Cover: problem statement, acceptance criteria, alternatives considered, test strategy."
+        skill: "spec-quality"
+      - key: implementation-notes
+        role: work
+        required: true
+        description: "What was built and why"
+```
+
+With this schema, `advance` `transition` with `trigger: "start"` from queue requires `requirements` to be filled. The server returns a `gate_blocked` error listing exactly which notes are missing.
+
+The `guidance` field provides authoring instructions surfaced at the right moment: when an agent is about to fill that note, the response names it as `guidanceKey` (with the `skillPointer` when the note names a skill), and `items_read` `schema` returns the text. The `skill` field goes further, naming a skill the agent should invoke before filling the note so the evaluation follows a defined framework rather than freeform prose.
+
+### Composable Traits
+
+Traits add cross-cutting note requirements to any schema without duplicating definitions. Define a trait once, apply it to any item type:
+
+```yaml
+traits:
+  needs-security-review:
+    notes:
+      - key: security-assessment
+        role: review
+        required: true
+        description: "Security review of auth, data handling, and access control"
+        skill: "security-review"
+
+work_item_schemas:
+  feature-task:
+    default_traits:
+      - needs-security-review
+    notes:
+      # ... base notes
+```
+
+Every `feature-task` item automatically inherits the `security-assessment` requirement. Traits can also be applied per item via the `traits` array of an `items_write` `create` or `update`, so a task touching authentication gets `needs-security-review` while a CSS cleanup doesn't.
+
+Illustrated: [Schemas and Traits](https://jpicklyk.github.io/task-orchestrator/field-guide/schemas-and-traits.html) shows how a type, its default traits and per-item traits resolve into one gate. [Seats](https://jpicklyk.github.io/task-orchestrator/field-guide/seats.html) covers splitting a phase between several agents.
+
+### Persistent Work Item Graph
+
+Everything is a **WorkItem** in a hierarchical graph. Items nest to any depth and are connected by typed dependency edges. Create an entire work breakdown atomically:
+
+```json
+{ "ops": [{
+    "op": "create_tree",
+    "root": { "title": "User Authentication", "type": "feature-task" },
+    "children": [
+      { "ref": "schema", "title": "Database schema", "type": "feature-task" },
+      { "ref": "api",    "title": "Login API",       "type": "feature-task" },
+      { "ref": "tests",  "title": "Integration tests", "type": "feature-task" }
+    ],
+    "deps": [
+      { "from": "schema", "to": "api" },
+      { "from": "api",    "to": "tests" }
+    ]
+} ] }
+```
+
+(`items_write`, orchestration profile.)
+
+When `schema` reaches terminal, `api` is automatically unblocked. When all children complete, an `auto`-lifecycle parent cascades to terminal (a parent in `review` needs an explicit advance). Dependency ordering is enforced by the server, structurally, not by convention.
+
+Illustrated: [Work Graph](https://jpicklyk.github.io/task-orchestrator/field-guide/work-graph.html) has a clickable version of this tree that shows blocking, unblocking and parent cascades.
+
+### Actor Attribution
+
+Every write is attributed to the **transport principal**: who the server knows the caller to be from how it connected, never from a field in the request. A bearer or JWT credential names its holder (`api:<id>`); stdio, and HTTP with no credential mode, run as the single `local` principal. A request body `actor` is refused as `unknown_parameter`.
+
+`notes_read` and `items_read` `history` entries carry that attribution (for callers allowed to see it): who wrote which note, who made which transition. Post-mortem debugging becomes a data query rather than conversation archaeology.
+
+To tell agents apart, give each its own credential (or, inside a run, its own seat token): enable the REST API with `API_AUTH_MODE=bearer` or `jwks` and `/mcp` authenticates with the same token. Every stdio or local-mode session is the same `local` principal, so those sessions share claims and note ownership. See [Fleet Deployment](https://github.com/jpicklyk/task-orchestrator/wiki/fleet-deployment).
+
+### Session Continuity
+
+No context rebuilding. One call recovers the full picture:
+
+```json
+{ "select": "context" }
+{ "select": "history", "since": "2026-01-15T09:00:00Z" }
+```
+
+(`items_read`.) The first returns active items, blocked items, stalled items with their missing notes and a claim summary; the second returns recent transitions with actor attribution. Add `"fields": ["ancestors"]` for the ancestor chains. A new session has the complete state in two small responses.
+
+Illustrated: [Finding Work](https://jpicklyk.github.io/task-orchestrator/field-guide/finding-work.html) maps each question a session has to the read call that answers it, and shows how the next item is ranked.
+
+### Notes as Structured Context
+
+Notes are phase-specific documentation attached to work items. An implementation agent reads a concise requirements note scoped to its task instead of scanning broader project context.
+
+Notes are keyed, role-scoped, and queryable:
+
+```json
+{ "select": "list", "itemId": "a3f28c01", "role": "work" }
+```
+
+(`notes_read`.) A list returns metadata only (`id`, `key`, `role`, `version`, `bodyLength`), so agents can check what exists without paying the token cost of every note body; `get` reads one body.
+
+### Full-Text Search
+
+Search work items and notes by keyword. Results are relevance-ranked, so an agent looking for related work or picking up after a long gap gets the best matches first.
+
+```json
+{ "select": "search", "query": "authentication login", "kinds": ["item"] }
+{ "select": "search", "query": "password validation", "kinds": ["note"] }
+```
+
+(`items_read`.)
+
+Search can be scoped to a subtree and filtered by role, tag, or priority, or run across the whole workspace.
+
+### REST API
+
+An optional HTTP layer (`API_ENABLED=true`) serves every tool over one RPC route (`POST /api/v1/ops/{tool}`), plus item and note resource GETs, lease admin, service meta and real-time SSE events, to dashboards, CI systems, and operators. It supports static bearer tokens, JWKS JWT auth, and the unauthenticated loopback mode shown in the Quick Start. It also powers `config-sync`, so one server can serve many projects with per-project schemas. See the [REST API Reference](current/docs/api-rest.md).
+
+Illustrated: [Runtime Map](https://jpicklyk.github.io/task-orchestrator/field-guide/runtime-map.html) covers the server's layers, tool profiles, both deployment shapes, the REST API, claims and caller identity.
+
+### Design Philosophy
+
+Task Orchestrator enforces workflow structure without imposing methodology. The server owns the guardrails: role transitions, dependency ordering, gate enforcement, and attribution. Agents own everything else. There are no mandatory planning ceremonies and no opinion on how agents approach implementation. Schemas, traits, and actor authentication are opt-in layers configured in `.taskorchestrator/config.yaml`. As models gain capabilities, the harness stays out of the way.
+
+---
+
+## Claude Code Plugin
+
+The plugin adds workflow automation on top of the MCP server: skills, hooks, and an orchestration context.
+
+**Install:**
+
+```
+/plugin marketplace add https://github.com/jpicklyk/task-orchestrator
+/plugin install task-orchestrator@task-orchestrator-marketplace
+```
+
+**What it adds:**
+
+| Layer | What it does |
+|-------|-------------|
+| **Skills** | Slash commands for common workflows, including `/task-orchestrator:quick-start`, `/task-orchestrator:init`, `/task-orchestrator:configure-server`, `/task-orchestrator:manage-schemas`, and `/task-orchestrator:create-item` |
+| **Hooks** | Context injection at session start, plan-mode integration, sub-agent context handoff and phase-gate enforcement, per-project config sync, and run-close retrospective prompts |
+| **Orchestration context** | A SessionStart hook delivers the orchestration core (with the `orchestrate` skill for tier and delegation detail): Claude plans, delegates to sub-agents, and tracks progress without writing code directly |
+| **Director mode** | `/task-orchestrator:director` runs the session as a board of open runs, decisions and rollups; a guard hook holds it above the code and delegates every read to coordinators |
+| **Runs** | `/task-orchestrator:run-wave` and `/task-orchestrator:ralph` open server runs with per-seat tokens, and closing a run triggers its retrospective |
+
+The MCP server works without the plugin. The plugin makes it seamless with Claude Code.
+
+**Optional mod (early access):** [task-orchestrator-mod](claude-plugins/task-orchestrator-mod/README.md) is a separate, opt-in plugin of in-process function hooks: a live work-graph pane, an in-flight band and status line, and in-process retrospective, phase-guard and call-shape hooks. It relies on an early-access Claude Code API and is best paired with a current task-orchestrator plugin.
+
+```
+/plugin install task-orchestrator-mod@task-orchestrator-marketplace
+```
+
+Illustrated: [Runs and Decisions](https://jpicklyk.github.io/task-orchestrator/field-guide/runs-and-decisions.html) steps through a server run, its seat tokens, run limits and decisions. [Orchestrating a Run](https://jpicklyk.github.io/task-orchestrator/field-guide/orchestrating-a-run.html) follows one feature from request to finished items. [Improvement Loop](https://jpicklyk.github.io/task-orchestrator/field-guide/improvement-loop.html) shows how friction noticed during work becomes a reviewed config change.
+
+---
+
+## MCP Tools
+
+| Category | Tools | Purpose |
+|----------|-------|---------|
+| **Items** | `items_read`, `items_write` | Read, search and summarize the work item hierarchy, find the next item, gate state and transition history (`items_read` selects); create, update, delete, create whole trees, complete trees and repin (`items_write` ops) |
+| **Notes** | `notes_read`, `notes_write` | Persistent phase-scoped documentation, versioned and batch-written |
+| **Dependencies** | `deps_read`, `deps_write` | Typed edges with pattern shortcuts (linear, fan-out, fan-in) and the blocking graph |
+| **Workflow** | `advance` | Trigger-based transitions with gate enforcement and dependency validation, and claim, release and heartbeat ops for multi-agent fleets |
+| **Documents** | `docs_read`, `docs_write` | Versioned plan, rule and page documents per project root |
+| **Project config** | `config` | Push, validate, roll back and inspect per-project schema config and rule text |
+
+Every tool answers one response envelope, and `describe: true` on any call returns the tool's schema. A `knowledge` profile (`/mcp/knowledge`, or `MCP_TOOL_PROFILE=knowledge` on stdio) exposes the smaller read/write subset without orchestration, and a `director` profile (`/mcp/director`, or `MCP_TOOL_PROFILE=director`) exposes only item and dependency reads plus the `report` tool. Item IDs accept short hex prefixes: `itemId="a3f28c01"` works in place of a full UUID once the prefix (8 to 32 hex characters) is unambiguous. Upgrading from 3.x? See "Upgrading from 3.x" in the [Changelog](CHANGELOG.md). See the [API Reference](https://github.com/jpicklyk/task-orchestrator/wiki/api-reference) for every tool's parameters and response shapes.
+
+---
+
+## Documentation
+
+| Resource | What's there |
+|----------|-------------|
+| **[Field Guide](https://jpicklyk.github.io/task-orchestrator/field-guide/)** | Illustrated, partly interactive walkthrough of the core ideas. The best first read. |
+| **[Quick Start Guide](https://github.com/jpicklyk/task-orchestrator/wiki/quick-start)** | Full setup walkthrough with first work item |
+| **[API Reference](https://github.com/jpicklyk/task-orchestrator/wiki/api-reference)** | Every MCP tool: parameters, response shapes, actor attribution |
+| **[REST API Reference](current/docs/api-rest.md)** | The RPC route, resource GETs, lease admin, SSE, auth, ETag |
+| **[Workflow Guide](https://github.com/jpicklyk/task-orchestrator/wiki/workflow-guide)** | Schemas, phase gates, dependencies, lifecycle modes |
+| **[Fleet Deployment](https://github.com/jpicklyk/task-orchestrator/wiki/fleet-deployment)** | Multi-agent operators: REST and `/mcp` authentication, caller identity, health checks, SQLite tuning, capacity planning |
+| **[Wiki](https://github.com/jpicklyk/task-orchestrator/wiki)** | Full documentation hub |
+| **[Changelog](CHANGELOG.md)** | Release history |
+| **[Contributing](CONTRIBUTING.md)** | Developer setup and contribution process |
+
+---
+
+## Technical Stack
+
+- **Kotlin** with Coroutines
+- **SQLite + Exposed ORM** with FTS5 full-text search, zero configuration
+- **Flyway** versioned schema migrations
+- **MCP Kotlin SDK** with STDIO and Streamable HTTP transports
+- **Ktor** for the REST API and SSE
+- **Docker** for one-command deployment
+
+A layered architecture (Domain → Application → Infrastructure → Interfaces, enforced by Konsist layering and package-cycle tests, both with empty baselines) with an extensive JUnit 5 test suite.
+
+---
+
+## License
+
+[MIT License](LICENSE) — Free for personal and commercial use.

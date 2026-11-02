@@ -11,10 +11,11 @@ without making a conversation transcript the source of truth.
 Design stage. There is no working Writhelm service yet. The roadmap describes intended capabilities,
 not implemented guarantees or measured performance.
 
-The intended workflow foundation is an extension of
-[Task Orchestrator](https://github.com/jpicklyk/task-orchestrator). No upstream implementation is
-vendored here. The extension strategy and dependency license compatibility must be settled before
-implementation is released.
+The workflow foundation is a maintained fork of
+[Task Orchestrator](https://github.com/jpicklyk/task-orchestrator), imported at a pinned baseline
+under `backend/`. The unchanged upstream baseline passes its tests, lint and JAR build;
+Writhelm-specific features are not implemented. Dependency license qualification remains open.
+See [upstream provenance](docs/upstream.md).
 Writhelm is an independent project, not an official upstream distribution.
 
 ## Direction
@@ -31,6 +32,7 @@ Writhelm is an independent project, not an official upstream distribution.
 
 - [Roadmap](docs/roadmap.md)
 - [Architecture direction](docs/architecture.md)
+- [Upstream provenance](docs/upstream.md)
 - [Publication policy](docs/publication.md)
 - [Contributor and agent instructions](AGENTS.md)
 
@@ -40,3 +42,5 @@ Writhelm is licensed under the **GNU Affero General Public License, version 3 on
 (`AGPL-3.0-only`). See [LICENSE](LICENSE) for the full terms.
 
 Any future upstream code reuse must preserve its provenance, license and required notices.
+The imported Task Orchestrator source retains its [MIT license](backend/LICENSE) and notices;
+Writhelm additions use AGPL-3.0-only.

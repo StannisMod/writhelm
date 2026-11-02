@@ -1,0 +1,138 @@
+package io.github.jpicklyk.mcptask.current.interfaces.api.v1.routes
+
+import io.github.jpicklyk.mcptask.current.application.api.ApiCapability
+import io.github.jpicklyk.mcptask.current.application.api.Principal
+import io.github.jpicklyk.mcptask.current.application.api.PrincipalKind
+import io.github.jpicklyk.mcptask.current.application.api.ProofStatus
+import io.github.jpicklyk.mcptask.current.application.port.AccessScope
+import io.github.jpicklyk.mcptask.current.infrastructure.identity.bearer.ApiAuthConfig
+import io.github.jpicklyk.mcptask.current.infrastructure.identity.bearer.BearerTokenStore
+import io.github.jpicklyk.mcptask.current.infrastructure.identity.bearer.HashBytes
+import io.github.jpicklyk.mcptask.current.interfaces.api.v1.auth.ApiBearerAuth
+import io.ktor.serialization.kotlinx.json.json
+import io.ktor.server.application.Application
+import io.ktor.server.application.install
+import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.routing.route
+import io.ktor.server.routing.routing
+import io.ktor.server.sse.SSE
+import io.modelcontextprotocol.kotlin.sdk.types.McpJson
+import java.security.MessageDigest
+import java.util.UUID
+
+/** Raw bearer token used in all test setups. */
+const val TEST_TOKEN = "integration-test-token-abc123"
+
+/** Token id corresponding to [TEST_TOKEN]. */
+const val TEST_TOKEN_ID = "test-read-principal"
+
+/** Admin token id for tests that need ADMIN capability. */
+const val ADMIN_TOKEN = "integration-admin-token-xyz789"
+const val ADMIN_TOKEN_ID = "test-admin-principal"
+
+/**
+ * Write-capable token for Phase 5 write-route tests. Granted READ + all write capabilities
+ * (WRITE_ITEMS, WRITE_NOTES, ADVANCE, MANAGE_DEPENDENCIES, WRITE_CONFIG) but NOT admin.
+ */
+const val WRITE_TOKEN = "integration-write-token-w0987"
+const val WRITE_TOKEN_ID = "test-write-principal"
+
+fun sha256(input: String): ByteArray {
+    val md = MessageDigest.getInstance("SHA-256")
+    return md.digest(input.toByteArray(Charsets.UTF_8))
+}
+
+/**
+ * Returns a [ApiAuthConfig.Bearer] with two principals:
+ * - [TEST_TOKEN] → `read` capability, unrestricted scope (optionally scoped by [scopeRootIds] and/or [tagsInclude])
+ * - [ADMIN_TOKEN] → `admin` + `read` capabilities, unrestricted scope
+ */
+fun makeTestAuthConfig(
+    scopeRootIds: Set<UUID>? = null,
+    tagsInclude: Set<String> = emptySet(),
+): ApiAuthConfig.Bearer {
+    val readPrincipal =
+        Principal(
+            id = TEST_TOKEN_ID,
+            scope = AccessScope.principal(rootIds = scopeRootIds, tagsInclude = tagsInclude),
+            capabilities = setOf(ApiCapability.READ),
+            kind = PrincipalKind.SERVICE,
+            proofStatus = ProofStatus.ISSUED,
+        )
+    val adminPrincipal =
+        Principal(
+            id = ADMIN_TOKEN_ID,
+            scope = AccessScope.principal(rootIds = null, tagsInclude = emptySet()),
+            capabilities = setOf(ApiCapability.READ, ApiCapability.ADMIN),
+            kind = PrincipalKind.SERVICE,
+            proofStatus = ProofStatus.ISSUED,
+        )
+    return ApiAuthConfig.Bearer(
+        tokens =
+            mapOf(
+                HashBytes(sha256(TEST_TOKEN)) to BearerTokenStore.TokenEntry(readPrincipal, expiresAt = null),
+                HashBytes(sha256(ADMIN_TOKEN)) to BearerTokenStore.TokenEntry(adminPrincipal, expiresAt = null),
+            ),
+    )
+}
+
+/**
+ * Returns a [ApiAuthConfig.Bearer] with three principals (extends [makeTestAuthConfig] for
+ * Phase 5 write-route tests):
+ * - [TEST_TOKEN]  → `read` only, scope = [scopeRootIds]
+ * - [ADMIN_TOKEN] → `admin` + `read`, unrestricted scope
+ * - [WRITE_TOKEN] → `read` + all write capabilities, scope = [scopeRootIds]
+ *
+ * The WRITE principal shares [scopeRootIds] with the READ principal so scope-enforcement tests
+ * can exercise write routes with a constrained scope.
+ */
+fun makeWriteAuthConfig(scopeRootIds: Set<UUID>? = null): ApiAuthConfig.Bearer {
+    val base = makeTestAuthConfig(scopeRootIds)
+    val writePrincipal =
+        Principal(
+            id = WRITE_TOKEN_ID,
+            scope = AccessScope.principal(rootIds = scopeRootIds, tagsInclude = emptySet()),
+            capabilities =
+                setOf(
+                    ApiCapability.READ,
+                    ApiCapability.WRITE_ITEMS,
+                    ApiCapability.WRITE_NOTES,
+                    ApiCapability.ADVANCE,
+                    ApiCapability.MANAGE_DEPENDENCIES,
+                    ApiCapability.WRITE_CONFIG,
+                ),
+            kind = PrincipalKind.SERVICE,
+            proofStatus = ProofStatus.ISSUED,
+        )
+    return ApiAuthConfig.Bearer(
+        tokens = base.tokens + (HashBytes(sha256(WRITE_TOKEN)) to BearerTokenStore.TokenEntry(writePrincipal, expiresAt = null)),
+    )
+}
+
+/**
+ * Common Ktor application configuration for route integration tests.
+ *
+ * Installs [ContentNegotiation], [SSE], [ApiBearerAuth], and registers routes via [routeBlock].
+ *
+ * @param authConfig The auth config to install on `/api/v1`. Accepts any [ApiAuthConfig] variant
+ *   (e.g. [ApiAuthConfig.Unauthenticated] for opt-in unauth-mode tests) — token entries are only
+ *   populated when it is [ApiAuthConfig.Bearer].
+ * @param routeBlock Route registration block called inside `route("/api/v1") { ... }`.
+ */
+fun Application.configureTestApp(
+    authConfig: ApiAuthConfig = makeTestAuthConfig(),
+    routeBlock: io.ktor.server.routing.Route.() -> Unit,
+) {
+    install(ContentNegotiation) { json(McpJson) }
+    install(SSE)
+    routing {
+        route("/api/v1") {
+            install(ApiBearerAuth) {
+                this.authConfig = authConfig
+                tokenEntries =
+                    (authConfig as? ApiAuthConfig.Bearer)?.tokens ?: emptyMap()
+            }
+            routeBlock()
+        }
+    }
+}

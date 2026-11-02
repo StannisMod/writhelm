@@ -1,0 +1,209 @@
+package io.github.jpicklyk.mcptask.current.interfaces.mcp
+
+import io.github.jpicklyk.mcptask.current.application.api.ToolExecutionContext
+import io.github.jpicklyk.mcptask.current.bootstrap.buildToolDispatcher
+import io.github.jpicklyk.mcptask.current.bootstrap.installMcpStreamableHttp
+import io.github.jpicklyk.mcptask.current.domain.model.WorkItem
+import io.github.jpicklyk.mcptask.current.infrastructure.config.AppConfig
+import io.github.jpicklyk.mcptask.current.interfaces.shared.tools.ToolProfile
+import io.github.jpicklyk.mcptask.current.interfaces.shared.tools.ToolRegistry
+import io.github.jpicklyk.mcptask.current.interfaces.shared.tools.buildToolSpecs
+import io.github.jpicklyk.mcptask.current.test.sqlite.SqliteTestDatabase
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
+import io.ktor.server.testing.testApplication
+import io.modelcontextprotocol.kotlin.sdk.server.Server
+import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
+import io.modelcontextprotocol.kotlin.sdk.types.Implementation
+import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.RegisterExtension
+
+/**
+ * End-to-end tests for the MCP **Streamable HTTP** transport mounted at `/mcp`.
+ *
+ * These tests are the regression guard for the SDK-0.12.0 startup crash where an explicit
+ * `install(SSE)` collided with the SSE plugin that `mcpStreamableHttp` installs itself
+ * (`DuplicatePluginException` → HTTP server never started). They exercise the SAME production
+ * wiring function ([installMcpStreamableHttp]) and the SAME tool registry (`buildToolSpecs()` through
+ * [McpOperationAdapter]) the real server uses — so re-introducing a duplicate plugin install, or otherwise breaking the `/mcp`
+ * module, fails the application at first request and trips these tests.
+ *
+ * Unlike the in-process ChannelTransport adapter tests ([McpOperationAdapterTest]), this drives the protocol
+ * over real HTTP through Ktor's test engine, covering the transport layer they cannot reach.
+ */
+class McpStreamableHttpTransportTest {
+    @RegisterExtension
+    val db = SqliteTestDatabase.perMethod()
+
+    private val rpc = Json { ignoreUnknownKeys = true }
+
+    /** Builds a real MCP [Server] with all production tools registered against an in-memory DB. */
+    private fun serverWithAllTools(): Server {
+        val provider =
+            db.repositoryProvider()
+        val server =
+            Server(
+                serverInfo = Implementation(name = "http-transport-test", version = "1.0.0"),
+                options =
+                    ServerOptions(
+                        capabilities =
+                            ServerCapabilities(tools = ServerCapabilities.Tools(listChanged = true)),
+                    ),
+            )
+        val context = ToolExecutionContext(provider, unitOfWork = db.unitOfWork())
+        McpOperationAdapter(buildToolDispatcher(context)).register(server, ToolRegistry(buildToolSpecs()), ToolProfile.ORCHESTRATION)
+        return server
+    }
+
+    /**
+     * Extracts the JSON-RPC envelope from a Streamable-HTTP response body. The transport may reply
+     * with raw `application/json` or an SSE frame (`event: message\ndata: {...}`); handle both.
+     */
+    private fun parseRpc(body: String): JsonObject {
+        val payload =
+            body
+                .lineSequence()
+                .firstOrNull { it.startsWith("data:") }
+                ?.removePrefix("data:")
+                ?.trim()
+                ?: body.trim()
+        return rpc.parseToJsonElement(payload).jsonObject
+    }
+
+    private val initializeBody =
+        """{"jsonrpc":"2.0","id":1,"method":"initialize","params":""" +
+            """{"protocolVersion":"2025-03-26","capabilities":{},""" +
+            """"clientInfo":{"name":"transport-test","version":"1.0"}}}"""
+
+    private val acceptBoth = "application/json, text/event-stream"
+
+    @Test
+    fun `mcpStreamableHttp module wires without SSE conflict and serves initialize`(): Unit =
+        testApplication {
+            val server = serverWithAllTools()
+            application { installMcpStreamableHttp(server, appConfig = AppConfig.fromEnv(), mcpAuth = McpAuthMode.Local) }
+
+            val response =
+                client.post("/mcp") {
+                    header(HttpHeaders.Accept, acceptBoth)
+                    contentType(ContentType.Application.Json)
+                    setBody(initializeBody)
+                }
+
+            // If a duplicate SSE plugin were installed, the app would fail to start and this would
+            // not be 200 OK — this assertion is the core regression guard.
+            assertEquals(HttpStatusCode.OK, response.status, "initialize should return 200")
+
+            val sessionId = response.headers["mcp-session-id"]
+            assertNotNull(sessionId, "server must assign an Mcp-Session-Id on initialize")
+
+            val result = parseRpc(response.bodyAsText())["result"]?.jsonObject
+            assertNotNull(result, "initialize must return a result")
+            assertNotNull(result!!["protocolVersion"], "result must carry protocolVersion")
+            assertNotNull(result["serverInfo"], "result must carry serverInfo")
+        }
+
+    @Test
+    fun `rejects cross-origin requests with 403 to guard against DNS rebinding`(): Unit =
+        testApplication {
+            val server = serverWithAllTools()
+            application { installMcpStreamableHttp(server, appConfig = AppConfig.fromEnv(), mcpAuth = McpAuthMode.Local) }
+
+            // Streamable HTTP spec security requirement: servers MUST validate the Origin header and
+            // respond 403 to an invalid origin (DNS-rebinding protection). This is enforced by the
+            // SDK's mcpStreamableHttp; the test locks the behavior in for our wiring so a future SDK
+            // bump or misconfiguration that drops it is caught.
+            val response =
+                client.post("/mcp") {
+                    header(HttpHeaders.Accept, acceptBoth)
+                    header(HttpHeaders.Origin, "http://evil.example.com")
+                    contentType(ContentType.Application.Json)
+                    setBody(initializeBody)
+                }
+
+            assertEquals(
+                HttpStatusCode.Forbidden,
+                response.status,
+                "a cross-origin Origin header must be rejected with 403",
+            )
+        }
+
+    @Test
+    fun `tools list and a tool call work over the HTTP transport`(): Unit =
+        testApplication {
+            val server = serverWithAllTools()
+            application { installMcpStreamableHttp(server, appConfig = AppConfig.fromEnv(), mcpAuth = McpAuthMode.Local) }
+
+            // 1) initialize → capture the session id
+            val init =
+                client.post("/mcp") {
+                    header(HttpHeaders.Accept, acceptBoth)
+                    contentType(ContentType.Application.Json)
+                    setBody(initializeBody)
+                }
+            assertEquals(HttpStatusCode.OK, init.status)
+            val sessionId = init.headers["mcp-session-id"]
+            assertNotNull(sessionId, "expected Mcp-Session-Id header")
+
+            // 2) notifications/initialized — completes the handshake
+            client.post("/mcp") {
+                header(HttpHeaders.Accept, acceptBoth)
+                header("mcp-session-id", sessionId!!)
+                contentType(ContentType.Application.Json)
+                setBody("""{"jsonrpc":"2.0","method":"notifications/initialized"}""")
+            }
+
+            // 3) tools/list — every production tool must be served over HTTP
+            val listResp =
+                client.post("/mcp") {
+                    header(HttpHeaders.Accept, acceptBoth)
+                    header("mcp-session-id", sessionId!!)
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"jsonrpc":"2.0","id":2,"method":"tools/list"}""")
+                }
+            assertEquals(HttpStatusCode.OK, listResp.status)
+            val servedNames =
+                parseRpc(listResp.bodyAsText())["result"]!!
+                    .jsonObject["tools"]!!
+                    .jsonArray
+                    .map { it.jsonObject["name"]!!.jsonPrimitive.content }
+                    .toSet()
+            val expectedNames = ToolRegistry(buildToolSpecs()).visible(ToolProfile.ORCHESTRATION).map { it.name }.toSet()
+            assertEquals(expectedNames, servedNames, "tools/list must expose exactly the production tool set")
+
+            // 4) tools/call config rules over a directly seeded root -- proves the full stack executes over HTTP
+            // (Q21 retired create_work_tree and Q23 query_rules, which this call used before)
+            val root = db.repositoryProvider().workItemRepository().create(WorkItem(title = "http"))
+            val callResp =
+                client.post("/mcp") {
+                    header(HttpHeaders.Accept, acceptBoth)
+                    header("mcp-session-id", sessionId!!)
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """{"jsonrpc":"2.0","id":3,"method":"tools/call",""" +
+                            """"params":{"name":"config","arguments":{"ops":[{"op":"rules","rootId":"${root.id}"}]}}}""",
+                    )
+                }
+            assertEquals(HttpStatusCode.OK, callResp.status)
+            val callResult = parseRpc(callResp.bodyAsText())["result"]!!.jsonObject
+            assertTrue(
+                callResult["isError"]?.jsonPrimitive?.content != "true",
+                "config should not be an error over HTTP: $callResult",
+            )
+        }
+}
