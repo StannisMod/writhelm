@@ -13,7 +13,8 @@ not implemented guarantees or measured performance.
 
 The intended workflow foundation is an extension of
 [Task Orchestrator](https://github.com/jpicklyk/task-orchestrator). No upstream implementation is
-vendored here. The extension strategy and licensing must be settled before implementation is released.
+vendored here. The extension strategy and dependency license compatibility must be settled before
+implementation is released.
 Writhelm is an independent project, not an official upstream distribution.
 
 ## Direction
@@ -35,5 +36,7 @@ Writhelm is an independent project, not an official upstream distribution.
 
 ## Licensing
 
-A project license has not yet been selected. Public visibility is not a license grant. Any future
-upstream code reuse must preserve its provenance, license and required notices.
+Writhelm is licensed under the **GNU Affero General Public License, version 3 only**
+(`AGPL-3.0-only`). See [LICENSE](LICENSE) for the full terms.
+
+Any future upstream code reuse must preserve its provenance, license and required notices.

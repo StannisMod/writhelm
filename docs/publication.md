@@ -11,6 +11,7 @@ Initial publication manifest:
 .gitignore
 README.md
 AGENTS.md
+LICENSE
 docs/architecture.md
 docs/publication.md
 docs/roadmap.md
@@ -18,6 +19,7 @@ docs/roadmap.md
 
 These documents are newly prepared public project descriptions and generic architecture/process rules.
 No implementation, evaluation archive, private project export or historical session material is included.
+The manifest also includes the unmodified GNU AGPLv3 license text from the Free Software Foundation.
 
 ## Never import by default
 
