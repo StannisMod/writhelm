@@ -1,7 +1,7 @@
 # CORE-003 — Core codec readiness and bounded implementation
 
 Task revision: 5. Status: pure implementation delivered/author-tested; parent source/evidence checked.
-Independent fresh-context review and service integration remain pending; no durable service acceptance.
+Bounded fresh-context core review completed at f94108b5 (REVIEW-CORE-001); no durable service acceptance.
 Executor: one native harness child, explicitly authorized by owner; parent handles auth design and
 checks the returned evidence. Scope derives from the accepted K-CODEC revision 2 and
 K-PUBLISH revision 1; design approval is not implemented/verified/integrated status.

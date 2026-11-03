@@ -1,6 +1,7 @@
 # Durable command outcomes and atomic Git publication
 
-Contract K-PUBLISH, revision 1. Status: disclosed scope approved by owner; not implemented/verified.
+Contract K-PUBLISH, revision 1. Status: scope approved; bounded internal mechanism/binding implemented.
+Author tests/parent checks completed; independent store review and real crash/supervision gates pending.
 Task: [DESIGN-007](../tasks/DESIGN-007.md). Dependencies:
 [K-CODEC revision 2](state-codec.md), [K-CONTENT](knowledge-content.md),
 [K-WORKFLOW](knowledge-workflow.md), [K-APP](accepted-knowledge.md),
@@ -230,3 +231,13 @@ review. The pre-status-update contract bytes have SHA-256
 This accepts PB-01–09 semantics, including receipt-only domain rejections, current-access replay and
 the stated process-crash profile. It does not certify behavior, approve unspecified schema/runtime
 details or credential deployment, authorize a public push or waive executable-task readiness gates.
+
+## Current implementation status
+
+STORE-001 implements the bounded local Git/journal-v2 mechanism with the approved AU-09 extension;
+APP-001 binds actual auth/core evaluation and namespace/provenance checks. STORE-002 adds the validated
+H-derived new-publication history-count guard, without a schema/retention/default-limit change.
+Final affected-dependency run: 57 store + 23 unchanged app cases passed; parent inspected source and
+exact evidence. Prior terminal-CAS and portable-root regressions are retained. PB-01–09 are unchanged.
+Unknown outcomes still fail closed behind a recovery barrier. No automatic marker clearing or
+qualified surviving-child recovery/runbook, real crash test, HTTP/MCP service or M1 acceptance exists.

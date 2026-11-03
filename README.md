@@ -15,8 +15,10 @@ The selected direction is a Writhelm-owned core with selective reuse, not a main
 [Task Orchestrator](https://github.com/jpicklyk/task-orchestrator) fork. Its pinned source baseline
 remains unchanged under `backend/` for reference and reuse qualification. That upstream baseline
 passes its tests, lint and JAR build; this is not verification of a Writhelm core.
-A local immutable content core and pure approval/input-manifest transitions have targeted tests;
-there is no working network service or durable Git approval store yet. New core publication is pending scoped review.
+The local implementation includes immutable content/approval/input manifests, a strict state codec,
+credential/authority rules and their internal binding to an atomic Git command store. There is no
+working HTTP/MCP service yet. Core blocks 1–3 received bounded independent review; later auth/store/app
+work has targeted author tests and parent checks. Real crash recovery and M1 acceptance remain open.
 Dependency license qualification remains open.
 See [upstream provenance](docs/upstream.md).
 Writhelm is an independent project, not an official upstream distribution.

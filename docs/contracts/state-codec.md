@@ -1,7 +1,8 @@
 # Versioned core records, export and command codec
 
 Contract K-CODEC, revision 2. Status: disclosed scope accepted; bounded pure implementation in CORE-003.
-Author tests and parent source/evidence inspection completed; independent review/integration pending.
+Author tests and parent source/evidence inspection completed; bounded independent core review completed
+at source commit f94108b5. Later service integration/recovery gates remain distinct and unpassed.
 Concrete core schemas/development bounds are pinned in CORE-003; production capacity is unqualified.
 Preparation task: [DESIGN-006](../tasks/DESIGN-006.md). No code, fixtures or tests implemented here.
 Scope: the complete CORE-001/002 pure model plus typed command encoding needed by the future P2 publisher.

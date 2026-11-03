@@ -283,3 +283,56 @@ the accepted checked-generation refusal; original tests/settings/imported source
 The new direct dependency is referenced, not vendored or distributed. Artifact license/security
 qualification remains open. Build output, caches, raw XML/logs and worker/reviewer scratch stay ignored.
 Later reviewer/implementation tasks and worker source paths need their own scoped tracking decision.
+
+## Auth/store/app scope P5 — local commit authorized
+
+The owner's next commit instruction authorizes local tracking/commit of the exact completed paths
+below and the listed status updates, after content/diff review. This is no push permission, no
+approval of proposed K-API behavior, and no release/crash/whole-service qualification. All new code
+is Writhelm-owned AGPL-3.0-only; test credentials are explicit fixed public synthetic vectors.
+
+```text
+docs/contracts/service-interface.md
+docs/tasks/REVIEW-CORE-001.md
+docs/tasks/AUTH-002.md
+docs/tasks/STORE-001.md
+docs/tasks/STORE-001-result.md
+docs/tasks/STORE-002.md
+docs/tasks/APP-001.md
+docs/tasks/DESIGN-009.md
+backend/server/src/main/kotlin/dev/writhelm/core/auth/Credentials.kt
+backend/server/src/main/kotlin/dev/writhelm/core/auth/AuthCodec.kt
+backend/server/src/main/kotlin/dev/writhelm/core/auth/Authority.kt
+backend/server/src/main/kotlin/dev/writhelm/core/store/AdmissionPolicy.kt
+backend/server/src/main/kotlin/dev/writhelm/core/store/StoreTypes.kt
+backend/server/src/main/kotlin/dev/writhelm/core/store/JournalCodec.kt
+backend/server/src/main/kotlin/dev/writhelm/core/store/NativeGit.kt
+backend/server/src/main/kotlin/dev/writhelm/core/store/GitCommandStore.kt
+backend/server/src/main/kotlin/dev/writhelm/core/app/AppState.kt
+backend/server/src/main/kotlin/dev/writhelm/core/app/AppReduction.kt
+backend/server/src/main/kotlin/dev/writhelm/core/app/MechanismApp.kt
+backend/server/src/test/kotlin/dev/writhelm/core/auth/AuthTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/auth/AuthBoundaryTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/store/JournalContractTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/store/StoreContractTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/store/EffectContractTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/store/PublicationSafetyTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/store/IntegrityContractTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/store/PolicyContractTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/store/StoreTestRoot.kt
+backend/server/src/test/kotlin/dev/writhelm/core/store/HistoryCapacityTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/app/AppFixture.kt
+backend/server/src/test/kotlin/dev/writhelm/core/app/AppContractTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/app/AuthorityBindingTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/app/CurrentHeadBindingTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/app/KnowledgeJourneyTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/app/NamespaceBindingTest.kt
+```
+
+Accompanying existing-path changes are only `.gitignore`, this record, `README.md`, the status /
+evidence appendices in `docs/contracts/{state-codec,command-publication,authentication-access}.md`
+and `docs/tasks/CORE-003.md`. Accepted CD-01–08/PB-01–09/AU-01–10 laws remain unchanged.
+Original core/import/build/dependency/settings/test bytes remain unchanged. Raw logs/XML, worker/
+reviewer evidence, private Git test repositories and handoff/session context are NOT publication
+inputs. The requested Markdown context handoff is prepared outside public source Git and is not
+included in this commit. No broad directory wildcard, future task or generated artifact is admitted.

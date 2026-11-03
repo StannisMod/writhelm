@@ -1,6 +1,7 @@
 # Initial authentication and project access
 
-Contract K-AUTH, revision 1. Status: disclosed scope approved by owner; not implemented/verified.
+Contract K-AUTH, revision 1. Status: scope approved; pure auth/internal publication binding implemented.
+Author tests/parent checks completed; independent auth review and real client/transport qualification pending.
 Task: [DESIGN-008](../tasks/DESIGN-008.md). Dependencies: [K-WORKFLOW](knowledge-workflow.md),
 [K-CODEC revision 2](state-codec.md), [K-PUBLISH revision 1](command-publication.md),
 [T1/UI](../design/approval-interface.md), [A1 proposal](../design/first-slice.md).
@@ -304,3 +305,12 @@ Approval includes the fixed initial project owner, long-lived explicitly revocab
 trusted-loopback development profile and T1 limitations. No raw credentials, public publication,
 remote TLS/hosting qualification, semantic changes to core v1 or passing runtime result is inferred.
 Exact auth/command-v2/journal-v2 field shapes and bounded executable tasks remain required inputs.
+
+## Current implementation status
+
+AUTH-002 implements the pure verifier, auth record/command-v2 codecs and scoped authority transitions;
+its final targeted suite has 73 passing cases after the header-limit regression correction. APP-001
+binds actual token checks, core policy, reducers, constrained grants and journal-v2 publication; its
+23 unchanged cases also passed with STORE-002's corrected history-capacity dependency. Parent checked
+source/evidence. Independent auth/store/app review, real keys/client provisioning, HTTP/MCP and
+crash/supervisor qualification remain unpassed. AU-01–10 are unchanged; this is not service acceptance.
