@@ -159,3 +159,84 @@ build storage. Record failures honestly, do not weaken tests, and qualify depend
 before declaring the baseline ready. No live models, embeddings or paid experiments are authorized.
 
 Implementation of the proposed first-slice behavior still requires separate design approval.
+
+## Specification/contract/task scope P2 — local tracking and commit authorized
+
+Status: the owner authorized committing the completed work on 2026-11-03. The exact paths below
+are approved for local tracking/commit after content/diff review; `.gitignore` reflects this scope.
+This does not ratify every surrounding draft requirement/design or authorize a public push. Raw
+scratch evidence, sessions, prototypes and generated outputs remain excluded. Publication to the
+remote still needs an explicit push instruction and the normal boundary review.
+
+```text
+docs/specification.md
+docs/acceptance.md
+docs/workflow.md
+docs/tasks/SPEC-001.md
+docs/contracts/accepted-knowledge.md
+docs/tasks/DESIGN-001.md
+docs/design/foundation.md
+docs/tasks/DESIGN-002.md
+docs/design/knowledge-model.md
+docs/tasks/DESIGN-003.md
+docs/design/publication-recovery.md
+docs/design/git-state.md
+docs/tasks/DESIGN-004.md
+docs/design/first-slice.md
+docs/tasks/DESIGN-005.md
+docs/design/approval-interface.md
+docs/contracts/knowledge-content.md
+docs/tasks/CORE-001.md
+docs/contracts/knowledge-workflow.md
+docs/tasks/CORE-002.md
+```
+
+Purpose: freshly authored public product requirements, synthetic acceptance scenarios, the temporary
+self-application procedure, canonical preparation/design tasks, an initial contract and a
+public-source-grounded foundation comparison, own-core knowledge representation and publication /
+recovery designs, the bounded first-slice record/authority/verification design, and the structured
+approval completeness/capability design. Synthetic scratch prototypes and raw local harness evidence
+are excluded from this proposed publication scope.
+
+## Own-core source scope P3 — local tracking and commit authorized
+
+Status: the owner's 2026-11-03 commit instruction authorizes local tracking/commit of the exact
+completed own-core paths below, not a public push or independent implementation acceptance. This is newly authored
+Writhelm AGPL-3.0-only code, not an upstream source extraction or an export of private project code.
+Track only the named source/build files after full review. Preserve the imported baseline; keep
+build artifacts, caches, evidence and unlisted future files ignored. No force-add or broad source export.
+
+Exact proposed source/build paths:
+
+```text
+backend/server/settings.gradle.kts
+backend/server/build.gradle.kts
+backend/server/gradle.properties
+backend/server/src/main/kotlin/dev/writhelm/core/knowledge/Content.kt
+backend/server/src/main/kotlin/dev/writhelm/core/knowledge/StructureIndex.kt
+backend/server/src/main/kotlin/dev/writhelm/core/knowledge/References.kt
+backend/server/src/main/kotlin/dev/writhelm/core/knowledge/DocumentRevision.kt
+backend/server/src/main/kotlin/dev/writhelm/core/knowledge/RevisionCatalog.kt
+backend/server/src/main/kotlin/dev/writhelm/core/workflow/WorkflowRecords.kt
+backend/server/src/main/kotlin/dev/writhelm/core/workflow/ReviewPacket.kt
+backend/server/src/main/kotlin/dev/writhelm/core/workflow/ApprovalWorkflow.kt
+backend/server/src/test/kotlin/dev/writhelm/core/knowledge/ContentTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/knowledge/StructureTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/knowledge/RevisionCatalogTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/workflow/WorkflowFixture.kt
+backend/server/src/test/kotlin/dev/writhelm/core/workflow/ApprovalWorkflowTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/workflow/ContinuityManifestTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/workflow/WorkflowRecordsTest.kt
+```
+
+The independent small build reuses the already qualified wrapper/cache as development tooling;
+no upstream implementation or fixture is copied into the new core. Dependency versions/tooling are
+public inputs, not permission to distribute dependencies without notice review. Exclude build/JAR
+outputs, Gradle/Kotlin caches, local test reports, machine paths, raw evidence and prototype artifacts.
+Inspect the exact source diff/provenance and the complete staged diff before committing. Future new
+paths need another scoped tracking/publication decision; this does not broadly allow `backend/server/**`.
+These are not exported private project
+documents, evaluation reports, session transcripts or historical task records. No external code is
+included; Writhelm's AGPL-3.0-only terms apply. Review the full proposed bytes and provenance before
+approval. Existing `docs/architecture.md` and `README.md` may record the confirmed own-core direction
+and checkpoint; they must not imply acceptance or implementation of the new specification.

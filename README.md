@@ -11,16 +11,20 @@ without making a conversation transcript the source of truth.
 Design stage. There is no working Writhelm service yet. The roadmap describes intended capabilities,
 not implemented guarantees or measured performance.
 
-The workflow foundation is a maintained fork of
-[Task Orchestrator](https://github.com/jpicklyk/task-orchestrator), imported at a pinned baseline
-under `backend/`. The unchanged upstream baseline passes its tests, lint and JAR build;
-Writhelm-specific features are not implemented. Dependency license qualification remains open.
+The selected direction is a Writhelm-owned core with selective reuse, not a maintained
+[Task Orchestrator](https://github.com/jpicklyk/task-orchestrator) fork. Its pinned source baseline
+remains unchanged under `backend/` for reference and reuse qualification. That upstream baseline
+passes its tests, lint and JAR build; this is not verification of a Writhelm core.
+A local immutable content core and pure approval/input-manifest transitions have targeted tests;
+there is no working network service or durable Git approval store yet. New core publication is pending scoped review.
+Dependency license qualification remains open.
 See [upstream provenance](docs/upstream.md).
 Writhelm is an independent project, not an official upstream distribution.
 
 ## Direction
 
-- One service owns versioned knowledge, workflow state and internally managed Git.
+- One service owns canonical knowledge, authority and workflow state, all versioned in internally
+  managed Git; any database index is derived, not an independent source of truth.
 - Human approval applies to a specific revision, not whatever text happens to be current.
 - Every delegation has a separate task with scope, inputs, acceptance and escalation conditions.
 - Context packets preserve mandatory obligations or explicitly refuse to fit a smaller budget.
