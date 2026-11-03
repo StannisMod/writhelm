@@ -39,6 +39,14 @@ class ApprovalWorkflow private constructor(
     private val generations = frozenMap(generations)
     private val blocked = frozenSet(blocked)
 
+    internal fun snapshot(maxRecords: Int = Int.MAX_VALUE): WorkflowSnapshot {
+        val count = catalog.snapshotRevisions().size.toLong() + policy.snapshotGrantCount() + proposals.size + requests.size +
+            resolutions.size + approvals.size + continuity.size + assessments.size + manifests.size + heads.size + generations.size + blocked.size
+        if (count > maxRecords) throw dev.writhelm.core.codec.CodecFault(dev.writhelm.core.codec.CodecProblem.RESOURCE_UNAVAILABLE)
+        return WorkflowSnapshot(catalog.snapshotRevisions(), policy.snapshotGrants(), proposals, requests,
+            resolutions, approvals, continuity, assessments, manifests, heads, generations, blocked)
+    }
+
     fun propose(actor: Actor, revision: DocumentRevision): WorkflowResult<Transition<RevisionKey>> {
         val project = revision.key.document.projectId
         if (!policy.allows(actor, project, Capability.PROPOSE)) return failure(WorkflowProblem.FORBIDDEN)
@@ -97,6 +105,7 @@ class ApprovalWorkflow private constructor(
             }
         }
         val approved = if (answer == StructuredAnswer.Approve) targets else emptyList()
+        if (!canAdvanceGenerations(approved.map { generation(it) })) return failure(WorkflowProblem.GENERATION_EXHAUSTED)
         val resolution = ApprovalResolution(requestId, actor, answer, approved)
         val newApprovals = approvals.toMutableMap()
         val newHeads = heads.toMutableMap()
@@ -104,7 +113,7 @@ class ApprovalWorkflow private constructor(
         approved.forEach {
             newApprovals.putIfAbsent(it, ApprovalTrace(it, requestId, actor.principalId))
             newHeads[it.subject()] = it
-            newGenerations[it.subject()] = generation(it) + 1
+            newGenerations[it.subject()] = checkNotNull(checkedNextGeneration(generation(it)))
         }
         return success(
             next(
@@ -317,10 +326,15 @@ class ApprovalWorkflow private constructor(
 
     companion object {
         fun start(policy: AccessPolicy): ApprovalWorkflow = ApprovalWorkflow(RevisionCatalog(), policy)
+
+        internal fun restoreValidated(s: WorkflowSnapshot): ApprovalWorkflow = with(s) {
+            ApprovalWorkflow(RevisionCatalog(revisions), AccessPolicy(grants), proposals, requests, resolutions, approvals,
+                continuity, assessments, manifests, heads, generations, blocked)
+        }
     }
 }
 
-private data class StoredContinuity(val source: KnowledgeReference, val assessmentId: UUID)
+internal data class StoredContinuity(val source: KnowledgeReference, val assessmentId: UUID)
 
 private fun failure(problem: WorkflowProblem): WorkflowResult.Failure = WorkflowResult.Failure(problem)
 

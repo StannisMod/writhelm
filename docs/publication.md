@@ -240,3 +240,46 @@ documents, evaluation reports, session transcripts or historical task records. N
 included; Writhelm's AGPL-3.0-only terms apply. Review the full proposed bytes and provenance before
 approval. Existing `docs/architecture.md` and `README.md` may record the confirmed own-core direction
 and checkpoint; they must not imply acceptance or implementation of the new specification.
+
+## Codec/contracts scope P4 — local commit authorized
+
+The owner's subsequent commit instruction authorizes local tracking/commit of the exact completed
+codec and freshly authored service-contract/readiness paths below, after boundary and complete diff
+review. This does not authorize push, publication of raw evidence/prototypes/session history, future
+worker output or blanket ratification of unaccepted transport design. New source is Writhelm-owned
+AGPL-3.0-only; synthetic fixture keys are fixed public test vectors, never live service credentials.
+
+```text
+docs/contracts/state-codec.md
+docs/contracts/command-publication.md
+docs/contracts/authentication-access.md
+docs/design/core-codec-readiness.md
+docs/design/auth-service-readiness.md
+docs/tasks/DESIGN-006.md
+docs/tasks/DESIGN-007.md
+docs/tasks/DESIGN-008.md
+docs/tasks/CORE-003.md
+docs/tasks/AUTH-001.md
+docs/schemas/core-codec-v1.json
+docs/schemas/core-codec-goldens-v1.json
+docs/schemas/auth-service-v1.json
+docs/schemas/auth-service-goldens-v1.json
+backend/server/src/main/kotlin/dev/writhelm/core/codec/StrictJson.kt
+backend/server/src/main/kotlin/dev/writhelm/core/codec/CoreRecordCodec.kt
+backend/server/src/main/kotlin/dev/writhelm/core/codec/CommandCodec.kt
+backend/server/src/main/kotlin/dev/writhelm/core/codec/CoreSnapshotCodec.kt
+backend/server/src/main/kotlin/dev/writhelm/core/workflow/WorkflowSnapshot.kt
+backend/server/src/main/kotlin/dev/writhelm/core/workflow/WorkflowSnapshotValidator.kt
+backend/server/src/test/kotlin/dev/writhelm/core/codec/StrictJsonTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/codec/RecordCommandCodecTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/codec/SnapshotCodecTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/codec/CodecFixture.kt
+```
+
+Accompanying existing-path changes are limited to `.gitignore`, this publication record,
+`backend/server/build.gradle.kts`, `RevisionCatalog.kt`, `ApprovalWorkflow.kt` and `WorkflowRecords.kt`
+under their already named P3 paths. They add the pinned JSON dependency, internal snapshot access and
+the accepted checked-generation refusal; original tests/settings/imported source remain unchanged.
+The new direct dependency is referenced, not vendored or distributed. Artifact license/security
+qualification remains open. Build output, caches, raw XML/logs and worker/reviewer scratch stay ignored.
+Later reviewer/implementation tasks and worker source paths need their own scoped tracking decision.

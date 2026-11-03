@@ -18,6 +18,8 @@ class RevisionCatalog(revisions: Collection<DocumentRevision> = emptyList()) {
 
     fun withRevision(revision: DocumentRevision): RevisionCatalog = RevisionCatalog(byKey.values + revision)
 
+    internal fun snapshotRevisions(): Collection<DocumentRevision> = byKey.values
+
     fun read(reference: ClauseReference): ReadResult<ClauseRead> =
         byKey[reference.revision]?.clauseRead(reference) ?: ReadResult.Failed(ReadFailure.REVISION_NOT_FOUND)
 

@@ -1,0 +1,61 @@
+{
+  "fixtureVersion": 1,
+  "purpose": "Independent synthetic expected bytes frozen before the Writhelm codec implementation; no claim of valid workflow graphs for shape-only samples.",
+  "canonicalJson": [
+    {
+      "name": "header",
+      "input": {"modelVersion": 1, "formatVersion": 1},
+      "expectedUtf8": "{\"formatVersion\":1,\"modelVersion\":1}"
+    },
+    {
+      "name": "grant-set-order",
+      "input": {
+        "formatVersion": 1,
+        "family": "grants",
+        "key": {"principalId": "00000000-0000-0000-0000-000000000006", "projectId": "00000000-0000-0000-0000-000000000001"},
+        "payload": {"capabilities": ["READ", "PLAN"]}
+      },
+      "expectedUtf8": "{\"family\":\"grants\",\"formatVersion\":1,\"key\":{\"principalId\":\"00000000-0000-0000-0000-000000000006\",\"projectId\":\"00000000-0000-0000-0000-000000000001\"},\"payload\":{\"capabilities\":[\"PLAN\",\"READ\"]}}"
+    },
+    {
+      "name": "explicit-controls-and-literal-unicode",
+      "input": {"z": 9223372036854775807, "a": "\n\r\t\b\f\u0000\u001f/\"\\é🙂"},
+      "expectedUtf8": "{\"a\":\"\\u000a\\u000d\\u0009\\u0008\\u000c\\u0000\\u001f/\\\"\\\\é🙂\",\"z\":9223372036854775807}",
+      "note": "Generic canonical writer vector, not a domain record. No BOM or final LF."
+    }
+  ],
+  "commandFingerprint": {
+    "input": {
+      "formatVersion": 1,
+      "requestKey": "00000000-0000-0000-0000-00000000000a",
+      "projectId": "00000000-0000-0000-0000-000000000001",
+      "operation": "revoke_access",
+      "payload": {"principalId": "00000000-0000-0000-0000-000000000006"}
+    },
+    "expectedSemanticUtf8": "{\"formatVersion\":1,\"operation\":\"revoke_access\",\"payload\":{\"principalId\":\"00000000-0000-0000-0000-000000000006\"},\"projectId\":\"00000000-0000-0000-0000-000000000001\"}",
+    "expectedSha256": "0225e74fafc5334382e0f302eea0177656ba3b62c387930ef64643bc9e6ef1c9",
+    "framing": "big-endian uint32 UTF-8 byte length + writhelm.command.v1; big-endian uint32 semantic UTF-8 byte length + exact semantic bytes"
+  },
+  "bodySha256": [
+    {"text": "", "expected": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+    {"text": "X\n", "expected": "7058299627365fc7a3dd7840fd3d56f29306cd30c0f2c13cb500fe79617290ff"},
+    {"text": "X\r\n", "expected": "d26a7528134491bbe88c1c728df61f64d493faf74932d00ea636567fb5a91fb9"},
+    {"text": "é🙂", "expected": "7382f537af6a53054b6a72792df00fa0be0f5d2e8214db9cd6ebbcc3d57d02b9"}
+  ],
+  "strictTokenRefusals": [
+    "{\"a\":1,\"a\":2}",
+    "{\"a\":1,\"\\u0061\":2}",
+    "{\"x\":{\"a\":1,\"a\":2}}",
+    "{} {}",
+    "{\"a\":-0}",
+    "{\"a\":1.0}",
+    "{\"a\":1e0}",
+    "{\"a\":01}",
+    "{\"a\":9223372036854775808}",
+    "{\"a\":\"\\uD800\"}",
+    "{\"\\uD800\":1}",
+    "{\"a\":1,}",
+    "{/*comment*/\"a\":1}",
+    "\ufeff{}"
+  ]
+}

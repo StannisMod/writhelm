@@ -35,6 +35,10 @@ class AccessPolicy(grants: Collection<Grant>) {
 
     internal fun hasGrant(project: UUID, principal: UUID): Boolean = entries.containsKey(principal to project)
 
+    internal fun snapshotGrants(): List<Grant> = frozenList(entries.map { (key, caps) -> Grant(key.first, key.second, caps) })
+
+    internal fun snapshotGrantCount(): Int = entries.size
+
     internal fun revocationKeepsAuthority(project: UUID, principal: UUID): Boolean {
         val removed = entries[principal to project].orEmpty()
         return listOf(Capability.APPROVE, Capability.MANAGE).all { capability ->
@@ -143,7 +147,7 @@ enum class WorkflowProblem {
     FORBIDDEN, NOT_FOUND, DUPLICATE_ID, INVALID_REFERENCE, FOREIGN_REFERENCE, MISSING_CONTEXT,
     STALE_SUBJECT, DIGEST_MISMATCH, ALREADY_RESOLVED, UNKNOWN_COMMENT_ITEM, INCOMPLETE_PACKET,
     UNAPPROVED_INPUT, BLOCKED_INPUT, INVALID_CONTINUITY, CONTEXT_CHANGED, INCOMPLETE_ASSESSMENT,
-    CONFLICTING_SELECTION, UNSUPPORTED_CONTEXT_MIX, LAST_AUTHORITY,
+    CONFLICTING_SELECTION, UNSUPPORTED_CONTEXT_MIX, LAST_AUTHORITY, GENERATION_EXHAUSTED,
 }
 
 sealed interface WorkflowResult<out T> {
@@ -161,3 +165,6 @@ internal fun requireText(value: String) {
 internal fun <T> frozenList(values: Collection<T>): List<T> = Collections.unmodifiableList(ArrayList(values))
 internal fun <T> frozenSet(values: Collection<T>): Set<T> = Collections.unmodifiableSet(LinkedHashSet(values))
 internal fun <K, V> frozenMap(values: Map<K, V>): Map<K, V> = Collections.unmodifiableMap(LinkedHashMap(values))
+
+internal fun checkedNextGeneration(value: Long): Long? = if (value < 0 || value == Long.MAX_VALUE) null else value + 1
+internal fun canAdvanceGenerations(values: Collection<Long>): Boolean = values.all { checkedNextGeneration(it) != null }

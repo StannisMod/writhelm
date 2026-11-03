@@ -1,0 +1,37 @@
+{
+  "fixtureVersion": 1,
+  "warning": "PUBLIC DETERMINISTIC SYNTHETIC VECTORS. Never provision these values as real credentials. No secret was generated or registered with a live service.",
+  "credential": {
+    "storeId": "00000000-0000-0000-0000-000000000001",
+    "projectId": "00000000-0000-0000-0000-000000000002",
+    "principalId": "00000000-0000-0000-0000-000000000003",
+    "credentialId": "00000000-0000-0000-0000-000000000004",
+    "syntheticSecretHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "expectedSecretBase64url": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+    "expectedToken": "wh1.00000000-0000-0000-0000-000000000001.00000000-0000-0000-0000-000000000004.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+    "expectedVerifierSha256": "d7e7768bfbb2a58f9417759671900e7f9fc779700b0b00116f080d5825763cb2",
+    "expectedTokenAsciiBytes": 121
+  },
+  "grant": {
+    "projectId": "00000000-0000-0000-0000-000000000002",
+    "principalId": "00000000-0000-0000-0000-000000000003",
+    "cases": [
+      {"present": false, "capabilities": [], "expectedSha256": "2dae767505deeeed7470cfbaef15782e20c4d6f6c0c7e3b75da826dc1847930b"},
+      {"present": true, "capabilities": [], "expectedSha256": "b0773415aab6318b2b02718412840ee862c6eb1cc4d72fe8ce420cdc0912a502"},
+      {"present": true, "capabilities": ["READ", "PLAN"], "expectedSha256": "92bfc4a10b3e99ba7fd841420d8128c6f5294c00f7c00b9913f4561a96129de8"}
+    ],
+    "note": "Capability order canonicalizes; absent differs from present-empty. Equal restored capability bytes do not reset the separately checked generation guard."
+  },
+  "commandFingerprintV2": {
+    "input": {
+      "formatVersion": 2,
+      "requestKey": "00000000-0000-0000-0000-000000000005",
+      "projectId": "00000000-0000-0000-0000-000000000002",
+      "operation": "revoke_credential",
+      "payload": {"credentialId": "00000000-0000-0000-0000-000000000004", "expectedGeneration": 0}
+    },
+    "expectedSemanticUtf8": "{\"formatVersion\":2,\"operation\":\"revoke_credential\",\"payload\":{\"credentialId\":\"00000000-0000-0000-0000-000000000004\",\"expectedGeneration\":0},\"projectId\":\"00000000-0000-0000-0000-000000000002\"}",
+    "expectedSha256": "fe4611fbb1e3038c17d417382462d3f72e3507508d64fb4594d8163cc22465f0",
+    "note": "Same length framing as CD-06, domain writhelm.command.v2; no requestKey or body actor in fingerprint material."
+  }
+}

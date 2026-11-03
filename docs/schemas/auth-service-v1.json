@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:writhelm:auth-service:v1",
+  "title": "Writhelm auth v1 and auth-enabled command/journal v2 field shapes",
+  "$comment": "Offline shape oracle. Register core-codec-v1.json locally under its urn. No remote resolution, token/secret validation, authority checks or temporal proof is provided by JSON Schema.",
+  "oneOf": [{"$ref": "#/$defs/header"}, {"$ref": "#/$defs/record"}, {"$ref": "#/$defs/command"}, {"$ref": "#/$defs/receipt"}],
+  "$defs": {
+    "uuid": {"$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"},
+    "digest": {"$ref": "urn:writhelm:core-codec:v1#/$defs/digest"},
+    "generation": {"$ref": "urn:writhelm:core-codec:v1#/$defs/generation"},
+    "grantKey": {"$ref": "urn:writhelm:core-codec:v1#/$defs/grantKey"},
+    "capabilities": {"type": "array", "uniqueItems": true, "items": {"enum": ["READ", "PROPOSE", "PLAN", "APPROVE", "MANAGE"]}},
+    "header": {
+      "type": "object", "additionalProperties": false, "required": ["formatVersion", "profileVersion"],
+      "properties": {"formatVersion": {"const": 1}, "profileVersion": {"const": 1}}
+    },
+    "principal": {"type": "object", "additionalProperties": false, "maxProperties": 0},
+    "project": {
+      "type": "object", "additionalProperties": false, "required": ["ownerPrincipalId", "profileVersion"],
+      "properties": {"ownerPrincipalId": {"$ref": "#/$defs/uuid"}, "profileVersion": {"const": 1}}
+    },
+    "credential": {
+      "type": "object", "additionalProperties": false,
+      "required": ["storeId", "projectId", "principalId", "verifierVersion", "verifierDigest", "status", "generation", "replacedBy"],
+      "properties": {
+        "storeId": {"$ref": "#/$defs/uuid"}, "projectId": {"$ref": "#/$defs/uuid"}, "principalId": {"$ref": "#/$defs/uuid"},
+        "verifierVersion": {"const": 1}, "verifierDigest": {"$ref": "#/$defs/digest"},
+        "status": {"enum": ["active", "revoked"]}, "generation": {"$ref": "#/$defs/generation"},
+        "replacedBy": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/uuid"}]}
+      },
+      "if": {"properties": {"status": {"const": "active"}}},
+      "then": {"properties": {"replacedBy": {"type": "null"}}}
+    },
+    "guard": {
+      "type": "object", "additionalProperties": false, "required": ["generation"],
+      "properties": {"generation": {"$ref": "#/$defs/generation"}}
+    },
+    "record": {
+      "type": "object", "additionalProperties": false, "required": ["formatVersion", "family", "key", "payload"],
+      "properties": {"formatVersion": {"const": 1}, "family": {"type": "string"}, "key": {}, "payload": {}},
+      "oneOf": [
+        {"properties": {"family": {"const": "principals"}, "key": {"$ref": "#/$defs/uuid"}, "payload": {"$ref": "#/$defs/principal"}}},
+        {"properties": {"family": {"const": "projects"}, "key": {"$ref": "#/$defs/uuid"}, "payload": {"$ref": "#/$defs/project"}}},
+        {"properties": {"family": {"const": "credentials"}, "key": {"$ref": "#/$defs/uuid"}, "payload": {"$ref": "#/$defs/credential"}}},
+        {"properties": {"family": {"const": "grant-guards"}, "key": {"$ref": "#/$defs/grantKey"}, "payload": {"$ref": "#/$defs/guard"}}}
+      ]
+    },
+    "replaceGrants": {
+      "type": "object", "additionalProperties": false,
+      "required": ["principalId", "expectedGeneration", "expectedGrantDigest", "capabilities"],
+      "properties": {"principalId": {"$ref": "#/$defs/uuid"}, "expectedGeneration": {"$ref": "#/$defs/generation"},
+        "expectedGrantDigest": {"$ref": "#/$defs/digest"}, "capabilities": {"$ref": "#/$defs/capabilities"}}
+    },
+    "revokeCredential": {
+      "type": "object", "additionalProperties": false, "required": ["credentialId", "expectedGeneration"],
+      "properties": {"credentialId": {"$ref": "#/$defs/uuid"}, "expectedGeneration": {"$ref": "#/$defs/generation"}}
+    },
+    "rotateCredential": {
+      "type": "object", "additionalProperties": false,
+      "required": ["credentialId", "expectedGeneration", "newCredentialId", "verifierVersion", "newVerifierDigest"],
+      "properties": {"credentialId": {"$ref": "#/$defs/uuid"}, "expectedGeneration": {"$ref": "#/$defs/generation"},
+        "newCredentialId": {"$ref": "#/$defs/uuid"}, "verifierVersion": {"const": 1}, "newVerifierDigest": {"$ref": "#/$defs/digest"}}
+    },
+    "command": {
+      "type": "object", "additionalProperties": false, "required": ["formatVersion", "requestKey", "projectId", "operation", "payload"],
+      "properties": {"formatVersion": {"const": 2}, "requestKey": {"$ref": "#/$defs/uuid"}, "projectId": {"$ref": "#/$defs/uuid"},
+        "operation": {"type": "string"}, "payload": {}},
+      "oneOf": [
+        {"properties": {"operation": {"const": "replace_grants"}, "payload": {"$ref": "#/$defs/replaceGrants"}}},
+        {"properties": {"operation": {"const": "revoke_credential"}, "payload": {"$ref": "#/$defs/revokeCredential"}}},
+        {"properties": {"operation": {"const": "rotate_credential"}, "payload": {"$ref": "#/$defs/rotateCredential"}}}
+      ]
+    },
+    "coreOperation": {"enum": ["propose_revision", "request_approval", "resolve_approval", "record_assessment", "pin_consumer", "revoke_access"]},
+    "authOperation": {"enum": ["replace_grants", "revoke_credential", "rotate_credential"]},
+    "operation": {"oneOf": [{"$ref": "#/$defs/coreOperation"}, {"$ref": "#/$defs/authOperation"}]},
+    "receiptKey": {
+      "type": "object", "additionalProperties": false, "required": ["principalId", "projectId", "operation", "requestKey"],
+      "properties": {"principalId": {"$ref": "#/$defs/uuid"}, "projectId": {"$ref": "#/$defs/uuid"},
+        "operation": {"$ref": "#/$defs/operation"}, "requestKey": {"$ref": "#/$defs/uuid"}}
+    },
+    "gitOid": {
+      "type": "object", "additionalProperties": false, "required": ["algorithm", "hex"],
+      "properties": {"algorithm": {"enum": ["sha1", "sha256"]}, "hex": {"type": "string"}},
+      "oneOf": [
+        {"properties": {"algorithm": {"const": "sha1"}, "hex": {"pattern": "^[0-9a-f]{40}$"}}},
+        {"properties": {"algorithm": {"const": "sha256"}, "hex": {"pattern": "^[0-9a-f]{64}$"}}}
+      ]
+    },
+    "nullableDigest": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/digest"}]},
+    "write": {
+      "type": "object", "additionalProperties": false,
+      "required": ["namespace", "family", "key", "beforeDigest", "afterDigest"],
+      "properties": {"namespace": {"enum": ["core", "auth"]}, "family": {"type": "string"}, "key": {},
+        "beforeDigest": {"$ref": "#/$defs/nullableDigest"}, "afterDigest": {"$ref": "#/$defs/nullableDigest"}},
+      "oneOf": [
+        {"properties": {"namespace": {"const": "core"}, "family": {"enum": ["revisions", "proposals"]}, "key": {"$ref": "urn:writhelm:core-codec:v1#/$defs/revisionKey"}}},
+        {"properties": {"namespace": {"const": "core"}, "family": {"const": "grants"}, "key": {"$ref": "#/$defs/grantKey"}}},
+        {"properties": {"namespace": {"const": "core"}, "family": {"enum": ["requests", "resolutions", "assessments", "manifests"]}, "key": {"$ref": "#/$defs/uuid"}}},
+        {"properties": {"namespace": {"const": "core"}, "family": {"enum": ["approvals", "continuity", "blocked"]}, "key": {"$ref": "urn:writhelm:core-codec:v1#/$defs/reference"}}},
+        {"properties": {"namespace": {"const": "core"}, "family": {"enum": ["heads", "generations"]}, "key": {"$ref": "urn:writhelm:core-codec:v1#/$defs/subject"}}},
+        {"properties": {"namespace": {"const": "core"}, "family": {"const": "bodies"}, "key": {"$ref": "#/$defs/digest"}}},
+        {"properties": {"namespace": {"const": "auth"}, "family": {"enum": ["principals", "projects", "credentials"]}, "key": {"$ref": "#/$defs/uuid"}}},
+        {"properties": {"namespace": {"const": "auth"}, "family": {"const": "grant-guards"}, "key": {"$ref": "#/$defs/grantKey"}}}
+      ],
+      "not": {"properties": {"beforeDigest": {"type": "null"}, "afterDigest": {"type": "null"}}}
+    },
+    "success": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "operation", "result", "domainReplayed"],
+      "properties": {"kind": {"const": "success"}, "operation": {"$ref": "#/$defs/operation"}, "result": {}, "domainReplayed": {"type": "boolean"}},
+      "oneOf": [
+        {"properties": {"operation": {"const": "propose_revision"}, "result": {"$ref": "urn:writhelm:core-codec:v1#/$defs/revisionKey"}}},
+        {"properties": {"operation": {"enum": ["request_approval", "resolve_approval", "record_assessment", "pin_consumer", "revoke_access", "replace_grants", "revoke_credential"]}, "result": {"$ref": "#/$defs/uuid"}}},
+        {"properties": {"operation": {"const": "rotate_credential"}, "result": {
+          "type": "object", "additionalProperties": false, "required": ["credentialId", "replacedCredentialId"],
+          "properties": {"credentialId": {"$ref": "#/$defs/uuid"}, "replacedCredentialId": {"$ref": "#/$defs/uuid"}}
+        }}}
+      ]
+    },
+    "rejection": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "domain", "code"],
+      "properties": {"kind": {"const": "rejected"}, "domain": {"enum": ["core", "auth"]}, "code": {"type": "string"}},
+      "oneOf": [
+        {"properties": {"domain": {"const": "core"}, "code": {"enum": [
+          "NOT_FOUND", "DUPLICATE_ID", "INVALID_REFERENCE", "FOREIGN_REFERENCE", "MISSING_CONTEXT", "STALE_SUBJECT", "DIGEST_MISMATCH",
+          "ALREADY_RESOLVED", "UNKNOWN_COMMENT_ITEM", "INCOMPLETE_PACKET", "UNAPPROVED_INPUT", "BLOCKED_INPUT", "INVALID_CONTINUITY",
+          "CONTEXT_CHANGED", "INCOMPLETE_ASSESSMENT", "CONFLICTING_SELECTION", "UNSUPPORTED_CONTEXT_MIX", "LAST_AUTHORITY", "GENERATION_EXHAUSTED"
+        ]}}},
+        {"properties": {"domain": {"const": "auth"}, "code": {"enum": [
+          "AUTH_TARGET_NOT_FOUND", "AUTH_STALE_CREDENTIAL", "AUTH_STALE_GRANT", "AUTH_ALREADY_REVOKED", "AUTH_ALREADY_REPLACED",
+          "AUTH_DUPLICATE_CREDENTIAL", "AUTH_OWNER_LOCKOUT", "AUTH_FIXED_OWNER_POLICY", "AUTH_GENERATION_EXHAUSTED"
+        ]}}}
+      ]
+    },
+    "receipt": {
+      "type": "object", "additionalProperties": false, "required": ["formatVersion", "family", "key", "payload"],
+      "properties": {
+        "formatVersion": {"const": 2}, "family": {"const": "command-receipt"}, "key": {"$ref": "#/$defs/receiptKey"},
+        "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["storeId", "fingerprintVersion", "fingerprint", "validatedAt", "authenticatedByCredentialId", "outcome", "writes"],
+          "properties": {"storeId": {"$ref": "#/$defs/uuid"}, "fingerprintVersion": {"enum": [1, 2]},
+            "fingerprint": {"$ref": "#/$defs/digest"}, "validatedAt": {"$ref": "#/$defs/gitOid"},
+            "authenticatedByCredentialId": {"$ref": "#/$defs/uuid"},
+            "outcome": {"oneOf": [{"$ref": "#/$defs/success"}, {"$ref": "#/$defs/rejection"}]},
+            "writes": {"type": "array", "items": {"$ref": "#/$defs/write"}}}
+        }
+      },
+      "allOf": [
+        {"if": {"properties": {"key": {"properties": {"operation": {"$ref": "#/$defs/coreOperation"}}}}},
+          "then": {"properties": {"payload": {"properties": {"fingerprintVersion": {"const": 1}}}}},
+          "else": {"properties": {"payload": {"properties": {"fingerprintVersion": {"const": 2}}}}}},
+        {"if": {"properties": {"payload": {"properties": {"outcome": {"properties": {"kind": {"const": "rejected"}}}}}}},
+          "then": {"properties": {"payload": {"properties": {"writes": {"maxItems": 0}}}}}}
+      ]
+    }
+  }
+}
