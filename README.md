@@ -16,10 +16,16 @@ The selected direction is a Writhelm-owned core with selective reuse, not a main
 remains unchanged under `backend/` for reference and reuse qualification. That upstream baseline
 passes its tests, lint and JAR build; this is not verification of a Writhelm core.
 The local implementation includes immutable content/approval/input manifests, a strict state codec,
-credential/authority rules and their internal binding to an atomic Git command store. There is no
-working HTTP/MCP service yet. Core blocks 1–3 received bounded independent review; later auth/store/app
-work has targeted author tests and parent checks. Real crash recovery and M1 acceptance remain open.
+credential/authority rules, atomic Git publication, HTTP/MCP application adapters and a native
+OpenCode Desktop plugin candidate. Bounded independent reviews and targeted combined checks have
+run; this is not a qualified launched service. Installed OpenCode rendering/IPC, abnormal recovery,
+other-OS operation and M1 acceptance remain open; one earlier component-start timeout is unexplained.
 Dependency license qualification remains open.
+The H1 connected-work contracts are approved, and a bounded portable implementation candidate has
+scoped independent review and parent acceptance in isolated worktrees. It is not yet integrated into
+this source tree or qualified for installed native execution. See the [completion plan](docs/roadmap.md).
+Linux, Windows and macOS are target service platforms. The current native store is Linux-specific;
+other platform adapters and cross-platform operational qualification are not implemented or verified.
 See [upstream provenance](docs/upstream.md).
 Writhelm is an independent project, not an official upstream distribution.
 
@@ -33,6 +39,8 @@ Writhelm is an independent project, not an official upstream distribution.
 - Accepted decisions, implemented changes, verified results and integration remain distinct.
 - A planning session coordinates bounded workers and risk-based independent verification.
 - Harness adapters provide native lifecycle integration; MCP access alone does not control history.
+- Platform-independent semantics with separately qualified Linux, Windows and macOS runtime adapters;
+  platform-specific dependencies must not silently narrow the product to one OS.
 
 ## Documents
 

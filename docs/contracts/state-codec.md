@@ -12,6 +12,12 @@ Those accepted directions are not reopened. This draft does not accept the separ
 
 ## CD-01 — Explicit formats, not runtime object serialization
 
+Cross-platform applicability under X1/K-RUN revision 2: canonical keys, framing, encoding and byte
+ordering stay identical across OSes. CD-01a slash-separated paths are logical Git entry keys, not
+host-native paths to normalize with OS separators or case rules. Platform adapters must preserve
+exact bytes, including CRLF/BOM/Unicode distinctions. No format migration or blanket cross-OS runtime
+qualification follows from this clarification.
+
 Use explicit typed DTOs and validators, not reflection over private fields, Java serialization or
 polymorphic class names. Envelope `formatVersion` is integer `1`; record variants have fixed type
 tags. Unknown versions/types fail closed. No guessing, legacy fallback or automatic migration.

@@ -11,6 +11,10 @@ kotlin {
 
 dependencies {
     implementation("com.fasterxml.jackson.core:jackson-core:2.21.7")
+    implementation("io.ktor:ktor-server-cio-jvm:3.4.3")
+    implementation("io.modelcontextprotocol:kotlin-sdk-server-jvm:0.13.0")
+    testImplementation("io.ktor:ktor-client-cio-jvm:3.4.3")
+    testImplementation("io.modelcontextprotocol:kotlin-sdk-client-jvm:0.13.0")
     testImplementation(kotlin("test-junit5"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.12.2")

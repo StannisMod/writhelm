@@ -1,12 +1,19 @@
 # Initial authentication and project access
 
 Contract K-AUTH, revision 1. Status: scope approved; pure auth/internal publication binding implemented.
-Author tests/parent checks completed; independent auth review and real client/transport qualification pending.
+Author/parent checks and bounded non-author service review completed; installed-client/operational
+qualification remains pending.
 Task: [DESIGN-008](../tasks/DESIGN-008.md). Dependencies: [K-WORKFLOW](knowledge-workflow.md),
 [K-CODEC revision 2](state-codec.md), [K-PUBLISH revision 1](command-publication.md),
 [T1/UI](../design/approval-interface.md), [A1 proposal](../design/first-slice.md).
 This concretizes the previously unaccepted credential/deployment profile; it is not another ruling
 on Git SSOT, clause-local authority or enterprise owner-origin attestation.
+
+Subsequent H1 extension: [K-WORK-AUTH revision 3](work-authority.md) is agreed for explicit work
+permissions and bounded delegated execution identities. The bootstrap-only/knowledge-only profile
+below remains its original versioned baseline; old PLAN/READ or role labels are not silently promoted.
+New enrollment/scopes/grants require the explicit H1 schema/namespace/command/journal profile before
+implementation. Existing verifier/token/owner protections are not weakened by the extension.
 
 ## AU-01 — Trust and the initial supported profile
 
@@ -260,6 +267,12 @@ single-root atomicity or expand the codec child's assigned implementation scope.
 
 ## AU-10 — Derived finite verification and readiness
 
+Cross-platform clarification under approved X1/K-RUN revision 2: authority, token/verifier bytes and
+capabilities remain identical on Linux, Windows and macOS. CSPRNG access, protected client secret
+storage and private-store permission enforcement require platform-specific qualification. A POSIX
+mode check or Unix-only secret helper is not the Windows implementation. Do not weaken protection
+or pass owner keys to a model to accommodate an OS. No token/schema/profile version bump is implied.
+
 | Cases | Expected observations |
 | --- | --- |
 | Valid secret/binding plus each absent/wrong/revoked/malformed predicate independently | Exact authorized operation succeeds; each failed predicate denies without protected data or receipt |
@@ -314,3 +327,10 @@ binds actual token checks, core policy, reducers, constrained grants and journal
 23 unchanged cases also passed with STORE-002's corrected history-capacity dependency. Parent checked
 source/evidence. Independent auth/store/app review, real keys/client provisioning, HTTP/MCP and
 crash/supervisor qualification remain unpassed. AU-01–10 are unchanged; this is not service acceptance.
+
+Later bounded review inspected actual auth/store/app and interface credential bindings. Its store
+F-001 and native retained-profile IF-001/file-open IF-002 findings were corrected in separate author
+tasks, independently rechecked and parent-accepted for exact candidate bytes. Local integrated
+HTTP/MCP/native-component checks now use synthetic credentials and protected Linux files; no live
+operator keys, installed-harness, Windows/macOS or recovery qualification is inferred. An earlier
+native-component first-controls timeout remains unexplained. AU semantics/token formats are unchanged.

@@ -1,7 +1,7 @@
 # Durable command outcomes and atomic Git publication
 
 Contract K-PUBLISH, revision 1. Status: scope approved; bounded internal mechanism/binding implemented.
-Author tests/parent checks completed; independent store review and real crash/supervision gates pending.
+Author/parent checks and bounded independent store review completed; real crash/supervision gates pending.
 Task: [DESIGN-007](../tasks/DESIGN-007.md). Dependencies:
 [K-CODEC revision 2](state-codec.md), [K-CONTENT](knowledge-content.md),
 [K-WORKFLOW](knowledge-workflow.md), [K-APP](accepted-knowledge.md),
@@ -198,6 +198,14 @@ there is no automatic force reset, cleanup of ambiguous locks or reconstruction 
 
 ## PB-09 — Runtime and verification gates
 
+Approved cross-platform scope X1/K-RUN revision 2: Linux, Windows and macOS are service targets.
+PB-01–08 atomicity, identity, receipt and uncertainty laws are the same on every platform. Git binary
+resolution, controlled environment/config, permissions, file locks/synchronization and process fencing
+belong to qualified platform adapters under [K-RUN](launch-recovery.md), not universal Unix paths or
+systemd requirements. Pin and test each actual profile; unsupported/unqualified platforms fail
+explicitly. The current Linux-specific store and its old evidence remain Linux-specific. This addition
+does not change canonical schemas or claim cross-OS data-directory migration/backup compatibility.
+
 Before implementation pin Git/JDK/dependencies, positive file/command/receipt/retry/restore budgets,
 supported object format/backend/filesystem, object/ref synchronization settings, process ownership,
 publisher lock/supervision and restart runbook. Git calls use argument arrays, byte-preserving object
@@ -241,3 +249,13 @@ Final affected-dependency run: 57 store + 23 unchanged app cases passed; parent 
 exact evidence. Prior terminal-CAS and portable-root regressions are retained. PB-01–09 are unchanged.
 Unknown outcomes still fail closed behind a recovery barrier. No automatic marker clearing or
 qualified surviving-child recovery/runbook, real crash test, HTTP/MCP service or M1 acceptance exists.
+
+Subsequent bounded service review found F-001: nonfinal changed-head reconciliation could clear the
+uncertainty barrier before failed audit and return definite unavailable after actual publication.
+STORE-003 corrects this through common final/nonfinal reconciliation; exact production SHA-256
+`da604f254b9f48c91f67b218329d10f9ab66b51f116f01942933dc2b40d05847`.
+Parent reproduced the original failure and checked source/evidence; non-author re-review closed
+F-001 for those bytes with 10 independently authored passing probes. Author affected run was 71
+store + 23 app cases. The corrected bytes are now locally integrated with the interface/native
+candidate; one final affected combined execution passed 120 cases. These are separate runs/scopes,
+not a fabricated full-suite or process-crash pass. PB laws/formats/count limits remain unchanged.

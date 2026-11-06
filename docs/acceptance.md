@@ -110,6 +110,19 @@ qualification is deferred, not claimed; service authorization/binding and decisi
 
 ## First working slice gate (M1)
 
+H1 E-COOP-1 amendment (2026-11-05): initial cooperative pilot doesn't claim stronger arbitrary-shell/
+OS confinement tested by AC-37. Preserve AC-37 as a strong-profile gate, not a passed cooperative test
+or first-pilot blocker. Initial profile checks actual service authority, owner-key exclusion, separate
+worktrees, read-only review integrity and whole-diff semantic scope. Platform targets/strong-profile
+qualification remain explicit.
+
+Pilot sequencing update (2026-11-05): the owner does not want a standalone M1 user trial and directed
+design of a complete managed-agent OpenCode pilot. The M1 gates below remain foundation obligations,
+not a claim of acceptance or grounds for dropping pending checks. The combined H1 pilot must add the
+bounded-work/context/lifecycle/evidence/review workflow under separately approved contracts. Prefer
+cheap component checks during development and a planned combined checkpoint, not more isolated M1
+GUI campaigns by default. No live model/paid experiment is authorized by this sequencing decision.
+
 Ratify the relevant contract clauses and a bounded implementation design, not a whole draft bundle.
 For one structural document with independent clauses X/Y, two project identities (including access
 denial), separately authenticated callers and two pinned consumers, demonstrate K-APP O1-O9 and its
@@ -145,6 +158,12 @@ transport test is not automatically classified as cheap. Counts and coverage per
 not establish oracle quality, and this allocation does not prove generic change-impact inference.
 
 ## Current execution status
+
+Approved X1/K-RUN revision 2 adds per-platform qualification: the common codec/auth/HTTP/MCP outcomes
+must remain identical on Linux, Windows and macOS; OS adapters need real permission, Git/config,
+exclusive ownership, synchronization, descendant containment and interrupted-recovery checks on the
+actual target OS/profile. A build or Linux run does not establish Windows/macOS behavior. No platform
+implementation order or extra expensive process-fault run is authorized by this coverage record.
 
 All AC scenarios: **not executed for Writhelm**. The imported upstream regression suite is useful
 baseline evidence only; it does not satisfy these scenarios by similarity of feature names.

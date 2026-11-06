@@ -47,11 +47,16 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
         git.deadlineNanos=System.nanoTime()+TimeUnit.MILLISECONDS.toNanos(bounds.commandMillis)
         try {
             usable(); var originalIdentity: CommandIdentity?=null; var originalCredential: UUID?=null
-            repeat(bounds.attempts) { attempt ->
-                val base=capture(); val h=base.snapshot
+            var reconciled: Pair<ValidatedHead,AuthenticatedActor>?=null
+            repeat(bounds.attempts) {
+                // A qualified absence below may supply the next attempt's already captured H and
+                // current access. Do not recapture or substitute another credential in between;
+                // expected-old CAS still fences any subsequent head movement.
+                val prepared=reconciled; reconciled=null
+                val base=prepared?.first ?: capture(); val h=base.snapshot
                 // The callback closes over the SAME presented credential. It must authenticate and
                 // authorize in this H, including on every CAS rebuild and before any receipt lookup.
-                val actor=access.authorize(h,command) ?: return CommandResult.Denied
+                val actor=prepared?.second ?: access.authorize(h,command) ?: return CommandResult.Denied
                 originalCredential?.let { integrity(it==actor.credentialId) }; originalCredential=actor.credentialId
                 val policy=AdmissionPolicy.decode(h.file("policy/admission.json") ?: fail(StoreProblem.INTEGRITY))
                 policy.command(command)
@@ -129,31 +134,35 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
                     owner.finishPublication(); publicationStarted=false
                     return CommandResult.Refused(StoreProblem.UNAVAILABLE)
                 }
-                if(attempt==bounds.attempts-1) {
-                    // Reconciliation is mandatory even when no CAS rebuild remains. Keep the
-                    // joined-child barrier until the published line, current access and receipt
-                    // are resolved. Any failure/deadline here is unknown, never definite absence.
-                    // capture/audit retain the ORIGINAL aggregate command deadline.
-                    validated=null
-                    val current=capture().snapshot
-                    val currentActor=access.authorize(current,command)
-                    if(currentActor==null) {
-                        owner.finishPublication(); publicationStarted=false
-                        return CommandResult.Denied
-                    }
-                    integrity(currentActor.principalId==actor.principalId && currentActor.credentialId==actor.credentialId)
-                    val recovered=current.file(identity.path)?.let { bytes ->
-                        val original=JournalCodec.decode(bytes,identity.path)
-                        integrity(original.identity==identity && original.storeId==storeId)
-                        if(original.fingerprintVersion==command.fingerprintVersion && original.fingerprint==command.fingerprint)
-                            CommandResult.Settled(original,true,null) else CommandResult.IdentityConflict
-                    }
-                    owner.finishPublication(); publicationStarted=false
-                    return recovered ?: CommandResult.Refused(StoreProblem.UNAVAILABLE)
-                }
-                owner.finishPublication(); publicationStarted=false
+                // Identical reconciliation on EVERY attempt, including the last. A completed child
+                // does not by itself establish the command outcome. Keep ambiguity/barrier until
+                // the published line, current rights and original receipt are resolved. These calls
+                // retain the ORIGINAL aggregate deadline; any unresolved failure stays Unknown.
                 validated=null
-                // Next iteration reauthenticates; unrecognized movement gets bounded full audit.
+                val currentBase=capture(); val current=currentBase.snapshot
+                val currentActor=access.authorize(current,command)
+                if(currentActor==null) {
+                    owner.finishPublication(); publicationStarted=false
+                    return CommandResult.Denied
+                }
+                val samePresentation=currentActor.principalId==actor.principalId && currentActor.credentialId==actor.credentialId
+                if(identity.path in current.entries) {
+                    // No protected result/conflict is disclosed under a substituted identity.
+                    integrity(samePresentation)
+                    val bytes=current.file(identity.path) ?: fail(StoreProblem.INTEGRITY)
+                    val original=JournalCodec.decode(bytes,identity.path)
+                    integrity(original.identity==identity && original.storeId==storeId)
+                    val recovered=if(original.fingerprintVersion==command.fingerprintVersion && original.fingerprint==command.fingerprint)
+                        CommandResult.Settled(original,true,null) else CommandResult.IdentityConflict
+                    owner.finishPublication(); publicationStarted=false
+                    return recovered
+                }
+                // Validated published absence resolves publication ambiguity, independently of a
+                // faulty trusted access port. Reject identity substitution before any rebuild;
+                // no receipt is disclosed and no new evaluator/CAS runs for that invalid port.
+                owner.finishPublication(); publicationStarted=false
+                integrity(samePresentation)
+                reconciled=currentBase to currentActor
             }
             return CommandResult.Refused(StoreProblem.UNAVAILABLE)
         } catch(e: StoreFault) {

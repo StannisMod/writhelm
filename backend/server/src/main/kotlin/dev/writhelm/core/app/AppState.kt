@@ -18,6 +18,13 @@ internal class AppOptions(val limits: AppLimits=AppLimits(),val admission: Admis
     val storeBounds: StoreBounds=StoreBounds(),val processBounds: ProcessBounds=ProcessBounds(),
     val publication: PublicationDriver=PublicationDriver.Native,val fileRead: (String)->Unit={ })
 internal class BoundState(val core: ApprovalWorkflow,val authority: AuthorityView,val entryBytes: Long=0)
+/** Typed protected service projection; no raw store/path or caller-supplied actor. */
+internal class AppAccessView(val basis: GitOid,val projectId: UUID,val principalId: UUID,capabilities: Set<Capability>) {
+    val capabilities=frozenSet(capabilities)
+}
+internal class AppReadView(val access: AppAccessView,val workflow: ApprovalWorkflow)
+internal enum class AppAccessProblem { UNAUTHENTICATED, FORBIDDEN }
+internal class AppAccessFault(val problem: AppAccessProblem): RuntimeException(problem.name)
 internal fun grantMap(policy: AccessPolicy)=policy.snapshotGrants().associate { (it.principalId to it.projectId) to it.capabilities }
 internal fun corePolicy(s: WorkflowSnapshot)=AccessPolicy(s.grants)
 

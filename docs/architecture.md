@@ -59,6 +59,22 @@ including the 53 content regressions. Two targeted disposable semantic mutations
 their regression assertions. JSON/wire codec, durable command identity/Git CAS and client wiring
 remain unimplemented; no integration/publication/independent-review acceptance follows.
 
+## Accepted cross-platform direction X1
+
+The owner approved K-RUN revision 2 and explicitly required cross-platform development as a project
+principle on 2026-11-04. Linux, Windows and macOS are target SERVICE platforms; remote client access
+alone does not satisfy this direction. Preserve platform-independent domain, canonical encoding and
+HTTP/MCP semantics. Isolate executable discovery, controlled Git environment, permissions, file locks/
+synchronization, process containment, launcher and client secret storage behind qualified OS adapters.
+systemd/cgroups and Windows Job Objects are candidates, not universal mechanisms or qualification.
+The macOS mechanism remains to be selected and qualified. No silent fallback to weaker guarantees.
+
+See [K-RUN revision 2](contracts/launch-recovery.md). NativeGit/RuntimeOwner at 05d1b9e2 are explicitly
+Linux-only implementation/evidence, not an approved permanent restriction. No Windows/macOS runtime,
+cross-OS data-store migration, power-loss or same-user adversarial isolation guarantee is inferred.
+An explicit platform implementation/verification order is still needed. Older proposals and exact
+historical task/results below retain their original scope rather than acquiring new test coverage.
+
 ## Ownership
 
 The service owns canonical knowledge revisions, workflow records, accepted decisions, task snapshots,

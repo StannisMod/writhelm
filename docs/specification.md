@@ -42,6 +42,13 @@ classification rules or source material. The engineering-level knowledge unit re
 
 ## Required behavior
 
+Accepted direction X1 (2026-11-04): develop the service for Linux, Windows and macOS with the same
+domain/authority/wire semantics and separately qualified OS runtime adapters. Remote cross-OS clients
+are not a substitute for service platform support. Implementation order is planned explicitly;
+unqualified platforms remain visible gates, not silently dropped targets. Approved operational
+requirements are in [K-RUN revision 2](contracts/launch-recovery.md). This scoped addition does not
+ratify the rest of this draft or claim current platform support.
+
 ### Service and knowledge
 
 **WH-01 — Central ownership.** One logical service owns canonical knowledge, workflow and authority
@@ -231,6 +238,14 @@ Claude Code bypass necessarily requires several actions or violates its system p
 owner's trust assumption, not a verified finding. Stronger execution isolation remains a separately
 qualified capability before it is advertised. The shown synthetic screen is accepted as a design
 basis; visual refinement may follow later, without deferring decision-information completeness.
+
+Accepted H1 execution amendment (2026-11-05): owner selected cooperative E-COOP-1 for the first
+pilot—worktrees/native permissions/whole-diff review, no OS arbitrary-shell confinement guarantee.
+This explicitly scopes D13's hard worker/reviewer filesystem assurance to separately qualified
+stronger profile, not a first-pilot prerequisite. Service authority and owner-key exclusion stay
+mandatory; semantic task scope isn't a predicted file allowlist. See
+[K-HARNESS revision 2](contracts/agent-workflow.md) and [K-EXECUTION revision 2](contracts/execution.md).
+No blanket draft ratification or false hard-isolation pass follows.
 
 ### Evidence, review and completion
 

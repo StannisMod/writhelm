@@ -336,3 +336,107 @@ Original core/import/build/dependency/settings/test bytes remain unchanged. Raw 
 reviewer evidence, private Git test repositories and handoff/session context are NOT publication
 inputs. The requested Markdown context handoff is prepared outside public source Git and is not
 included in this commit. No broad directory wildcard, future task or generated artifact is admitted.
+
+## Cross-platform contract documentation scope P6
+
+The owner approved the six-point K-RUN revision 2 and explicitly requested project-wide cross-platform
+principles and contract impact assessment. Admit the single newly authored documentation path
+`docs/contracts/launch-recovery.md` for this canonical public-safe contract; allow its exact ignore
+exception. Existing README/AGENTS/architecture/specification/acceptance and codec/auth/publication/API
+contract paths may record that scoped decision, clarifications and remaining qualification gates.
+No runtime/source export, private evidence, platform qualification, commit or push is authorized by
+this documentation scope. Historical task/test reports retain their exact assessed platform scope.
+
+## Client setup contract documentation scope P7
+
+The owner approved the six-point K-SETUP revision 1. Admit the single newly authored canonical
+documentation path `docs/contracts/client-setup.md` and its exact ignore exception to record that
+public-safe design. Existing API/task references may link the accepted setup decision. This scope
+does not admit implementation paths, secret files, private task/evidence archives or generated keys,
+and does not authorize a commit or push. Implementation/testing/qualification remain distinct.
+
+## OpenCode checkpoint documentation scope P8
+
+The owner approved K-OC-CHECK revision 1. Admit only newly authored
+`docs/contracts/opencode-qualification.md` and its exact ignore exception for this public-safe
+checkpoint contract. Raw GUI/host evidence, sessions, screenshots, synthetic secret files, SDK/cache/
+display packages and private execution tasks remain excluded. No plugin/source publication, commit,
+push or installation into the owner's live profile is authorized by this documentation scope.
+
+## H1 boundary documentation scope P9
+
+The owner approved the disclosed H1 boundary and service-control/native-execution split. Admit only
+newly authored `docs/contracts/agent-workflow.md` and its exact ignore exception for that canonical
+public-safe decision. Existing roadmap may reference its scoped approval. This does not admit future
+task/runtime source, private design/execution workspaces or raw worker/session evidence, and does
+not authorize commit/push, live-model experiments or automatic installation into the owner's harness.
+
+## Task contract documentation scope P10
+
+The owner approved K-TASK revision 1 with the explicit planner exact-result acceptance clarification.
+Admit only newly authored `docs/contracts/task-contract.md` and its exact ignore exception to record
+that public-safe scope. Existing H1 contract may link it. No task implementation paths, new capability/
+namespace migration, private evidence/session material, model call or commit/push is authorized by
+this documentation record. Component implementation/verification and publication remain distinct.
+
+## Dispatch contract documentation scope P11
+
+The owner approved K-DISPATCH revision 2 with its native-first clarification. Admit only newly
+authored `docs/contracts/dispatch.md` and its exact ignore exception; existing H1 contract may link
+the decision. This public-safe record does not admit task/adapter implementation paths, private
+research/evidence/session material or runtime configuration. No commit/push/live call or standalone
+M1/native checkpoint follows from this documentation scope.
+
+## Retrospective/context documentation scope P12
+
+The owner explicitly approved the separately named K-RETRO revision 1 and K-CONTEXT revision 2.
+Admit only newly authored `docs/contracts/retrospective.md`, `docs/contracts/context-continuity.md`
+and their exact ignore exceptions for canonical public-safe decisions; existing H1 contract may
+reference them. No private source SOP, incident, session, raw evidence, extraction workspace, new
+implementation path, runtime/live-call authorization or commit/push is admitted by this record.
+
+## Practical H1 amendments and execution documentation scope P13
+
+Owner approved the disclosed per-contract amendment table on 2026-11-05. Existing H1/task/dispatch/
+context/specification/acceptance/roadmap paths may record their scoped changes; K-RETRO1 unchanged.
+Admit only new `docs/contracts/execution.md` and its exact ignore exception for approved E-COOP-1/
+worktree/read-only-review/integration scope. No implementation, private prior revisions/evidence,
+raw sessions/runtime config, commit/push/live experiment or host install authorized. Old evidence
+keeps its original assessed scope.
+
+## Evidence/integration contract documentation scope P14
+
+Owner approved K-EVIDENCE revision 2 including explicit contract/condition/test/executed-result
+traceability. Admit only new `docs/contracts/evidence-integration.md` and its exact ignore exception;
+existing H1 contract may link it. This public-safe decision doesn't admit private source SOPs, raw
+reports/logs/sessions, implementation/runtime profiles or fixtures, and doesn't authorize commit/
+push, host changes, model calls or another native/M1 campaign.
+
+## H1 work-authority documentation scope P15
+
+The owner agreed to K-WORK-AUTH revision 1 after explicit planner-permission clarification. Admit
+only new `docs/contracts/work-authority.md` and its exact ignore exception; existing auth/H1 records
+may reference that scoped extension. No private key/profile/session/research/evidence, implementation
+path, capability migration, live/native test, host install or commit/push is authorized by this record.
+
+## H1 work-state documentation scope P16
+
+Owner approved K-WORK-STATE revision 1. Admit only new `docs/contracts/work-state.md` and its exact
+ignore exception; existing H1 documentation may reference the decision. No concrete future schema/
+implementation paths, private artifact/session/evidence, live keys, migration/native run, host install,
+commit/push or broad public export is authorized by this documentation record.
+
+## Local checkpoint of approved contracts and existing source paths P17
+
+The owner subsequently requested a commit of the current working state and a plan before further
+implementation. This authorizes local commit of the already admitted P6–P16 documentation paths and
+existing tracked README/AGENTS/architecture/specification/acceptance/API/task/publication/ignore-rule
+updates, plus current changes to the already admitted server build, AppState, MechanismApp and
+GitCommandStore paths. The connected-work amendment is recorded in the existing admitted H1/task/
+dispatch/context/evidence contracts; the roadmap records proposed next work, not its execution.
+
+This checkpoint does not import the isolated H1 implementation, adapter sources, private worktrees,
+readiness catalogues, handoffs, sessions, logs, generated bundles, fixture archives or local paths.
+The accepted portable candidate requires a separate exact source-path/content review and target
+integration checkpoint before tracking; this commit is not that integration. No push, working-profile
+installation, live-model or pilot permission follows from the local commit instruction.

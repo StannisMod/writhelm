@@ -64,6 +64,35 @@ internal class MechanismApp private constructor(private val binding: AppBinding)
     @Synchronized fun readRequest(presented: String,project: UUID,id: UUID)=read(presented,project) { s,a -> s.core.readRequest(a,project,id) }
     @Synchronized fun readResolution(presented: String,project: UUID,id: UUID)=read(presented,project) { s,a -> s.core.readResolution(a,project,id) }
     @Synchronized fun approvalTrace(presented: String,reference: KnowledgeReference)=read(presented,reference.revision.document.projectId) { s,a -> s.core.approvalTrace(a,reference) }
+    /** Authenticates against ONE current validated H, never cached protocol authorization. */
+    private fun captureService(presented: String,requireRead: Boolean): Pair<AppAccessView,BoundState> {
+        var state: BoundState?=null
+        var access: AppAccessView?=null
+        return store.read(binding.storeId,ReadAccess { h,_ ->
+            val s=binding.load(h)
+            val token=dev.writhelm.core.auth.CredentialVerifier.parse(presented)
+                ?: throw AppAccessFault(AppAccessProblem.UNAUTHENTICATED)
+            token.use {
+                val c=s.authority.credentials[token.credentialId]
+                    ?: throw AppAccessFault(AppAccessProblem.UNAUTHENTICATED)
+                if(token.storeId!=binding.storeId || c.storeId!=binding.storeId ||
+                    c.status!=dev.writhelm.core.auth.CredentialStatus.ACTIVE || !token.verifies(c))
+                    throw AppAccessFault(AppAccessProblem.UNAUTHENTICATED)
+                val caps=s.authority.policy.snapshotGrants().firstOrNull {
+                    it.projectId==c.projectId && it.principalId==c.principalId
+                }?.capabilities.orEmpty()
+                if(requireRead && s.authority.authorize(presented,c.projectId,"read")==null)
+                    throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+                access=AppAccessView(h.oid,c.projectId,c.principalId,caps);state=s
+            }
+            true
+        }) { checkNotNull(access) to checkNotNull(state) }
+    }
+    @Synchronized fun inspectAccess(presented: String): AppAccessView=captureService(presented,false).first
+    @Synchronized fun captureRead(presented: String): AppReadView {
+        val (access,state)=captureService(presented,true)
+        return AppReadView(access,state.core)
+    }
     @Synchronized override fun close()=store.close()
     companion object {
         fun initialize(directory: Path,genesis: AppGenesis,options: AppOptions=AppOptions()): MechanismApp {

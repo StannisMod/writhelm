@@ -1,10 +1,72 @@
-# Shared service handlers, HTTP/MCP and human review flow
+# M1 service interface, navigation and human review flow
 
-Contract K-API, draft revision 1. Status: proposed; not implemented or transport-qualified.
+Contract K-API, revision 3. Status: revision-2 decisions approved with the native-harness correction below;
+Application/native candidate implemented and bounded-tested/reviewed; installed-harness and operational
+qualification remain held. Retained revision-1 technical proposals are distinguished
+from that approval; assembly does not expand its scope.
 Task: [DESIGN-009](../tasks/DESIGN-009.md). Dependencies: [K-CODEC](state-codec.md),
 [K-PUBLISH](command-publication.md), [K-AUTH](authentication-access.md),
 [K-WORKFLOW](knowledge-workflow.md), [T1/U1](../design/approval-interface.md).
 Existing domain laws, command bytes/fingerprints and atomicity remain unchanged.
+
+## Revision-3 owner correction — presenter inside the harness
+
+The owner explicitly requires review inside the coding harness through a plugin, extension, panel
+or equivalent integration. A separate desktop application or external browser window is not an
+acceptable M1 presenter/fallback. This supersedes revision-2 decision 5's non-native allowance and
+retained revision-1 external-view alternatives, not domain commands, current rights, completeness or T1.
+A local credential/controller component may support the integration but must not create a separate
+user-facing decision workflow. It reads protected credentials outside the model path; the native
+view renders canonical packets and submits exact choices. Tokens never become model tool arguments
+or approval-form fields. Qualify actual plugin/session/request binding and complete rendering for
+the selected harness/profile. Unsupported profiles leave pending, not external-window/free-text
+approval. No universal native support or adversarial human-origin proof is implied.
+The owner selected OpenCode as the first harness on 2026-11-04. Target OpenCode V2; pin and qualify
+the concrete GUI/TUI release/profile before claiming support. Historic feasibility is not qualification.
+The GUI plugin API is experimental; native panels/IPC are documented candidates, not passing tests.
+
+## Approved revision-2 decision scope
+
+1. **Shared service.** HTTP and MCP use common handlers and authority. An identical command retry
+   does not create a second effect. Unknown publication is never represented as rollback.
+2. **Navigation without prior IDs.** Clients can enumerate accessible projects, documents and their
+   revisions, approval requests and pinned consumer manifests. Pages bind to one snapshot; access is
+   checked on every request. An incomplete page is not a complete decision packet.
+3. **Exact reads.** Selected records retain immutable references, status and provenance. Navigation
+   helps discover a record but never replaces a pinned revision with the latest revision.
+4. **Approval in the working flow.** A planner creates a request; the human client fetches it from
+   the service, presents the complete packet and submits the exact structured answer with its own
+   credential. The model does not receive the owner key. MCP exposes READ/PROPOSE/PLAN, not owner actions.
+5. **M1 human client deliverable.** One supported human interface provides pending-decision listing,
+   complete review, approve/reject/changes-required and result recovery after disconnection. Chat may
+   open an exact request by link. Native in-harness approval requires separate integration qualification;
+   universal support is not promised.
+6. **No hidden reductions.** An incomplete, inaccessible or oversized packet blocks approval. Closing
+   the view leaves the request pending; unrelated state movement does not require repeat approval.
+7. **M1 boundary and gates.** Tasks, dispatch, mandatory context closure, evidence lifecycle and worker
+   control require later contracts. Launch/abnormal recovery is a separate contract. Schemas, libraries
+   and limits must be frozen before implementation; acceptance requires an actual HTTP/MCP/client journey.
+
+These are the complete owner-facing revision-2 semantic decisions. The numbered API-01–07 text below
+retains the revision-1 technical elaboration as a preparation baseline: existing accepted domain laws
+remain binding, but undisclosed transport/version/session/error/schema details are not independently
+ratified by this approval. Reconcile the technical profile with this scope before dispatch; escalate
+consequential additional choices rather than silently treating this document as blanket approval.
+
+Navigation is a new required read surface alongside exact reads. Its closed selectors, authorization
+mapping, ordering, cursor/snapshot lifetime, page bounds and explicit unavailable/expired behavior
+remain readiness inputs, not invented completed schemas. Project discovery must not disclose denied
+projects. Snapshot pagination must not preserve revoked access. Listing never supplies approval or
+proves packet completeness. No full-text search, RAG or canonical mutation is implied.
+
+Under revision 3 the M1 presenter MUST be integrated into the selected harness. A nonsecret request
+reference may open the exact native view; it is not a credential or assent. Neither manual terminal/
+API ceremony nor a separate desktop/browser view substitutes for this deliverable. Client secret
+handling and actual harness/profile qualification remain gates.
+The owner subsequently approved [K-SETUP revision 1](client-setup.md): local setup and a client
+component backed by protected non-project files/OS permissions or ACLs; no owner key in chat, command
+arguments, links, embedded HTML or approval forms. Integrate that profile without weakening current
+authority or claiming other-OS support from Linux evidence. Exact component mechanics remain readiness inputs.
 
 ## API-01 — One application boundary, not two authority implementations
 
@@ -189,6 +251,13 @@ leave pending or refuse, never free-chat automatic assent.
 
 ## API-07 — Resource, cancellation and integration gates
 
+Approved X1/K-RUN revision 2 adds Linux, Windows and macOS as service targets. Common schemas,
+HTTP/MCP authority and exact bytes do not depend on OS. Isolate client secret storage, local launch,
+executable discovery and filesystem/process behavior; do not add unconditional Unix dependencies.
+Distinguish portable interface implementation, current Linux-backed execution and per-platform
+qualified service support. Launch/abnormal recovery follow [K-RUN](launch-recovery.md); no new network
+or remote TLS profile is inferred from client/server OS independence.
+
 Before implementation pin HTTP/MCP library/runtime versions and positive ingress/header/response/
 wire-expansion/session/queue/rate/concurrency/time budgets. Account for MCP wrapper and optional text
 duplication, escaping of raw document bytes and complete review material. Reject overload before
@@ -221,6 +290,9 @@ worker dispatch/mandatory closure and enterprise anti-agent attestation stay out
 | Old/new consumers interleaved with proposals and ordinary updates | Exact original refs/text/provenance and one captured H per read; no forced newest input |
 | Large/denied/corrupt/incomplete review bundle and output-size failure | Explicit whole-view refusal, no cropped approval; post-publication delivery failure never erases receipt |
 | HTTP/MCP alternate credential/header/Origin/media routes | Same actual authority and byte rules, safe error handling and no secret leakage |
+| Reconnect with no cached record IDs | Authorized project/document/revision/request/manifest navigation reaches exact reads without local canonical copies |
+| Page while state changes, access is revoked or snapshot expires | One explicit snapshot across pages, current access enforced, no latest fallback or hidden incomplete result |
+| Open exact request from chat, disconnect after answer, reopen client | Complete supported review and same-command result recovery; link/view closure is not assent |
 
 Read primary MCP 2025-11-25 [basic/messages](https://modelcontextprotocol.io/specification/2025-11-25/basic),
 [lifecycle](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle),
@@ -233,3 +305,56 @@ not proof of current libraries, native renderers or arbitrary client support. To
 are not human attestation. The basic MCP specification permits custom auth strategies; the initial
 profile explicitly omits OAuth discovery while preserving per-request private credentials. No runtime
 probe, server/client implementation, paid call or passing integration result is claimed by this draft.
+
+## Revision and approval provenance
+
+Revision 1 was an unapproved detailed proposal at source commit
+`05d1b9e20f25c8fa28a2f69a7093160609f26049`; committing it did not approve it.
+After comparing it with product/M1 requirements, the planner disclosed missing discovery/navigation,
+unqualified native harness approval and the distinction between M1 and the full product. The owner
+requested a short new contract and explicitly approved the seven-point K-API v2 shown in conversation
+with “ладно, утверждаю” on 2026-11-04. The seven decisions recorded above map that exact scope;
+technical document assembly, retained revision-1 details and future tasks do not enlarge it.
+
+This is a manual pre-service approval record, not a fabricated service resolution/credential event.
+It authorizes the disclosed interface direction, not a push, live credentials, paid experiments,
+whole-service acceptance or bypass of the independently confirmed publication finding F-001.
+
+Revision 3 records the owner's explicit rejection of desktop/browser-only alternatives and requirement
+for a harness plugin/extension on 2026-11-04. Only presenter delivery/fallback scope is superseded;
+no old verification or undisclosed plugin mechanism is ratified by document assembly.
+
+## Current bounded implementation status
+
+Common HTTP/MCP adapters, navigation/exact review reads and an OpenCode V2 GUI plugin/controller
+candidate are locally integrated with protected Linux setup/rotation helpers. Target native profile:
+OpenCode Desktop 2.2.5 with pinned actual plugin SDK 2.2.5; this is build/type compatibility, NOT an
+installed panel/main-window IPC or human walkthrough pass. CLI/TUI/other-harness support is not claimed.
+
+Non-author review found IF-001 (retained rotation versus async attach) and IF-002 (blocking FIFO open).
+Separate correction OC-002 was parent-checked and independently rechecked: seven new independent
+checks passed, rebuilt GUI bundle matched, no new defect established. Original author checks passed
+24 Node cases and a final real Git/HTTP/component journey; its earlier first-controls timeout L-001
+remains unexplained despite later passes. Historical failed evidence remains applicable to its inputs.
+
+An initial combined run failed one of 104 cases: actual MCP SDK0.13.0 generated an optional concurrent
+GET405 probe that contended with POST for one HTTP slot. API-003 explicitly refines the development
+admission profile to four admitted lifetimes including delivery, one stateful dispatch and one
+authenticated stateless GET405 lane, global32/s unchanged/no unbounded admission queue. Dispatch
+ends only after SDK context cleanup and bounded immutable reply planning; delivery retains lifetime/
+reply-reserve ownership. A 16-MiB ledger bounds retained frozen replies and reserves, NOT total JVM
+heap/engine allocations. Resource maxima/production-engine qualification remains held.
+
+The original unwrapped SDK expectations remain unchanged. API-003 author checks passed17 focused
+cases; non-author review passed four independent cases and found no new blocking defect. Parent
+checked source/hash/log/XML evidence, then ran one new exact combined checkpoint:120 affected JVM
+cases passed (store/app/service, including actual SDK and native-component journey). This is neither
+a full core/auth regression rerun nor installed-host/cross-platform/K-RUN/M1 acceptance. No live
+plugin installation, user-wide configuration change, production service, commit or push occurred.
+
+The subsequently approved K-OC-CHECK1 real Desktop checkpoint failed complete native presentation:
+OC-CHECK-UI-001 clips content/choices in host overflowhidden layout without plugin-owned scrolling.
+Actual registration/IPC/packet retrieval were observed, not full native acceptance. No answers or
+rotations were submitted; remaining native scenarios are unexecuted. A separate layout correction
+and new isolated checkpoint are required; earlier component/SDK passes and closed findings remain
+about their exact assessed inputs. This does not close historical L-001 or any platform/K-RUN/M1 gate.

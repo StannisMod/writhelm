@@ -150,6 +150,18 @@
 
 # Owner-authorized local commit P5; future source/tasks/evidence remain excluded.
 !/docs/contracts/service-interface.md
+!/docs/contracts/launch-recovery.md
+!/docs/contracts/client-setup.md
+!/docs/contracts/opencode-qualification.md
+!/docs/contracts/agent-workflow.md
+!/docs/contracts/task-contract.md
+!/docs/contracts/dispatch.md
+!/docs/contracts/retrospective.md
+!/docs/contracts/context-continuity.md
+!/docs/contracts/execution.md
+!/docs/contracts/evidence-integration.md
+!/docs/contracts/work-authority.md
+!/docs/contracts/work-state.md
 !/docs/tasks/REVIEW-CORE-001.md
 !/docs/tasks/AUTH-002.md
 !/docs/tasks/STORE-001.md

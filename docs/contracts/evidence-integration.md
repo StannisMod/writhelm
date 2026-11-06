@@ -1,0 +1,108 @@
+# Proportionate verification, exact acceptance and integration
+
+Contract K-EVIDENCE, revision 3. Status: seven disclosed decisions, connected-work mechanical evidence handling and explicit contract-to-test
+traceability approved by owner; no verification/runtime implementation claimed. Governing
+[K-HARNESS](agent-workflow.md), [K-TASK](task-contract.md), [K-DISPATCH](dispatch.md),
+[K-CONTEXT](context-continuity.md), [K-RETRO](retrospective.md), [K-EXECUTION](execution.md).
+No uniform evidence ritual, blanket invalidation, recursive reviewers or fixed full-suite cadence.
+
+## EV-01 — Evidence proportional to the claim
+
+Progress is an attributed task/assignment report. A test-pass claim needs an identifiable actual run
+and outcome; conformance needs relevant checks/assessment; acceptance needs an explicit exact-result
+planner decision. Identity/environment/artifact detail follows claimed subject/risk. Dirty-code
+conformance cannot rely on HEAD alone; ordinary progress needn't carry a final acceptance dossier.
+Distinguish reported/observed/inferred and mock/component/native/live. Neither report nor owner
+approval automatically proves a factual claim.
+
+## EV-02 — Contract obligations, evolving verification plan
+
+Expected behavior comes from governing contract, not implementation answers. Map stable contract
+clauses to finite conditions/scenarios, their tests/check boundaries and actual executed results.
+Mapping is many-to-many: no obligatory one-test-per-clause or new rule per regression. A reference,
+test count or executed line alone doesn't prove coverage. Native/integration promises require their
+actual boundary, not similar component mocks. Uncovered/unexecuted obligations stay visible at the
+gate requiring them. Simple tables/metadata suffice; no mandatory heavyweight framework.
+
+Set acceptance criteria, mandatory checks/independence, grouping, deferred expensive gates and
+consumer readiness before execution, not every test/step. Add/refine checks within scope as new
+facts arise, recording material reasons. Removing/weaking required criteria/gates or hiding deferred
+coverage needs authorized decision, not convenient plan revision after failure. Method refinement
+alone needn't rebind the task. Related changes can share independent review; planner checks reviewer
+reports without an infinite recursive reviewer pipeline.
+
+## EV-03 — Exact independent assessment, separate fixing role
+
+Fresh-context non-author reviewer gets immutable identified result/read-only snapshot and separate
+report/scratch under declared profile. Assess conformance/whole diff proportionally to risk. Findings
+identify requirement/source/scenario/expected-versus-actual with evidence where feasible. Style alone
+isn't blocker; new expectation isn't an old requirement. Reviewer doesn't edit assessed code/tests.
+Authorized implementation fixes produce new exact result; review identifies affected delta/inputs,
+not automatic full re-review or inherited pass. Original tests/criteria aren't weakened to pass.
+
+## EV-04 — Applicable evidence survives unrelated changes
+
+Evidence applies to actual subject and significant inputs, not every later commit ID. New commit/
+tree alone doesn't invalidate all checks. Planner/reviewer identify affected scope and justify retained
+applicability; file disjointness alone doesn't prove semantic independence. Changed significant
+inputs require appropriate new checks. Uncertainty gets targeted assessment, not blanket full-suite
+or no-check assumption. Never relabel old evidence as a new run or changed subject by copying refs.
+Scope/environment/provenance/deferred limits stay visible; no automatic semantic-impact proof.
+
+## EV-05 — Block affected claim/decision, not everything
+
+Distinguish confirmed requirement violation, missing/failed mandatory check, historical unexplained
+failure, hypothesis and recommendation. Blocking defect/unmet gate holds affected acceptance or
+integration claim; unrelated results may proceed under plan. Historical unexplained failure remains
+recorded and limits claims it undermines, not automatically every subsequent result. State held
+claim/gate/disposition/reason. Passing rerun doesn't explain/erase failure. Don't relabel a known
+current violation as uncertainty to bypass it. Parent checks consequential review findings
+proportionally. Only authorized owner exception/design change can alter binding norm/gate with exact
+scope/basis; exception doesn't fabricate success or factual verification.
+
+## EV-06 — Planner accepts justified exact result
+
+Planner checks criteria, applicable evidence/dispositions and required stage readiness, then accepts
+identified R1 with actor/basis/permitted integration. Service enforces typed rights/bindings/records/
+blockers; semantic conformance is attributed planner/reviewer judgment. Worker cannot selfaccept.
+Future expensive milestone coverage stays pending only if planned; component acceptance doesn't
+certify it. Routine conforming acceptance needs no new owner vote. Acceptance isn't performed merge,
+waiver of blockers or publication permission.
+
+## EV-07 — Integration/recovery preserve identities and history
+
+Authorized integration checks target/base/dirty work, preserves unrelated/user edits and records
+source result/resulting tree. Apply EV-04: check changed integration inputs, retain justified unchanged
+evidence, escalate new meaning; no blind overwrite/full-suite ritual/unproved inherited pass.
+Commit/push follows explicit policy. Lost/repeated intents reconcile native target effects before
+another merge; no cross-repo atomicity fiction/blind new-key retry. Reports/checkpoints/retrospective/
+deferred limits remain recoverable; context retirement doesn't erase evidence or wait for all downstream
+acceptance. Canonical records capture meaningful transitions/decisions/checkpoints; operational logs/
+heartbeats/UI/tool streams don't create Git commits by default.
+
+## EV-08 — Engine-collected mechanical evidence and blocker resolution
+
+The engine collects exact change identities, actual check outcomes and blocker-resolution history,
+making them available for authorized review/continuation without requiring the model to transcribe
+hashes, commands and statuses between conversations. Preserve original run/subject attribution and
+limits; collected metadata is not independent verification or proof of behavioral sufficiency.
+
+The designated assessor remains responsible for the substantive conclusion that the agreed blocking
+condition is resolved. The engine uses that attributed confirmation and required checks for subsequent
+coordination; it neither infers truth from a success field nor requires a fresh planner relay for each
+eligible continuation. Apply TASK/DP/CT connected-work rules and their H1 qualification scenario.
+
+## Approval provenance/readiness
+
+On 2026-11-05 owner requested proportionality corrections to draft1, then explicitly asked about
+contract-to-test binding. Planner clarified governing clause → tested conditions/scenarios → tests
+→ actual executed results, with many-to-many mapping and boundary-specific coverage. Owner approved
+K-EVIDENCE v2 including that clarification with “окэй, утверждаю”. This manual record accepts the
+disclosed scope, not missing schemas/runtime roles, implemented enforcement, a passing H1 pilot,
+live/paid calls, host install, expensive checkpoint, source publication or commit/push.
+Pin exact schemas/authority/result/evidence/integration protocols and finite coverage before scoped
+implementation. E-COOP-1 is not a hardened OS profile; stronger claims need separate qualification.
+
+Revision 3 records owner approval with “Согласовано” of engine-collected mechanical evidence and
+connected-work resolution/continuation. No automatic semantic-impact proof, verification waiver,
+implemented automation or new publication/live-call permission follows.

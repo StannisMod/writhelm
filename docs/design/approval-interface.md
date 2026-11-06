@@ -146,6 +146,11 @@ calling a page trusted. Authentication still uses current canonical policy, not 
 
 ### UI-06 — Capability fallback, not weaker semantics
 
+Subsequent owner correction (K-API revision 3/K-SETUP revision 2, 2026-11-04): M1 requires the view
+inside the selected harness via plugin/extension/panel. The standalone fallback in the historical
+recommendation below is superseded. Unsupported profiles stay pending; no external browser/desktop
+substitute. T1 and decision-information completeness remain unchanged.
+
 Use one canonical packet/answer contract with qualified presenters. A native rich panel is optional,
 not the authority model. A controlled small Writhelm review surface could provide consistent UI when
 a harness lacks it; an adapter can offer a non-secret request link or notification, not a preauthorized
