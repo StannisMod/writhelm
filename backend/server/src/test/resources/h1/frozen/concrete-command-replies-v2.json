@@ -1,0 +1,1134 @@
+{
+  "create_task_revision": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "create_task_revision",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "create_task_revision",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "taskId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "revision": 9223372036854775807
+        },
+        "generation": null,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "set_task_head": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "set_task_head",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "set_task_head",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "taskId": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": 9223372036854775807,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "pin_input_manifest": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "pin_input_manifest",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "pin_input_manifest",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": null,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "create_profile": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "create_profile",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "create_profile",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "profileId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "revision": 9223372036854775807
+        },
+        "generation": null,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "revise_verification_plan": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "revise_verification_plan",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "revise_verification_plan",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "revision": 9223372036854775807
+        },
+        "generation": null,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "revise_applicability": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "revise_applicability",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "revise_applicability",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "revision": 9223372036854775807
+        },
+        "generation": null,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "update_plan": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "update_plan",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "update_plan",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "revision": 9223372036854775807
+        },
+        "generation": 9223372036854775807,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "reserve_assignment": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "reserve_assignment",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "reserve_assignment",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": 9223372036854775807,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "bind_assignment": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "bind_assignment",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "bind_assignment",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": 9223372036854775807,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "request_native_transition": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "request_native_transition",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "request_native_transition",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": 9223372036854775807,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "observe_native_transition": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "observe_native_transition",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "observe_native_transition",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": 9223372036854775807,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "record_recovery": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "record_recovery",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "record_recovery",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": null,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "rebind_assignment": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "rebind_assignment",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "rebind_assignment",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": 9223372036854775807,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "complete_assignment": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "complete_assignment",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "complete_assignment",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": 9223372036854775807,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "record_loaded_view": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "record_loaded_view",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "record_loaded_view",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "revision": 9223372036854775807
+        },
+        "generation": null,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "record_memory": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "record_memory",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "record_memory",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "revision": 9223372036854775807
+        },
+        "generation": null,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "record_checkpoint": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "record_checkpoint",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "record_checkpoint",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": null,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "record_retrospective": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "record_retrospective",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "record_retrospective",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": null,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "submit_result": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "submit_result",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "submit_result",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": null,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "submit_verification_report": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "submit_verification_report",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "submit_verification_report",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": null,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "record_evidence": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "record_evidence",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "record_evidence",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": null,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "record_delivery": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "record_delivery",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "record_delivery",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": 9223372036854775807,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "record_evidence_applicability": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "record_evidence_applicability",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "record_evidence_applicability",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": null,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "record_disposition": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "record_disposition",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "record_disposition",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": null,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "accept_result": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "accept_result",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "accept_result",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": null,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "prepare_integration": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "prepare_integration",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "prepare_integration",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": 9223372036854775807,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "observe_integration": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "observe_integration",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "observe_integration",
+      "result": {
+        "key": {
+          "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+          "id": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        },
+        "generation": 9223372036854775807,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "record_source_cut": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "record_source_cut",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "record_source_cut",
+      "result": {
+        "key": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "id": "00000000-0000-0000-0000-000000000001"
+        },
+        "generation": null,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "record_controller_continuation": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "record_controller_continuation",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "record_controller_continuation",
+      "result": {
+        "key": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "controllerId": "00000000-0000-0000-0000-000000000001",
+          "id": "00000000-0000-0000-0000-000000000001"
+        },
+        "generation": null,
+        "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "replace_work_grants": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "replace_work_grants",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "replace_work_grants",
+      "result": "00000000-0000-0000-0000-00000000000a",
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "register_delegation": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "register_delegation",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "register_delegation",
+      "result": "00000000-0000-0000-0000-00000000000f",
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "rotate_delegated_credential": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "rotate_delegated_credential",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "rotate_delegated_credential",
+      "result": {
+        "credentialId": "00000000-0000-0000-0000-000000000028",
+        "replacedCredentialId": "00000000-0000-0000-0000-000000000004"
+      },
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "revoke_delegated_credential": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "revoke_delegated_credential",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "revoke_delegated_credential",
+      "result": "00000000-0000-0000-0000-000000000004",
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "revoke_delegation": {
+    "formatVersion": 1,
+    "kind": "settled",
+    "identity": {
+      "principalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "projectId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "operation": "revoke_delegation",
+      "requestKey": "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    },
+    "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "validatedAt": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "authenticatedByCredentialId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "outcome": {
+      "kind": "success",
+      "operation": "revoke_delegation",
+      "result": "00000000-0000-0000-0000-00000000000f",
+      "domainReplayed": false
+    },
+    "commandReplayed": false,
+    "publication": {
+      "algorithm": "sha256",
+      "hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  }
+}

@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "formatVersion": {
+      "const": 1
+    },
+    "origin": {
+      "type": "string",
+      "maxLength": 4096
+    },
+    "storeId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "projectId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "principalId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "active": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "credentialId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "token": {
+          "type": "string",
+          "minLength": 121,
+          "maxLength": 121
+        }
+      },
+      "required": [
+        "credentialId",
+        "token"
+      ]
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "principalId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "credentialId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "token": {
+          "type": "string",
+          "minLength": 121,
+          "maxLength": 121
+        }
+      },
+      "required": [
+        "principalId",
+        "credentialId",
+        "token"
+      ]
+    },
+    "pending": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "enum": [
+                "answer",
+                "rotation",
+                "setup"
+              ]
+            },
+            "session": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "id": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "server": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "directory": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "projectRoot": {
+                  "type": "string",
+                  "maxLength": 4096
+                }
+              },
+              "required": [
+                "key",
+                "id",
+                "server",
+                "directory",
+                "projectRoot"
+              ]
+            },
+            "commandJSON": {
+              "type": "string",
+              "maxLength": 98304
+            },
+            "replacement": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "credentialId": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                    },
+                    "token": {
+                      "type": "string",
+                      "minLength": 121,
+                      "maxLength": 121
+                    }
+                  },
+                  "required": [
+                    "credentialId",
+                    "token"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "registrationJSON": {
+              "type": "string",
+              "maxLength": 16384
+            },
+            "storeDirectory": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          },
+          "required": [
+            "kind",
+            "session",
+            "commandJSON",
+            "replacement",
+            "registrationJSON",
+            "storeDirectory"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "formatVersion",
+    "origin",
+    "storeId",
+    "projectId",
+    "principalId",
+    "active",
+    "agent",
+    "pending"
+  ]
+}

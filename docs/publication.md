@@ -440,3 +440,31 @@ readiness catalogues, handoffs, sessions, logs, generated bundles, fixture archi
 The accepted portable candidate requires a separate exact source-path/content review and target
 integration checkpoint before tracking; this commit is not that integration. No push, working-profile
 installation, live-model or pilot permission follows from the local commit instruction.
+
+## Portable H1 source integration scope P18
+
+The owner approved autonomous execution of the completion plan, including exact source/content review,
+target integration and a separate local commit. Admit only the individually enumerated file exceptions
+under the `P18: exact reviewed portable H1 source paths` section of `.gitignore`. Those 121 explicit
+paths extend the earlier manifest; they are not directory globs or permission for future files.
+Previously admitted source/build paths may receive the corresponding accepted H1 implementation.
+The following P18 synthetic-prerequisite section admits its 47 named JSON fixtures and README only.
+These are bounded code/schema examples and mathematical vectors, not copies of readiness reports,
+task/session histories, run evidence or instance stores. The server test task may default to these
+in-repository fixtures while retaining explicit input overrides; native component execution has its
+own prerequisite-checked task, not a silent passing native gate in the portable selection.
+
+Provenance: Writhelm-owned AGPL-3.0-only portable work/auth/publication/application and OpenCode adapter
+source, plus synthetic tests and structural schemas. Preserve upstream MIT notices and imported wrapper
+bytes. The four individually named `src/generated` validators/declarations are code generated from the
+selected synthetic service/profile schemas for this adapter, not an export of runtime state or a
+bundled dependency tree. Package manifests/lock and build scripts identify the original dependency
+versions; qualification of a distributed dependency bundle remains a release gate.
+
+Content review selects exact source bytes and synthetic records, not worker histories or local artifact
+directories. No private filesystem paths, live keys, raw sessions/reports, test repositories, logs,
+cache/toolchain/dependency directories or compiled GUI `dist` bundle are admitted. The missing previous
+GUI build is not silently represented as recovered or tested; a new build requires its own evidence.
+Source identity recovery is not a passing behavioral test. Target checks and exact integration state
+are recorded separately. Real native custody/fencing, other platforms and the full H1 pilot remain
+unqualified. This local tracking/integration decision does not authorize a public push or live profile.

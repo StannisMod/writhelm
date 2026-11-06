@@ -1,0 +1,374 @@
+{
+  "task-revisions": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/task-revisions"
+    },
+    "mutable": false,
+    "path": "work/records/task-revisions/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": null
+  },
+  "task-heads": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/taskKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/task-heads"
+    },
+    "mutable": true,
+    "path": "work/records/task-heads/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": "payload.generation"
+  },
+  "plans": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/plans"
+    },
+    "mutable": true,
+    "path": "work/records/plans/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": "payload.generation"
+  },
+  "input-manifests": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/input-manifests"
+    },
+    "mutable": false,
+    "path": "work/records/input-manifests/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": null
+  },
+  "loaded-views": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/loaded-views"
+    },
+    "mutable": false,
+    "path": "work/records/loaded-views/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": null
+  },
+  "profiles": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/profileKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/profiles"
+    },
+    "mutable": false,
+    "path": "work/records/profiles/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": null
+  },
+  "assignments": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/assignments"
+    },
+    "mutable": true,
+    "path": "work/records/assignments/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": "payload.generation"
+  },
+  "assignment-bindings": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/assignmentBindingKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/assignment-bindings"
+    },
+    "mutable": false,
+    "path": "work/records/assignment-bindings/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": null
+  },
+  "claims": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/resourceKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/claims"
+    },
+    "mutable": true,
+    "path": "work/records/claims/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": "payload.generation"
+  },
+  "native-intents": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/native-intents"
+    },
+    "mutable": true,
+    "path": "work/records/native-intents/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": "payload.generation"
+  },
+  "recoveries": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/recoveries"
+    },
+    "mutable": false,
+    "path": "work/records/recoveries/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": null
+  },
+  "checkpoints": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/checkpoints"
+    },
+    "mutable": false,
+    "path": "work/records/checkpoints/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": null
+  },
+  "deliveries": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/deliveries"
+    },
+    "mutable": true,
+    "path": "work/records/deliveries/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": "payload.generation"
+  },
+  "memory": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/memory"
+    },
+    "mutable": false,
+    "path": "work/records/memory/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": null
+  },
+  "retrospectives": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/retrospectives"
+    },
+    "mutable": false,
+    "path": "work/records/retrospectives/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": null
+  },
+  "results": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/results"
+    },
+    "mutable": false,
+    "path": "work/records/results/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": null
+  },
+  "verification-plans": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/verification-plans"
+    },
+    "mutable": false,
+    "path": "work/records/verification-plans/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": null
+  },
+  "verification-reports": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/verification-reports"
+    },
+    "mutable": false,
+    "path": "work/records/verification-reports/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": null
+  },
+  "evidence": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/evidence"
+    },
+    "mutable": false,
+    "path": "work/records/evidence/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": null
+  },
+  "dispositions": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/dispositions"
+    },
+    "mutable": false,
+    "path": "work/records/dispositions/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": null
+  },
+  "acceptances": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/acceptances"
+    },
+    "mutable": false,
+    "path": "work/records/acceptances/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": null
+  },
+  "integration-intents": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/integration-intents"
+    },
+    "mutable": true,
+    "path": "work/records/integration-intents/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": "payload.generation"
+  },
+  "integrations": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/integrations"
+    },
+    "mutable": false,
+    "path": "work/records/integrations/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": null
+  },
+  "applicability": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/applicability"
+    },
+    "mutable": false,
+    "path": "work/records/applicability/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": null
+  },
+  "evidence-applicability": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/evidence-applicability"
+    },
+    "mutable": false,
+    "path": "work/records/evidence-applicability/ab/<framed-key-sha256>.json",
+    "deletable": false,
+    "generation": null
+  },
+  "source-cuts": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/source-cuts"
+    },
+    "mutable": false,
+    "deletable": false,
+    "generation": null,
+    "path": "work/records/source-cuts/<first2>/<framed-key-sha256>.json"
+  },
+  "controller-continuations": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/controllerContinuationKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/controller-continuations"
+    },
+    "mutable": false,
+    "deletable": false,
+    "generation": null,
+    "path": "work/records/controller-continuations/<first2>/<framed-key-sha256>.json"
+  },
+  "assignment-replacements": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/assignment-replacements"
+    },
+    "mutable": false,
+    "deletable": false,
+    "generation": null,
+    "path": "work/records/assignment-replacements/<first2>/<framed-key-sha256>.json"
+  },
+  "conditions": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/conditions"
+    },
+    "mutable": false,
+    "deletable": false,
+    "generation": null,
+    "path": "work/records/conditions/<first2>/<framed-key-sha256>.json"
+  },
+  "condition-confirmations": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/condition-confirmations"
+    },
+    "mutable": false,
+    "deletable": false,
+    "generation": null,
+    "path": "work/records/condition-confirmations/<first2>/<framed-key-sha256>.json"
+  },
+  "continuations": {
+    "key": {
+      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+    },
+    "payload": {
+      "$ref": "urn:writhelm:work:model2#/$defs/continuations"
+    },
+    "mutable": true,
+    "deletable": false,
+    "generation": "payload.generation",
+    "path": "work/records/continuations/<first2>/<framed-key-sha256>.json"
+  }
+}

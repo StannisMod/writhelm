@@ -244,6 +244,14 @@ class ApprovalWorkflow private constructor(
         return authority(reference)
     }
 
+    /** Internal current validation facts for an already authorized typed write. These disclose no
+     * protected content/trace and confer no READ permission. Never substitute them for readClause,
+     * approvalTrace or subject-sensitive service authorization; no synthetic owner Actor is needed. */
+    internal fun validationSourceAvailable(reference: KnowledgeReference): Boolean =
+        validateReferences(reference.revision.document.projectId,listOf(reference))==null && !blockedThroughProvenance(reference)
+    internal fun validationDecisionApproved(reference: KnowledgeReference): Boolean =
+        validateReferences(reference.revision.document.projectId,listOf(reference))==null && authority(reference) is WorkflowResult.Success
+
     private fun authority(ref: KnowledgeReference, seen: Set<KnowledgeReference> = emptySet()): WorkflowResult<ApprovalTrace> {
         if (ref in blocked) return WorkflowResult.Failure(WorkflowProblem.BLOCKED_INPUT)
         if (ref in seen) return WorkflowResult.Failure(WorkflowProblem.INVALID_CONTINUITY)

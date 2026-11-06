@@ -1,0 +1,90 @@
+[
+  {
+    "formatVersion": 1,
+    "family": "source-cuts",
+    "key": {
+      "projectId": "00000000-0000-0000-0000-000000000001",
+      "id": "00000000-0000-0000-0000-000000000001"
+    },
+    "payload": {
+      "nativeHostId": "00000000-0000-0000-0000-000000000001",
+      "nativeSessionId": "ses_h1synthetic",
+      "sourceFormatVersion": 1,
+      "renderedRequestDigest": "1111111111111111111111111111111111111111111111111111111111111111",
+      "packetDigest": "2222222222222222222222222222222222222222222222222222222222222222",
+      "retainedLocatorId": "00000000-0000-0000-0000-000000000001",
+      "nativeMessages": [
+        {
+          "messageId": "msg_synthetic",
+          "digest": "3333333333333333333333333333333333333333333333333333333333333333"
+        }
+      ],
+      "retainedFragments": [],
+      "task": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "taskId": "00000000-0000-0000-0000-000000000001",
+        "revision": 0
+      },
+      "assignment": {
+        "assignmentId": "00000000-0000-0000-0000-000000000001",
+        "generation": 0
+      },
+      "profile": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "profileId": "00000000-0000-0000-0000-000000000001",
+        "revision": 0
+      },
+      "pending": []
+    }
+  },
+  {
+    "formatVersion": 1,
+    "family": "controller-continuations",
+    "key": {
+      "projectId": "00000000-0000-0000-0000-000000000001",
+      "controllerId": "00000000-0000-0000-0000-000000000001",
+      "id": "00000000-0000-0000-0000-000000000001"
+    },
+    "payload": {
+      "profile": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "profileId": "00000000-0000-0000-0000-000000000001",
+        "revision": 0
+      },
+      "previous": null,
+      "source": {
+        "nativeHostId": "00000000-0000-0000-0000-000000000001",
+        "nativeSessionId": "ses_h1synthetic",
+        "sourceFormatVersion": 1,
+        "renderedRequestDigest": "1111111111111111111111111111111111111111111111111111111111111111",
+        "packetDigest": "2222222222222222222222222222222222222222222222222222222222222222",
+        "retainedLocatorId": "00000000-0000-0000-0000-000000000001",
+        "nativeMessages": [
+          {
+            "messageId": "msg_synthetic",
+            "digest": "3333333333333333333333333333333333333333333333333333333333333333"
+          }
+        ],
+        "retainedFragments": []
+      },
+      "frontier": [
+        {
+          "task": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "taskId": "00000000-0000-0000-0000-000000000001",
+            "revision": 0
+          },
+          "assignments": [],
+          "obligationIds": []
+        }
+      ],
+      "entries": [],
+      "gaps": [],
+      "pending": [],
+      "report": {
+        "digest": "0000000000000000000000000000000000000000000000000000000000000000",
+        "byteLength": 0
+      }
+    }
+  }
+]

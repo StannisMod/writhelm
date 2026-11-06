@@ -1,0 +1,40 @@
+{
+  "formatVersion": 1,
+  "family": "verification-plans",
+  "key": {
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "id": "00000000-0000-0000-0000-000000000001",
+    "revision": 0
+  },
+  "payload": {
+    "task": {
+      "projectId": "00000000-0000-0000-0000-000000000001",
+      "taskId": "00000000-0000-0000-0000-000000000001",
+      "revision": 0
+    },
+    "previous": null,
+    "criteria": [
+      {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "statement": "synthetic",
+        "clauses": []
+      }
+    ],
+    "gates": [
+      {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "criterionIds": [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "boundary": "pure",
+        "independent": false,
+        "stage": "dispatch",
+        "groupId": null,
+        "deferred": false,
+        "reason": "synthetic"
+      }
+    ],
+    "reason": "synthetic",
+    "authorizedChanges": []
+  }
+}

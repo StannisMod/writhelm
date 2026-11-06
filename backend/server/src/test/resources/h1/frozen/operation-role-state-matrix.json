@@ -1,0 +1,1540 @@
+{
+  "create_task_revision": {
+    "right": "TASK_PLAN",
+    "role": null,
+    "guards": [
+      "new exact task revision; executable requires complete inputs and approved design where applicable",
+      "dependency graph acyclic; exact readiness selected, no false deferred certification",
+      "no overwrite or running-assignment replacement",
+      "optional co-created plan key equals selected verificationPlan and plan.task equals exact new task revision; otherwise plan already resolves; no circular bootstrap authority",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add task-revisions",
+      "add optional exact typed verification-plans record with task revision in one derived effect",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "task-revisions",
+    "errors": [
+      "BLOCKED_INPUT",
+      "DIGEST_MISMATCH",
+      "DUPLICATE_ID",
+      "FOREIGN_REFERENCE",
+      "INVALID_REFERENCE",
+      "MISSING_BODY",
+      "NOT_FOUND"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/create_task_revision",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "set_task_head": {
+    "right": "TASK_PLAN",
+    "role": null,
+    "guards": [
+      "absent requires null guard; existing requires exact generation",
+      "references match task; executable revision is executable",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "create/update task-heads; increment generation checked",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "task-heads",
+    "errors": [
+      "DIGEST_MISMATCH",
+      "GENERATION_EXHAUSTED",
+      "INVALID_REFERENCE",
+      "MISSING_BODY",
+      "STALE_GENERATION"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/set_task_head",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "pin_input_manifest": {
+    "right": "TASK_PLAN",
+    "role": null,
+    "guards": [
+      "immutable exact declared closure and inclusion reasons",
+      "approved/unblocked mandatory inputs with exact source fragments",
+      "known gaps disallow dispatch, not silent omission; base not loaded view",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add input-manifests",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "input-manifests",
+    "errors": [
+      "BLOCKED_INPUT",
+      "DIGEST_MISMATCH",
+      "DUPLICATE_ID",
+      "FOREIGN_REFERENCE",
+      "INVALID_REFERENCE",
+      "MISSING_BODY",
+      "NOT_FOUND"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/pin_input_manifest",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "create_profile": {
+    "right": "TASK_PLAN",
+    "role": null,
+    "guards": [
+      "key absent",
+      "all exact references resolve in project",
+      "no changed contract authority",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add profiles",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "profiles",
+    "errors": [
+      "BLOCKED_INPUT",
+      "DIGEST_MISMATCH",
+      "DUPLICATE_ID",
+      "FOREIGN_REFERENCE",
+      "INVALID_REFERENCE",
+      "MISSING_BODY",
+      "NOT_FOUND"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/create_profile",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "revise_verification_plan": {
+    "right": "TASK_PLAN",
+    "role": null,
+    "guards": [
+      "new immutable revision; method refinement permitted",
+      "criteria/gate weakening requires exact owner decision; no hiding failed/deferred gates",
+      "independence and grouping specified before affected execution",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add verification-plans",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "verification-plans",
+    "errors": [
+      "BLOCKED_INPUT",
+      "DIGEST_MISMATCH",
+      "DUPLICATE_ID",
+      "FOREIGN_REFERENCE",
+      "INVALID_REFERENCE",
+      "MISSING_BODY",
+      "NOT_FOUND"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/revise_verification_plan",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "revise_applicability": {
+    "right": "TASK_PLAN",
+    "role": null,
+    "guards": [
+      "key absent",
+      "all exact references resolve in project",
+      "no changed contract authority",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add applicability",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "applicability",
+    "errors": [
+      "BLOCKED_INPUT",
+      "DIGEST_MISMATCH",
+      "DUPLICATE_ID",
+      "FOREIGN_REFERENCE",
+      "INVALID_REFERENCE",
+      "MISSING_BODY",
+      "NOT_FOUND"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/revise_applicability",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "update_plan": {
+    "right": "TASK_PLAN_OR_ASSIGNED_ROLE",
+    "role": "own-executor-or-reviewer",
+    "guards": [
+      "current task planning right OR own active executor assignment",
+      "exact existing plan generation or null absent",
+      "sequence/refinement within semantic contract, no requirement/base/authority change",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "create/update plans generation only; task revision unchanged",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "plans",
+    "errors": [
+      "DIGEST_MISMATCH",
+      "GENERATION_EXHAUSTED",
+      "MISSING_BODY",
+      "STALE_GENERATION",
+      "WRONG_ASSIGNMENT"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/update_plan",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [
+      "executor-v1",
+      "reviewer-v1"
+    ],
+    "assignmentNewEffectStates": [
+      "active",
+      "pausing",
+      "paused",
+      "stopping",
+      "stopped"
+    ],
+    "assignmentReplayOnlyStates": [
+      "completed",
+      "replaced"
+    ],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": [
+      "active credential/delegation; exact current project/assignment/executionGeneration",
+      "all target records/refs remain in own template subject closure before protected lookup",
+      "sourceCut and original binding remain applicable; no result/subject/base widening"
+    ]
+  },
+  "reserve_assignment": {
+    "right": "TASK_DISPATCH",
+    "role": null,
+    "guards": [
+      "executable task, valid exact base/closure, current rights and readiness immediately rechecked",
+      "profile qualified for intended claim",
+      "exclusive task/workspace/incompatible resources acquired atomically",
+      "review subjects immutable; nonauthor execution binding required before start",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add assignments at generation zero; acquire/create claims; add pending prepare native-intent",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "assignments",
+    "errors": [
+      "BLOCKED_INPUT",
+      "CLAIM_CONFLICT",
+      "DIGEST_MISMATCH",
+      "GENERATION_EXHAUSTED",
+      "INVALID_REFERENCE",
+      "MISSING_BODY",
+      "NOT_READY",
+      "STALE_GENERATION"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/reserve_assignment",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "bind_assignment": {
+    "right": "TASK_DISPATCH",
+    "role": null,
+    "guards": [
+      "reserved/current generation; exact preselected correlation/session/workspace",
+      "passive identified session, no active orphan; delegated identity mapping AUTH2 is current",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight",
+      "assignment intendedExecution fixes controller/execution/template/native host/session",
+      "registered delegationId exists; auth immutable scope and full subject group equal intent",
+      "create passive native binding only; no enrollment and no model start in this effect"
+    ],
+    "effects": [
+      "update assignment bound; add immutable assignment-bindings for exact executionGeneration; confirm prepare intent; do not start execution",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies",
+      "stamp initial execution principal/credential from current registered delegation, not model fields",
+      "immutable binding retains intendedExecution/delegationId/exact ordered reviewSubjects"
+    ],
+    "result": "assignments",
+    "errors": [
+      "DIGEST_MISMATCH",
+      "GENERATION_EXHAUSTED",
+      "INVALID_BINDING",
+      "MISSING_BODY",
+      "NATIVE_UNKNOWN",
+      "NOT_READY",
+      "STALE_GENERATION"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/bind_assignment",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "request_native_transition": {
+    "right": "TASK_DISPATCH",
+    "role": null,
+    "guards": [
+      "start only bound; pause active; stop active/bound/paused; resume paused with exact checkpoint and current inputs",
+      "no pending/unknown competing effect; claims retained; current inputs/withdrawals checked",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add preselected native-intent; mark pending desired state, not confirmed physical state",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "native-intents",
+    "errors": [
+      "BLOCKED_INPUT",
+      "DIGEST_MISMATCH",
+      "GENERATION_EXHAUSTED",
+      "INVALID_TRANSITION",
+      "MISSING_BODY",
+      "NATIVE_UNKNOWN",
+      "NOT_READY",
+      "STALE_GENERATION"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/request_native_transition",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "observe_native_transition": {
+    "right": "TASK_DISPATCH",
+    "role": null,
+    "guards": [
+      "current intent/generation and exact native identities",
+      "qualified actual boundary evidence, idle/timeout/parent death insufficient for stopped",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "update native-intent and assignment; unknown retains affected claims",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "native-intents",
+    "errors": [
+      "DIGEST_MISMATCH",
+      "GENERATION_EXHAUSTED",
+      "INVALID_BINDING",
+      "INVALID_TRANSITION",
+      "MISSING_BODY",
+      "STALE_GENERATION"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/observe_native_transition",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "record_recovery": {
+    "right": "TASK_DISPATCH",
+    "role": null,
+    "guards": [
+      "current assignment/generation and exact unknown effect",
+      "bind-existing or proven not-started or revoked-right AND demonstrably isolated resources",
+      "uncontained shared effects retain affected claims; operator-required never frees them",
+      "AUTH2 revocation coupling required for revoked-isolated",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add recoveries",
+      "update guarded assignment recovery pointer and recovery state; isolate only proven resources; AUTH2 exact scope closure for revoked-isolated",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "recoveries",
+    "errors": [
+      "BLOCKED_INPUT",
+      "DIGEST_MISMATCH",
+      "DUPLICATE_ID",
+      "FOREIGN_REFERENCE",
+      "GENERATION_EXHAUSTED",
+      "INVALID_REFERENCE",
+      "MISSING_BODY",
+      "NOT_FOUND",
+      "STALE_GENERATION"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/record_recovery",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "rebind_assignment": {
+    "right": "TASK_DISPATCH",
+    "role": null,
+    "guards": [
+      "old execution stopped/fenced or right revoked and resources isolated",
+      "new exact executable inputs and claims valid; AUTH2 old scope closed atomically",
+      "generation overflow preflight includes auth/claim/intent counters",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "advance assignment execution generation; fence previous scope; add pending rebind intent; preserve old subjects",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies",
+      "terminalize old execution scope by generation closure, preserve old delegation and receipts",
+      "clear current delegationId/execution/binding; pin new intendedExecution; stay reserved until registration/bind"
+    ],
+    "result": "assignments",
+    "errors": [
+      "CLAIM_CONFLICT",
+      "DIGEST_MISMATCH",
+      "GENERATION_EXHAUSTED",
+      "MISSING_BODY",
+      "NATIVE_UNKNOWN",
+      "NOT_READY",
+      "STALE_GENERATION"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/rebind_assignment",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "complete_assignment": {
+    "right": "TASK_DISPATCH",
+    "role": null,
+    "guards": [
+      "durable finished checkpoint, result/report/retro/pending delivery retained",
+      "actual completion/fencing established; only safely reusable claims released; AUTH2 closes new work",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "mark completed; release only proved-safe resources; preserve result/replay rights per AUTH2",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "assignments",
+    "errors": [
+      "CLAIM_CONFLICT",
+      "DIGEST_MISMATCH",
+      "GENERATION_EXHAUSTED",
+      "INCOMPLETE_HANDOFF",
+      "MISSING_BODY",
+      "NATIVE_UNKNOWN",
+      "STALE_GENERATION"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/complete_assignment",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "record_loaded_view": {
+    "right": "ASSIGNMENT_ROLE",
+    "role": "own-executor-or-reviewer",
+    "guards": [
+      "own exact active assignment/task/generation; no completed/replaced fresh submission",
+      "all refs exact/project scoped; declared role subject set enforced by AUTH2",
+      "result snapshot immutable and retained; producer/reviewer execution service-derived; no selfreview",
+      "handoff/checkpoint source cut and late pending events preserved",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add loaded-views; stamp attribution from authenticated binding where present; no claim release",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "loaded-views",
+    "errors": [
+      "DIGEST_MISMATCH",
+      "DUPLICATE_ID",
+      "INCOMPLETE_HANDOFF",
+      "INVALID_REFERENCE",
+      "INVALID_SUBJECT",
+      "MISSING_BODY",
+      "STALE_GENERATION",
+      "WRONG_ASSIGNMENT"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/record_loaded_view",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": false,
+    "assignmentTemplates": [
+      "executor-v1",
+      "reviewer-v1"
+    ],
+    "assignmentNewEffectStates": [
+      "active",
+      "pausing",
+      "paused",
+      "stopping",
+      "stopped"
+    ],
+    "assignmentReplayOnlyStates": [
+      "completed",
+      "replaced"
+    ],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": [
+      "active credential/delegation; exact current project/assignment/executionGeneration",
+      "all target records/refs remain in own template subject closure before protected lookup",
+      "sourceCut and original binding remain applicable; no result/subject/base widening"
+    ]
+  },
+  "record_memory": {
+    "right": "ASSIGNMENT_ROLE",
+    "role": "own-executor-or-reviewer",
+    "guards": [
+      "own exact active assignment/task/generation; no completed/replaced fresh submission",
+      "all refs exact/project scoped; declared role subject set enforced by AUTH2",
+      "result snapshot immutable and retained; producer/reviewer execution service-derived; no selfreview",
+      "handoff/checkpoint source cut and late pending events preserved",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add memory; stamp attribution from authenticated binding where present; no claim release",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "memory",
+    "errors": [
+      "DIGEST_MISMATCH",
+      "DUPLICATE_ID",
+      "INCOMPLETE_HANDOFF",
+      "INVALID_REFERENCE",
+      "INVALID_SUBJECT",
+      "MISSING_BODY",
+      "STALE_GENERATION",
+      "WRONG_ASSIGNMENT"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/record_memory",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": false,
+    "assignmentTemplates": [
+      "executor-v1",
+      "reviewer-v1"
+    ],
+    "assignmentNewEffectStates": [
+      "active",
+      "pausing",
+      "paused",
+      "stopping",
+      "stopped"
+    ],
+    "assignmentReplayOnlyStates": [
+      "completed",
+      "replaced"
+    ],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": [
+      "active credential/delegation; exact current project/assignment/executionGeneration",
+      "all target records/refs remain in own template subject closure before protected lookup",
+      "sourceCut and original binding remain applicable; no result/subject/base widening"
+    ]
+  },
+  "record_checkpoint": {
+    "right": "ASSIGNMENT_ROLE",
+    "role": "own-executor-or-reviewer",
+    "guards": [
+      "own exact active assignment/task/generation; no completed/replaced fresh submission",
+      "all refs exact/project scoped; declared role subject set enforced by AUTH2",
+      "result snapshot immutable and retained; producer/reviewer execution service-derived; no selfreview",
+      "handoff/checkpoint source cut and late pending events preserved",
+      "exact assignment record generation before advancing checkpoint pointer",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add checkpoints; stamp attribution from authenticated binding where present; no claim release",
+      "advance assignment checkpoint pointer and record generation, never executionGeneration",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "checkpoints",
+    "errors": [
+      "DIGEST_MISMATCH",
+      "DUPLICATE_ID",
+      "GENERATION_EXHAUSTED",
+      "INCOMPLETE_HANDOFF",
+      "INVALID_REFERENCE",
+      "INVALID_SUBJECT",
+      "MISSING_BODY",
+      "STALE_GENERATION",
+      "WRONG_ASSIGNMENT"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/record_checkpoint",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": false,
+    "assignmentTemplates": [
+      "executor-v1",
+      "reviewer-v1"
+    ],
+    "assignmentNewEffectStates": [
+      "active",
+      "pausing",
+      "paused",
+      "stopping",
+      "stopped"
+    ],
+    "assignmentReplayOnlyStates": [
+      "completed",
+      "replaced"
+    ],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": [
+      "active credential/delegation; exact current project/assignment/executionGeneration",
+      "all target records/refs remain in own template subject closure before protected lookup",
+      "sourceCut and original binding remain applicable; no result/subject/base widening"
+    ]
+  },
+  "record_retrospective": {
+    "right": "ASSIGNMENT_ROLE",
+    "role": "own-executor-or-reviewer",
+    "guards": [
+      "own exact active assignment/task/generation; no completed/replaced fresh submission",
+      "all refs exact/project scoped; declared role subject set enforced by AUTH2",
+      "result snapshot immutable and retained; producer/reviewer execution service-derived; no selfreview",
+      "handoff/checkpoint source cut and late pending events preserved",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add retrospectives; stamp attribution from authenticated binding where present; no claim release",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "retrospectives",
+    "errors": [
+      "DIGEST_MISMATCH",
+      "DUPLICATE_ID",
+      "INCOMPLETE_HANDOFF",
+      "INVALID_REFERENCE",
+      "INVALID_SUBJECT",
+      "MISSING_BODY",
+      "STALE_GENERATION",
+      "WRONG_ASSIGNMENT"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/record_retrospective",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": false,
+    "assignmentTemplates": [
+      "executor-v1",
+      "reviewer-v1"
+    ],
+    "assignmentNewEffectStates": [
+      "active",
+      "pausing",
+      "paused",
+      "stopping",
+      "stopped"
+    ],
+    "assignmentReplayOnlyStates": [
+      "completed",
+      "replaced"
+    ],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": [
+      "active credential/delegation; exact current project/assignment/executionGeneration",
+      "all target records/refs remain in own template subject closure before protected lookup",
+      "sourceCut and original binding remain applicable; no result/subject/base widening"
+    ]
+  },
+  "submit_result": {
+    "right": "ASSIGNMENT_ROLE",
+    "role": "executor",
+    "guards": [
+      "own exact active assignment/task/generation; no completed/replaced fresh submission",
+      "all refs exact/project scoped; declared role subject set enforced by AUTH2",
+      "result snapshot immutable and retained; producer/reviewer execution service-derived; no selfreview",
+      "handoff/checkpoint source cut and late pending events preserved",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add results; stamp attribution from authenticated binding where present; no claim release",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "results",
+    "errors": [
+      "DIGEST_MISMATCH",
+      "DUPLICATE_ID",
+      "INCOMPLETE_HANDOFF",
+      "INVALID_REFERENCE",
+      "INVALID_SUBJECT",
+      "MISSING_BODY",
+      "STALE_GENERATION",
+      "WRONG_ASSIGNMENT"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/submit_result",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": false,
+    "assignmentTemplates": [
+      "executor-v1"
+    ],
+    "assignmentNewEffectStates": [
+      "active"
+    ],
+    "assignmentReplayOnlyStates": [
+      "completed",
+      "replaced"
+    ],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": [
+      "active credential/delegation; exact current project/assignment/executionGeneration",
+      "all target records/refs remain in own template subject closure before protected lookup",
+      "sourceCut and original binding remain applicable; no result/subject/base widening"
+    ]
+  },
+  "submit_verification_report": {
+    "right": "ASSIGNMENT_ROLE",
+    "role": "reviewer",
+    "guards": [
+      "own exact active assignment/task/generation; no completed/replaced fresh submission",
+      "all refs exact/project scoped; declared role subject set enforced by AUTH2",
+      "result snapshot immutable and retained; producer/reviewer execution service-derived; no selfreview",
+      "handoff/checkpoint source cut and late pending events preserved",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add verification-reports; stamp attribution from authenticated binding where present; no claim release",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "verification-reports",
+    "errors": [
+      "DIGEST_MISMATCH",
+      "DUPLICATE_ID",
+      "INCOMPLETE_HANDOFF",
+      "INVALID_REFERENCE",
+      "INVALID_SUBJECT",
+      "MISSING_BODY",
+      "STALE_GENERATION",
+      "WRONG_ASSIGNMENT"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/submit_verification_report",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": false,
+    "assignmentTemplates": [
+      "reviewer-v1"
+    ],
+    "assignmentNewEffectStates": [
+      "active"
+    ],
+    "assignmentReplayOnlyStates": [
+      "completed",
+      "replaced"
+    ],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": [
+      "active credential/delegation; exact current project/assignment/executionGeneration",
+      "all target records/refs remain in own template subject closure before protected lookup",
+      "sourceCut and original binding remain applicable; no result/subject/base widening"
+    ]
+  },
+  "record_evidence": {
+    "right": "ASSIGNMENT_ROLE",
+    "role": "assigned-executor-or-reviewer",
+    "guards": [
+      "own exact active assignment/task/generation; no completed/replaced fresh submission",
+      "all refs exact/project scoped; declared role subject set enforced by AUTH2",
+      "result snapshot immutable and retained; producer/reviewer execution service-derived; no selfreview",
+      "handoff/checkpoint source cut and late pending events preserved",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add evidence; stamp attribution from authenticated binding where present; no claim release",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "evidence",
+    "errors": [
+      "DIGEST_MISMATCH",
+      "DUPLICATE_ID",
+      "INCOMPLETE_HANDOFF",
+      "INVALID_REFERENCE",
+      "INVALID_SUBJECT",
+      "MISSING_BODY",
+      "STALE_GENERATION",
+      "WRONG_ASSIGNMENT"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/record_evidence",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": false,
+    "assignmentTemplates": [
+      "executor-v1",
+      "reviewer-v1"
+    ],
+    "assignmentNewEffectStates": [
+      "active"
+    ],
+    "assignmentReplayOnlyStates": [
+      "completed",
+      "replaced"
+    ],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": [
+      "active credential/delegation; exact current project/assignment/executionGeneration",
+      "all target records/refs remain in own template subject closure before protected lookup",
+      "sourceCut and original binding remain applicable; no result/subject/base widening"
+    ]
+  },
+  "record_delivery": {
+    "right": "TASK_DISPATCH",
+    "role": null,
+    "guards": [
+      "exact source cut and destination; durable recoverable notification not physical user reading",
+      "exact generation; delivered does not release claims or stop tools",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "create/update deliveries generation",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "deliveries",
+    "errors": [
+      "DIGEST_MISMATCH",
+      "GENERATION_EXHAUSTED",
+      "INVALID_REFERENCE",
+      "MISSING_BODY",
+      "STALE_GENERATION"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/record_delivery",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "record_evidence_applicability": {
+    "right": "RESULT_ACCEPT",
+    "role": null,
+    "guards": [
+      "significant input/scope comparison justified; new tree alone not blanket invalidation",
+      "uncertain/changed inputs hold affected gates; no fabricated new run",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add evidence-applicability",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "evidence-applicability",
+    "errors": [
+      "BLOCKED_INPUT",
+      "DIGEST_MISMATCH",
+      "DUPLICATE_ID",
+      "FOREIGN_REFERENCE",
+      "INVALID_REFERENCE",
+      "MISSING_BODY",
+      "NOT_FOUND"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/record_evidence_applicability",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "record_disposition": {
+    "right": "RESULT_ACCEPT",
+    "role": null,
+    "guards": [
+      "finding/result/gate exact; current violation not relabeled uncertainty",
+      "owner-exception requires exact authorized owner decision; fix refers to new exact result, not erased finding",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add dispositions",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "dispositions",
+    "errors": [
+      "BLOCKED_INPUT",
+      "DIGEST_MISMATCH",
+      "DUPLICATE_ID",
+      "FOREIGN_REFERENCE",
+      "INVALID_REFERENCE",
+      "MISSING_BODY",
+      "NOT_FOUND"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/record_disposition",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "accept_result": {
+    "right": "RESULT_ACCEPT",
+    "role": null,
+    "guards": [
+      "exact immutable result and task criteria",
+      "caller not producer/worker selfaccept; reviewer actual execution distinct",
+      "required applicable independent reports/checks and dispositions satisfied; no unresolved affected blocker",
+      "deferred milestone gates only per explicit plan; component acceptance not milestone certification",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add acceptances",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "acceptances",
+    "errors": [
+      "BLOCKED_INPUT",
+      "DIGEST_MISMATCH",
+      "DUPLICATE_ID",
+      "FOREIGN_REFERENCE",
+      "INVALID_REFERENCE",
+      "MISSING_BODY",
+      "NOT_FOUND"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/accept_result",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "prepare_integration": {
+    "right": "TARGET_INTEGRATE",
+    "role": null,
+    "guards": [
+      "exact applicable accepted result/permitted target; target/base/dirty bytes checked",
+      "exclusive target claims; unrelated edits preserved; no pending uncertain native merge",
+      "publication/push rights remain separate",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "add prepared integration-intent; acquire target claims; no claim native merge occurred",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "integration-intents",
+    "errors": [
+      "CLAIM_CONFLICT",
+      "DIGEST_MISMATCH",
+      "GENERATION_EXHAUSTED",
+      "INVALID_SUBJECT",
+      "MISSING_BODY",
+      "NATIVE_UNKNOWN",
+      "NOT_ACCEPTED",
+      "STALE_TARGET"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/prepare_integration",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "observe_integration": {
+    "right": "TARGET_INTEGRATE",
+    "role": null,
+    "guards": [
+      "exact preselected native effect; unknown reconciled before new merge",
+      "confirmed requires immutable resulting tree, applicable checks and preserved unrelated edits",
+      "not-performed/unknown excludes resultingSnapshot; unknown retains affected claims",
+      "attached body digest/length recomputed; exact missing-body set equals attachments; final encoded limits preflight"
+    ],
+    "effects": [
+      "update intent; confirmed adds integrations with service attribution; unknown no success record",
+      "release only exact owned target claims after confirmed complete/fenced native effect or proven not-performed; unknown retains them; checked claim generations",
+      "add only missing bodies directly referenced by this exact typed effect; identical existing reuse; no orphan bodies"
+    ],
+    "result": "integration-intents",
+    "errors": [
+      "DIGEST_MISMATCH",
+      "GENERATION_EXHAUSTED",
+      "INVALID_REFERENCE",
+      "MISSING_BODY",
+      "NATIVE_UNKNOWN",
+      "STALE_GENERATION",
+      "STALE_TARGET"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/observe_integration",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "READY-WORK-v1",
+    "controllerScope": true,
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "record_source_cut": {
+    "right": "ASSIGNMENT_ROLE",
+    "role": "own-executor-or-reviewer",
+    "guards": [
+      "own exact task/assignment/execution generation/native binding/profile",
+      "unique message IDs in observed order; actual retained source/packet digests match",
+      "retained locator and targeted source fragments available; no full chat in canonical state",
+      "source cut is attributed evidence, not permission to install compaction or claim completeness",
+      "exact missing-body closure; checked metadata/body/resource limits before publication"
+    ],
+    "effects": [
+      "add immutable source-cuts and exact missing referenced bodies"
+    ],
+    "result": "source-cuts",
+    "errors": [
+      "DIGEST_MISMATCH",
+      "DUPLICATE_ID",
+      "INCOMPLETE_HANDOFF",
+      "INVALID_REFERENCE",
+      "INVALID_SUBJECT",
+      "MISSING_BODY",
+      "STALE_GENERATION",
+      "WRONG_ASSIGNMENT"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/record_source_cut",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "parent composition v2",
+    "controllerScope": false,
+    "assignmentTemplates": [
+      "executor-v1",
+      "reviewer-v1"
+    ],
+    "assignmentNewEffectStates": [
+      "active",
+      "pausing",
+      "paused",
+      "stopping",
+      "stopped"
+    ],
+    "assignmentReplayOnlyStates": [
+      "completed",
+      "replaced"
+    ],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": [
+      "active credential/delegation; exact current project/assignment/executionGeneration",
+      "all target records/refs remain in own template subject closure before protected lookup",
+      "sourceCut and original binding remain applicable; no result/subject/base widening"
+    ]
+  },
+  "record_controller_continuation": {
+    "right": "TASK_PLAN",
+    "role": null,
+    "guards": [
+      "current TASK_PLAN + exact authenticated controllerId; no assigned-role alternative",
+      "all source/profile/task/assignment refs belong to exact current project/controller closure",
+      "captured frontier exact task/assignment generations; absent coverage explicit gap blocks install",
+      "unique task/message/assignment identities; retained source/digests/body closure available",
+      "previous continuation belongs to same controller; no cycle or other-controller adoption"
+    ],
+    "effects": [
+      "add own immutable controller-continuations and exact missing referenced bodies"
+    ],
+    "result": "controller-continuations",
+    "errors": [
+      "BLOCKED_INPUT",
+      "DIGEST_MISMATCH",
+      "DUPLICATE_ID",
+      "FOREIGN_REFERENCE",
+      "INVALID_REFERENCE",
+      "MISSING_BODY",
+      "NOT_FOUND",
+      "STALE_GENERATION"
+    ],
+    "replay": "Current AUTH2 check first; same-key same-fingerprint returns immutable outcome without effect; changed fingerprint conflicts. No work command has a new-key domain replay.",
+    "payloadSchema": "urn:writhelm:work-commands:v3#/$defs/record_controller_continuation",
+    "replySchema": "urn:writhelm:work-commands:v3#/$defs/reply",
+    "commonNonterminalErrors": [
+      "UNAUTHENTICATED",
+      "FORBIDDEN",
+      "INVALID_INPUT",
+      "UNSUPPORTED",
+      "TOO_LARGE",
+      "UNAVAILABLE",
+      "INTEGRITY",
+      "PUBLICATION_UNKNOWN",
+      "IDENTITY_CONFLICT"
+    ],
+    "sourceMatrix": "parent composition v2",
+    "controllerScope": "exact owning controller only",
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "assignmentReplayOnlyStates": [],
+    "assignmentDefaultNewEffect": "deny",
+    "assignmentConditions": []
+  },
+  "register_delegation": {
+    "right": "TASK_DISPATCH",
+    "controllerScope": "exact owning controller only",
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "targetStates": [
+      "reserved"
+    ],
+    "requiresDelegationAbsent": true,
+    "effects": [
+      "six new core/auth records",
+      "assignment.delegationId and assignment CAS generation +1"
+    ],
+    "schema": "urn:writhelm:auth:v2#/$defs/registerDelegation"
+  },
+  "replace_work_grants": {
+    "right": "fixed owner MANAGE",
+    "controllerScope": "owner P/C only",
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "guards": [
+      "ordinary enrolled target, expectedWorkGrantDigest + generation; delegated target denied",
+      "checked increment; preserve current core grants and unrelated auth/work"
+    ],
+    "effects": [
+      "update exactly one work-grants record"
+    ],
+    "schema": "urn:writhelm:auth:v2#/$defs/replaceWorkGrants"
+  },
+  "rotate_delegated_credential": {
+    "right": "TASK_DISPATCH",
+    "controllerScope": "exact owning controller only",
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "targetStates": [
+      "reserved",
+      "bound",
+      "active",
+      "pausing",
+      "paused",
+      "stopping",
+      "stopped"
+    ],
+    "guards": [
+      "current active delegation and unreplaced active lineage key; exact credential/delegation/assignment guards",
+      "same immutable scope, new unused credential ID/verifier; no work execution-generation change"
+    ],
+    "effects": [
+      "old credential revoked generation+1 and active successor generation0 atomically"
+    ],
+    "schema": "urn:writhelm:auth:v2#/$defs/rotateDelegatedCredential"
+  },
+  "revoke_delegated_credential": {
+    "right": "TASK_DISPATCH",
+    "controllerScope": "exact owning controller only",
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "targetStates": "including terminal for cleanup",
+    "guards": [
+      "exact credential/delegation guards; same owning scope; target active"
+    ],
+    "effects": [
+      "credential revoked generation+1; do not claim physical stop or release claims"
+    ],
+    "schema": "urn:writhelm:auth:v2#/$defs/revokeDelegatedCredential"
+  },
+  "revoke_delegation": {
+    "right": "owning controller TASK_DISPATCH OR fixed owner MANAGE",
+    "controllerScope": "exact owning controller or fixed owner P/C",
+    "assignmentTemplates": [],
+    "assignmentNewEffectStates": [],
+    "targetStates": "including terminal",
+    "guards": [
+      "same project; exact delegation generation; currently active delegation"
+    ],
+    "effects": [
+      "delegation revoked generation+1; all lineage requests denied; no claim release/physical-stop assertion"
+    ],
+    "schema": "urn:writhelm:auth:v2#/$defs/revokeDelegation"
+  }
+}

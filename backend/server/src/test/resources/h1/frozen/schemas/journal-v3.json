@@ -1,0 +1,3706 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:writhelm:journal:v3",
+  "$comment": "Shape only. Strict raw-token/UTF8/canonical, history, authority, reference and resource laws are separate; see laws.md. Resolve URNs offline only.",
+  "oneOf": [
+    {
+      "$ref": "urn:writhelm:journal:v3#/$defs/header"
+    },
+    {
+      "$ref": "urn:writhelm:journal:v3#/$defs/receipt"
+    },
+    {
+      "$ref": "urn:writhelm:journal:v3#/$defs/store"
+    }
+  ],
+  "$defs": {
+    "header": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "formatVersion"
+      ],
+      "properties": {
+        "formatVersion": {
+          "const": 3
+        }
+      }
+    },
+    "operation": {
+      "anyOf": [
+        {
+          "$ref": "urn:writhelm:auth-service:v1#/$defs/operation"
+        },
+        {
+          "$ref": "urn:writhelm:work-commands:v3#/$defs/operation"
+        },
+        {
+          "$ref": "urn:writhelm:auth:v2#/$defs/operation"
+        }
+      ]
+    },
+    "receiptKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "principalId",
+        "projectId",
+        "operation",
+        "requestKey"
+      ],
+      "properties": {
+        "principalId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "projectId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "operation": {
+          "$ref": "urn:writhelm:journal:v3#/$defs/operation"
+        },
+        "requestKey": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        }
+      }
+    },
+    "workWrite": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "task-revisions"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/taskRevisionKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "task-heads"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/taskKey"
+            },
+            "beforeDigest": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+                }
+              ]
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "plans"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/revisionKey"
+            },
+            "beforeDigest": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+                }
+              ]
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "input-manifests"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/idKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "loaded-views"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/revisionKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "profiles"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/profileKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "assignments"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/idKey"
+            },
+            "beforeDigest": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+                }
+              ]
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "assignment-bindings"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/assignmentBindingKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "claims"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/resourceKey"
+            },
+            "beforeDigest": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+                }
+              ]
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "native-intents"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/idKey"
+            },
+            "beforeDigest": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+                }
+              ]
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "recoveries"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/idKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "checkpoints"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/idKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "deliveries"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/idKey"
+            },
+            "beforeDigest": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+                }
+              ]
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "memory"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/revisionKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "retrospectives"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/idKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "results"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/idKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "verification-plans"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/revisionKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "verification-reports"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/idKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "evidence"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/idKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "dispositions"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/idKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "acceptances"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/idKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "integration-intents"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/idKey"
+            },
+            "beforeDigest": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+                }
+              ]
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "integrations"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/idKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "applicability"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/revisionKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "evidence-applicability"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/idKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "bodies"
+            },
+            "key": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "source-cuts"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/idKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "family",
+            "key",
+            "beforeDigest",
+            "afterDigest"
+          ],
+          "properties": {
+            "namespace": {
+              "const": "work"
+            },
+            "family": {
+              "const": "controller-continuations"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:v1#/$defs/controllerContinuationKey"
+            },
+            "beforeDigest": {
+              "const": null
+            },
+            "afterDigest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        }
+      ]
+    },
+    "legacyCoreWrite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "namespace",
+        "family",
+        "key",
+        "beforeDigest",
+        "afterDigest"
+      ],
+      "properties": {
+        "namespace": {
+          "const": "core"
+        },
+        "family": {
+          "type": "string"
+        },
+        "key": {},
+        "beforeDigest": {
+          "$ref": "urn:writhelm:auth-service:v1#/$defs/nullableDigest"
+        },
+        "afterDigest": {
+          "$ref": "urn:writhelm:auth-service:v1#/$defs/nullableDigest"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "namespace": {
+              "const": "core"
+            },
+            "family": {
+              "enum": [
+                "revisions",
+                "proposals"
+              ]
+            },
+            "key": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/revisionKey"
+            }
+          }
+        },
+        {
+          "properties": {
+            "namespace": {
+              "const": "core"
+            },
+            "family": {
+              "const": "grants"
+            },
+            "key": {
+              "$ref": "urn:writhelm:auth-service:v1#/$defs/grantKey"
+            }
+          }
+        },
+        {
+          "properties": {
+            "namespace": {
+              "const": "core"
+            },
+            "family": {
+              "enum": [
+                "requests",
+                "resolutions",
+                "assessments",
+                "manifests"
+              ]
+            },
+            "key": {
+              "$ref": "urn:writhelm:auth-service:v1#/$defs/uuid"
+            }
+          }
+        },
+        {
+          "properties": {
+            "namespace": {
+              "const": "core"
+            },
+            "family": {
+              "enum": [
+                "approvals",
+                "continuity",
+                "blocked"
+              ]
+            },
+            "key": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/reference"
+            }
+          }
+        },
+        {
+          "properties": {
+            "namespace": {
+              "const": "core"
+            },
+            "family": {
+              "enum": [
+                "heads",
+                "generations"
+              ]
+            },
+            "key": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/subject"
+            }
+          }
+        },
+        {
+          "properties": {
+            "namespace": {
+              "const": "core"
+            },
+            "family": {
+              "const": "bodies"
+            },
+            "key": {
+              "$ref": "urn:writhelm:auth-service:v1#/$defs/digest"
+            }
+          }
+        }
+      ],
+      "not": {
+        "properties": {
+          "beforeDigest": {
+            "type": "null"
+          },
+          "afterDigest": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    "write": {
+      "oneOf": [
+        {
+          "$ref": "urn:writhelm:journal:v3#/$defs/legacyCoreWrite"
+        },
+        {
+          "$ref": "urn:writhelm:journal:v3#/$defs/workWrite"
+        },
+        {
+          "$ref": "urn:writhelm:auth:v2#/$defs/write"
+        }
+      ]
+    },
+    "outcome": {
+      "anyOf": [
+        {
+          "$ref": "urn:writhelm:auth-service:v1#/$defs/success"
+        },
+        {
+          "$ref": "urn:writhelm:auth-service:v1#/$defs/rejection"
+        },
+        {
+          "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+        },
+        {
+          "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+        },
+        {
+          "$ref": "urn:writhelm:auth:v2#/$defs/success"
+        },
+        {
+          "$ref": "urn:writhelm:auth:v2#/$defs/rejection"
+        }
+      ]
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "formatVersion",
+        "family",
+        "key",
+        "payload"
+      ],
+      "properties": {
+        "formatVersion": {
+          "const": 3
+        },
+        "family": {
+          "const": "command-receipt"
+        },
+        "key": {
+          "$ref": "urn:writhelm:journal:v3#/$defs/receiptKey"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "storeId",
+            "fingerprintVersion",
+            "fingerprint",
+            "validatedAt",
+            "authenticatedByCredentialId",
+            "outcome",
+            "writes"
+          ],
+          "properties": {
+            "storeId": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+            },
+            "fingerprintVersion": {
+              "enum": [
+                1,
+                2,
+                3
+              ]
+            },
+            "fingerprint": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            },
+            "validatedAt": {
+              "$ref": "urn:writhelm:auth-service:v1#/$defs/gitOid"
+            },
+            "authenticatedByCredentialId": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+            },
+            "outcome": {
+              "$ref": "urn:writhelm:journal:v3#/$defs/outcome"
+            },
+            "writes": {
+              "type": "array",
+              "items": {
+                "$ref": "urn:writhelm:journal:v3#/$defs/write"
+              },
+              "minItems": 0,
+              "maxItems": 4096
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "$ref": "urn:writhelm:auth-service:v1#/$defs/coreOperation"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "fingerprintVersion": {
+                    "const": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "$ref": "urn:writhelm:auth-service:v1#/$defs/authOperation"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "fingerprintVersion": {
+                    "const": 2
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "anyOf": [
+                      {
+                        "$ref": "urn:writhelm:work-commands:v3#/$defs/operation"
+                      },
+                      {
+                        "$ref": "urn:writhelm:auth:v2#/$defs/operation"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "fingerprintVersion": {
+                    "const": 3
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "properties": {
+                      "kind": {
+                        "const": "rejected"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "writes": {
+                    "maxItems": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "properties": {
+                      "domainReplayed": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "domainReplayed"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "writes": {
+                    "maxItems": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "propose_revision"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:auth-service:v1#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "propose_revision"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "$ref": "urn:writhelm:auth-service:v1#/$defs/rejection"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "request_approval"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:auth-service:v1#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "request_approval"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "$ref": "urn:writhelm:auth-service:v1#/$defs/rejection"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "resolve_approval"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:auth-service:v1#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "resolve_approval"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "$ref": "urn:writhelm:auth-service:v1#/$defs/rejection"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "record_assessment"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:auth-service:v1#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "record_assessment"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "$ref": "urn:writhelm:auth-service:v1#/$defs/rejection"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "pin_consumer"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:auth-service:v1#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "pin_consumer"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "$ref": "urn:writhelm:auth-service:v1#/$defs/rejection"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "revoke_access"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:auth-service:v1#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "revoke_access"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "$ref": "urn:writhelm:auth-service:v1#/$defs/rejection"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "replace_grants"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:auth-service:v1#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "replace_grants"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "$ref": "urn:writhelm:auth-service:v1#/$defs/rejection"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "revoke_credential"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:auth-service:v1#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "revoke_credential"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "$ref": "urn:writhelm:auth-service:v1#/$defs/rejection"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "rotate_credential"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:auth-service:v1#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "rotate_credential"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "$ref": "urn:writhelm:auth-service:v1#/$defs/rejection"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "create_task_revision"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "create_task_revision"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "BLOCKED_INPUT",
+                                  "DIGEST_MISMATCH",
+                                  "DUPLICATE_ID",
+                                  "FOREIGN_REFERENCE",
+                                  "INVALID_REFERENCE",
+                                  "MISSING_BODY",
+                                  "NOT_FOUND"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "set_task_head"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "set_task_head"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "DIGEST_MISMATCH",
+                                  "GENERATION_EXHAUSTED",
+                                  "INVALID_REFERENCE",
+                                  "MISSING_BODY",
+                                  "STALE_GENERATION"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "pin_input_manifest"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "pin_input_manifest"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "BLOCKED_INPUT",
+                                  "DIGEST_MISMATCH",
+                                  "DUPLICATE_ID",
+                                  "FOREIGN_REFERENCE",
+                                  "INVALID_REFERENCE",
+                                  "MISSING_BODY",
+                                  "NOT_FOUND"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "create_profile"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "create_profile"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "BLOCKED_INPUT",
+                                  "DIGEST_MISMATCH",
+                                  "DUPLICATE_ID",
+                                  "FOREIGN_REFERENCE",
+                                  "INVALID_REFERENCE",
+                                  "MISSING_BODY",
+                                  "NOT_FOUND"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "revise_verification_plan"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "revise_verification_plan"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "BLOCKED_INPUT",
+                                  "DIGEST_MISMATCH",
+                                  "DUPLICATE_ID",
+                                  "FOREIGN_REFERENCE",
+                                  "INVALID_REFERENCE",
+                                  "MISSING_BODY",
+                                  "NOT_FOUND"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "revise_applicability"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "revise_applicability"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "BLOCKED_INPUT",
+                                  "DIGEST_MISMATCH",
+                                  "DUPLICATE_ID",
+                                  "FOREIGN_REFERENCE",
+                                  "INVALID_REFERENCE",
+                                  "MISSING_BODY",
+                                  "NOT_FOUND"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "update_plan"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "update_plan"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "DIGEST_MISMATCH",
+                                  "GENERATION_EXHAUSTED",
+                                  "MISSING_BODY",
+                                  "STALE_GENERATION",
+                                  "WRONG_ASSIGNMENT"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "reserve_assignment"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "reserve_assignment"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "BLOCKED_INPUT",
+                                  "CLAIM_CONFLICT",
+                                  "DIGEST_MISMATCH",
+                                  "GENERATION_EXHAUSTED",
+                                  "INVALID_REFERENCE",
+                                  "MISSING_BODY",
+                                  "NOT_READY",
+                                  "STALE_GENERATION"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "bind_assignment"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "bind_assignment"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "DIGEST_MISMATCH",
+                                  "GENERATION_EXHAUSTED",
+                                  "INVALID_BINDING",
+                                  "MISSING_BODY",
+                                  "NATIVE_UNKNOWN",
+                                  "NOT_READY",
+                                  "STALE_GENERATION"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "request_native_transition"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "request_native_transition"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "BLOCKED_INPUT",
+                                  "DIGEST_MISMATCH",
+                                  "GENERATION_EXHAUSTED",
+                                  "INVALID_TRANSITION",
+                                  "MISSING_BODY",
+                                  "NATIVE_UNKNOWN",
+                                  "NOT_READY",
+                                  "STALE_GENERATION"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "observe_native_transition"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "observe_native_transition"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "DIGEST_MISMATCH",
+                                  "GENERATION_EXHAUSTED",
+                                  "INVALID_BINDING",
+                                  "INVALID_TRANSITION",
+                                  "MISSING_BODY",
+                                  "STALE_GENERATION"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "record_recovery"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "record_recovery"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "BLOCKED_INPUT",
+                                  "DIGEST_MISMATCH",
+                                  "DUPLICATE_ID",
+                                  "FOREIGN_REFERENCE",
+                                  "GENERATION_EXHAUSTED",
+                                  "INVALID_REFERENCE",
+                                  "MISSING_BODY",
+                                  "NOT_FOUND",
+                                  "STALE_GENERATION"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "rebind_assignment"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "rebind_assignment"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "CLAIM_CONFLICT",
+                                  "DIGEST_MISMATCH",
+                                  "GENERATION_EXHAUSTED",
+                                  "MISSING_BODY",
+                                  "NATIVE_UNKNOWN",
+                                  "NOT_READY",
+                                  "STALE_GENERATION"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "complete_assignment"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "complete_assignment"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "CLAIM_CONFLICT",
+                                  "DIGEST_MISMATCH",
+                                  "GENERATION_EXHAUSTED",
+                                  "INCOMPLETE_HANDOFF",
+                                  "MISSING_BODY",
+                                  "NATIVE_UNKNOWN",
+                                  "STALE_GENERATION"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "record_loaded_view"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "record_loaded_view"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "DIGEST_MISMATCH",
+                                  "DUPLICATE_ID",
+                                  "INCOMPLETE_HANDOFF",
+                                  "INVALID_REFERENCE",
+                                  "INVALID_SUBJECT",
+                                  "MISSING_BODY",
+                                  "STALE_GENERATION",
+                                  "WRONG_ASSIGNMENT"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "record_memory"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "record_memory"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "DIGEST_MISMATCH",
+                                  "DUPLICATE_ID",
+                                  "INCOMPLETE_HANDOFF",
+                                  "INVALID_REFERENCE",
+                                  "INVALID_SUBJECT",
+                                  "MISSING_BODY",
+                                  "STALE_GENERATION",
+                                  "WRONG_ASSIGNMENT"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "record_checkpoint"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "record_checkpoint"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "DIGEST_MISMATCH",
+                                  "DUPLICATE_ID",
+                                  "GENERATION_EXHAUSTED",
+                                  "INCOMPLETE_HANDOFF",
+                                  "INVALID_REFERENCE",
+                                  "INVALID_SUBJECT",
+                                  "MISSING_BODY",
+                                  "STALE_GENERATION",
+                                  "WRONG_ASSIGNMENT"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "record_retrospective"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "record_retrospective"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "DIGEST_MISMATCH",
+                                  "DUPLICATE_ID",
+                                  "INCOMPLETE_HANDOFF",
+                                  "INVALID_REFERENCE",
+                                  "INVALID_SUBJECT",
+                                  "MISSING_BODY",
+                                  "STALE_GENERATION",
+                                  "WRONG_ASSIGNMENT"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "submit_result"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "submit_result"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "DIGEST_MISMATCH",
+                                  "DUPLICATE_ID",
+                                  "INCOMPLETE_HANDOFF",
+                                  "INVALID_REFERENCE",
+                                  "INVALID_SUBJECT",
+                                  "MISSING_BODY",
+                                  "STALE_GENERATION",
+                                  "WRONG_ASSIGNMENT"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "submit_verification_report"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "submit_verification_report"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "DIGEST_MISMATCH",
+                                  "DUPLICATE_ID",
+                                  "INCOMPLETE_HANDOFF",
+                                  "INVALID_REFERENCE",
+                                  "INVALID_SUBJECT",
+                                  "MISSING_BODY",
+                                  "STALE_GENERATION",
+                                  "WRONG_ASSIGNMENT"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "record_evidence"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "record_evidence"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "DIGEST_MISMATCH",
+                                  "DUPLICATE_ID",
+                                  "INCOMPLETE_HANDOFF",
+                                  "INVALID_REFERENCE",
+                                  "INVALID_SUBJECT",
+                                  "MISSING_BODY",
+                                  "STALE_GENERATION",
+                                  "WRONG_ASSIGNMENT"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "record_delivery"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "record_delivery"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "DIGEST_MISMATCH",
+                                  "GENERATION_EXHAUSTED",
+                                  "INVALID_REFERENCE",
+                                  "MISSING_BODY",
+                                  "STALE_GENERATION"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "record_evidence_applicability"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "record_evidence_applicability"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "BLOCKED_INPUT",
+                                  "DIGEST_MISMATCH",
+                                  "DUPLICATE_ID",
+                                  "FOREIGN_REFERENCE",
+                                  "INVALID_REFERENCE",
+                                  "MISSING_BODY",
+                                  "NOT_FOUND"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "record_disposition"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "record_disposition"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "BLOCKED_INPUT",
+                                  "DIGEST_MISMATCH",
+                                  "DUPLICATE_ID",
+                                  "FOREIGN_REFERENCE",
+                                  "INVALID_REFERENCE",
+                                  "MISSING_BODY",
+                                  "NOT_FOUND"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "accept_result"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "accept_result"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "BLOCKED_INPUT",
+                                  "DIGEST_MISMATCH",
+                                  "DUPLICATE_ID",
+                                  "FOREIGN_REFERENCE",
+                                  "INVALID_REFERENCE",
+                                  "MISSING_BODY",
+                                  "NOT_FOUND"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "prepare_integration"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "prepare_integration"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "CLAIM_CONFLICT",
+                                  "DIGEST_MISMATCH",
+                                  "GENERATION_EXHAUSTED",
+                                  "INVALID_SUBJECT",
+                                  "MISSING_BODY",
+                                  "NATIVE_UNKNOWN",
+                                  "NOT_ACCEPTED",
+                                  "STALE_TARGET"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "observe_integration"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "observe_integration"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "DIGEST_MISMATCH",
+                                  "GENERATION_EXHAUSTED",
+                                  "INVALID_REFERENCE",
+                                  "MISSING_BODY",
+                                  "NATIVE_UNKNOWN",
+                                  "STALE_GENERATION",
+                                  "STALE_TARGET"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "record_source_cut"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "record_source_cut"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "DIGEST_MISMATCH",
+                                  "DUPLICATE_ID",
+                                  "INCOMPLETE_HANDOFF",
+                                  "INVALID_REFERENCE",
+                                  "INVALID_SUBJECT",
+                                  "MISSING_BODY",
+                                  "STALE_GENERATION",
+                                  "WRONG_ASSIGNMENT"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "record_controller_continuation"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "record_controller_continuation"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:work-commands:v3#/$defs/rejection"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "BLOCKED_INPUT",
+                                  "DIGEST_MISMATCH",
+                                  "DUPLICATE_ID",
+                                  "FOREIGN_REFERENCE",
+                                  "INVALID_REFERENCE",
+                                  "MISSING_BODY",
+                                  "NOT_FOUND",
+                                  "STALE_GENERATION"
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "replace_work_grants"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:auth:v2#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "replace_work_grants"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "$ref": "urn:writhelm:auth:v2#/$defs/rejection"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "register_delegation"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:auth:v2#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "register_delegation"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "$ref": "urn:writhelm:auth:v2#/$defs/rejection"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "rotate_delegated_credential"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:auth:v2#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "rotate_delegated_credential"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "$ref": "urn:writhelm:auth:v2#/$defs/rejection"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "revoke_delegated_credential"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:auth:v2#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "revoke_delegated_credential"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "$ref": "urn:writhelm:auth:v2#/$defs/rejection"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "const": "revoke_delegation"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "oneOf": [
+                      {
+                        "allOf": [
+                          {
+                            "$ref": "urn:writhelm:auth:v2#/$defs/success"
+                          },
+                          {
+                            "properties": {
+                              "operation": {
+                                "const": "revoke_delegation"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "$ref": "urn:writhelm:auth:v2#/$defs/rejection"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "store": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "formatVersion",
+        "storeId",
+        "gitObjectFormat",
+        "namespaces"
+      ],
+      "properties": {
+        "formatVersion": {
+          "const": 1
+        },
+        "storeId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "gitObjectFormat": {
+          "enum": [
+            "sha1",
+            "sha256"
+          ]
+        },
+        "namespaces": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "core",
+            "auth",
+            "work",
+            "commands",
+            "policy"
+          ],
+          "properties": {
+            "core": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/header"
+            },
+            "auth": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "formatVersion",
+                "profileVersion"
+              ],
+              "properties": {
+                "formatVersion": {
+                  "const": 2
+                },
+                "profileVersion": {
+                  "const": 2
+                }
+              }
+            },
+            "work": {
+              "$ref": "urn:writhelm:work:v1#/$defs/header"
+            },
+            "commands": {
+              "$ref": "urn:writhelm:journal:v3#/$defs/header"
+            },
+            "policy": {
+              "$ref": "urn:writhelm:policy:v2#/$defs/header"
+            }
+          }
+        }
+      }
+    }
+  }
+}

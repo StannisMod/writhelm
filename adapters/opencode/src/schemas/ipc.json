@@ -1,0 +1,543 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "id": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "server": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "directory": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "projectRoot": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      },
+      "required": [
+        "key",
+        "id",
+        "server",
+        "directory",
+        "projectRoot"
+      ]
+    },
+    "reply": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "code": {
+          "enum": [
+            "OK",
+            "UNCONFIGURED",
+            "INVALID_INPUT",
+            "FORBIDDEN",
+            "UNAUTHENTICATED",
+            "STALE_VIEW",
+            "EXPIRED_VIEW",
+            "BUSY",
+            "UNAVAILABLE",
+            "INCOMPLETE",
+            "UNSUPPORTED_PLATFORM",
+            "PROTECTION_FAILED",
+            "HELPER_UNAVAILABLE",
+            "SETUP_UNKNOWN",
+            "ROTATION_UNKNOWN",
+            "PUBLICATION_UNKNOWN",
+            "IDENTITY_CONFLICT",
+            "INTEGRITY",
+            "DOMAIN_REJECTED"
+          ]
+        },
+        "handle": {
+          "type": "string",
+          "maxLength": 36
+        },
+        "bundleJSON": {
+          "type": "string",
+          "maxLength": 4194304
+        },
+        "pageJSON": {
+          "type": "string",
+          "maxLength": 4194304
+        },
+        "resultJSON": {
+          "type": "string",
+          "maxLength": 4194304
+        },
+        "pending": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "code",
+        "handle",
+        "bundleJSON",
+        "pageJSON",
+        "resultJSON",
+        "pending"
+      ]
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "server": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "directory": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "projectRoot": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          },
+          "required": [
+            "key",
+            "id",
+            "server",
+            "directory",
+            "projectRoot"
+          ]
+        }
+      },
+      "required": [
+        "session"
+      ]
+    },
+    "connect": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "server": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "directory": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "projectRoot": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          },
+          "required": [
+            "key",
+            "id",
+            "server",
+            "directory",
+            "projectRoot"
+          ]
+        }
+      },
+      "required": [
+        "session"
+      ]
+    },
+    "pending": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "server": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "directory": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "projectRoot": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          },
+          "required": [
+            "key",
+            "id",
+            "server",
+            "directory",
+            "projectRoot"
+          ]
+        },
+        "cursor": {
+          "type": "string",
+          "maxLength": 36
+        }
+      },
+      "required": [
+        "session",
+        "cursor"
+      ]
+    },
+    "open": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "server": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "directory": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "projectRoot": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          },
+          "required": [
+            "key",
+            "id",
+            "server",
+            "directory",
+            "projectRoot"
+          ]
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "requestDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "packetDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "session",
+        "requestId",
+        "requestDigest",
+        "packetDigest"
+      ]
+    },
+    "answer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "server": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "directory": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "projectRoot": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          },
+          "required": [
+            "key",
+            "id",
+            "server",
+            "directory",
+            "projectRoot"
+          ]
+        },
+        "handle": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "choice": {
+          "enum": [
+            "approve",
+            "reject",
+            "changes-required"
+          ]
+        },
+        "comments": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "itemId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 4096
+              }
+            },
+            "required": [
+              "itemId",
+              "text"
+            ]
+          }
+        }
+      },
+      "required": [
+        "session",
+        "handle",
+        "choice",
+        "comments"
+      ]
+    },
+    "reconcile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "server": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "directory": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "projectRoot": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          },
+          "required": [
+            "key",
+            "id",
+            "server",
+            "directory",
+            "projectRoot"
+          ]
+        }
+      },
+      "required": [
+        "session"
+      ]
+    },
+    "rotate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "server": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "directory": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "projectRoot": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          },
+          "required": [
+            "key",
+            "id",
+            "server",
+            "directory",
+            "projectRoot"
+          ]
+        }
+      },
+      "required": [
+        "session"
+      ]
+    },
+    "setup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "server": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "directory": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "projectRoot": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          },
+          "required": [
+            "key",
+            "id",
+            "server",
+            "directory",
+            "projectRoot"
+          ]
+        },
+        "origin": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      },
+      "required": [
+        "session",
+        "origin"
+      ]
+    },
+    "dismiss": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "server": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "directory": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "projectRoot": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          },
+          "required": [
+            "key",
+            "id",
+            "server",
+            "directory",
+            "projectRoot"
+          ]
+        },
+        "handle": {
+          "type": "string",
+          "maxLength": 36
+        }
+      },
+      "required": [
+        "session",
+        "handle"
+      ]
+    }
+  },
+  "description": "Method-specific strict native Ipc; raw JSON fields additionally validate against the pinned service result schema."
+}

@@ -89,7 +89,19 @@ internal object JsonConstruction {
 
 internal object StrictJson {
     fun decode(bytes: ByteArray, limits: JsonLimits = JsonLimits(), unavailable: Boolean = false,
-        consume: (Long, Long) -> Unit = { _, _ -> }): JsonValue {
+        consume: (Long, Long) -> Unit = { _, _ -> }): JsonValue = decodeBounded(bytes,limits,unavailable,consume,null)
+
+    /** Command attachment budget only; this is NOT closed command/domain admission. The sole
+     * exception is the string at root.payload.bodies[array element].body, never a name-only match.
+     * Every token/string still consumes the same aggregate callback and encoded/parser budgets. */
+    fun decodeWorkCommand(bytes: ByteArray,limits: JsonLimits,bodyBytes: Int,unavailable: Boolean=false,
+        consume: (Long,Long)->Unit={ _,_ -> }): JsonValue {
+        require(bodyBytes>0)
+        return decodeBounded(bytes,limits,unavailable,consume,bodyBytes)
+    }
+
+    private fun decodeBounded(bytes: ByteArray,limits: JsonLimits,unavailable: Boolean,
+        consume: (Long,Long)->Unit,attachmentBodyBytes: Int?): JsonValue {
         val exhausted = if (unavailable) CodecProblem.RESOURCE_UNAVAILABLE else CodecProblem.ADMISSION_LIMIT
         if (bytes.size > limits.bytes) refuse(exhausted)
         if (bytes.size >= 3 && bytes[0] == 0xef.toByte() && bytes[1] == 0xbb.toByte() && bytes[2] == 0xbf.toByte()) refuse(CodecProblem.MALFORMED)
@@ -102,7 +114,9 @@ internal object StrictJson {
             if (result.isUnderflow) break
             chars.clear()
         }
-        val configured=StreamReadConstraints.builder().maxNestingDepth(limits.depth).maxStringLength(limits.stringBytes)
+        var stringMaximum=limits.stringBytes
+        fun maximum(path: Int)=if(path==4 && attachmentBodyBytes!=null)attachmentBodyBytes else limits.stringBytes
+        val configured=StreamReadConstraints.builder().maxNestingDepth(limits.depth).maxStringLength(maxOf(limits.stringBytes,attachmentBodyBytes ?: limits.stringBytes))
             .maxNameLength(limits.nameBytes).maxNumberLength(20).maxTokenCount(limits.tokens.toLong()).build()
         // Numeric bounds are format laws, not an operator resource shortage. The pinned library's
         // public validation callbacks keep their refusal separate without inspecting error messages.
@@ -110,13 +124,16 @@ internal object StrictJson {
             configured.maxNumberLength,configured.maxStringLength,configured.maxNameLength,configured.maxTokenCount) {
             override fun validateIntegerLength(length: Int) { if(length>20)refuse(CodecProblem.INVALID_SHAPE) }
             override fun validateFPLength(length: Int) { refuse(CodecProblem.MALFORMED) }
+            // Jackson's growing UTF-16 buffer is bounded before materializing parser.text. UTF-8
+            // byte accounting below remains authoritative for multibyte/supplementary characters.
+            override fun validateStringLength(length: Int) { if(length>stringMaximum)refuse(exhausted) }
         }
         val factory = JsonFactory.builder().enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
             .disable(StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION).streamReadConstraints(constraints).build()
         var count = 0
-        fun text(s: String, name: Boolean = false): String {
+        fun text(s: String, name: Boolean = false,maximum: Int=limits.stringBytes): String {
             val size = utf8Size(s)
-            if (size > if (name) limits.nameBytes else limits.stringBytes) refuse(exhausted)
+            if (size > if (name) limits.nameBytes else maximum) refuse(exhausted)
             consume(0, size)
             return s
         }
@@ -127,7 +144,10 @@ internal object StrictJson {
                     if (t != null) { if (++count > limits.tokens) refuse(exhausted); consume(1, 0) }
                     return t
                 }
-                fun value(t: JsonToken?, depth: Int): JsonValue = when (t) {
+                fun nextValue(path: Int): JsonToken? { stringMaximum=maximum(path); return next() }
+                // Path states: root0 -> payload1 -> bodies2 -> array item3 -> body4.
+                // All other edges stay -1, including arrays/objects nested under the body field.
+                fun value(t: JsonToken?, depth: Int,path: Int): JsonValue = when (t) {
                     JsonToken.START_OBJECT -> {
                         if (depth > limits.depth) refuse(exhausted)
                         val map = LinkedHashMap<String, JsonValue>()
@@ -136,7 +156,8 @@ internal object StrictJson {
                             if (map.size >= limits.collection) refuse(exhausted)
                             val key = text(parser.currentName(), true)
                             if (key in map) refuse(CodecProblem.MALFORMED)
-                            map[key] = value(next(), depth+1)
+                            val child=when { path==0 && key=="payload" -> 1; path==1 && key=="bodies" -> 2; path==3 && key=="body" -> 4; else -> -1 }
+                            map[key] = value(nextValue(child), depth+1,child)
                         }
                         JObject(map)
                     }
@@ -144,13 +165,14 @@ internal object StrictJson {
                         if (depth > limits.depth) refuse(exhausted)
                         val list = ArrayList<JsonValue>()
                         while (true) {
-                            val token = next(); if (token == JsonToken.END_ARRAY) break
+                            val child=if(path==2)3 else -1
+                            val token = nextValue(child); if (token == JsonToken.END_ARRAY) break
                             if (list.size >= limits.collection) refuse(exhausted)
-                            list.add(value(token, depth+1))
+                            list.add(value(token, depth+1,child))
                         }
                         JArray(list)
                     }
-                    JsonToken.VALUE_STRING -> JString(text(parser.text))
+                    JsonToken.VALUE_STRING -> { stringMaximum=maximum(path); JString(text(parser.text,maximum=stringMaximum)) }
                     JsonToken.VALUE_NUMBER_INT -> {
                         val spelling = parser.text
                         if (!spelling.matches(Regex("0|-?[1-9][0-9]*"))) refuse(CodecProblem.MALFORMED)
@@ -161,7 +183,7 @@ internal object StrictJson {
                     JsonToken.VALUE_NULL -> JNull
                     else -> refuse(CodecProblem.MALFORMED)
                 }
-                val result = value(next(), 1)
+                val result = value(nextValue(0), 1,0)
                 if (next() != null) refuse(CodecProblem.MALFORMED)
                 return result
             }

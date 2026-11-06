@@ -42,9 +42,9 @@ component contract design, beginning with K-TASK, not blanket behavioral impleme
 
 The approved connected-work amendment assigns blocker resolution, consistent environment preparation,
 minimal sufficient notification and eligible continuation to the engine. Exact identities remain
-technical evidence, not repeated chat payloads. A bounded portable implementation candidate has
-completed independent review and scoped parent acceptance in isolated development worktrees; it is
-not yet integrated into this source tree or qualified as an operational OpenCode service.
+technical evidence, not repeated chat payloads. The bounded portable implementation has completed
+independent review/scoped parent acceptance and is included in the source tree. This is not an
+operational OpenCode service or actual native/physical writer qualification.
 
 The owner approved autonomous execution of this completion plan. Existing separate permissions for
 live inference, working-profile installation, the user pilot and public push remain unchanged.

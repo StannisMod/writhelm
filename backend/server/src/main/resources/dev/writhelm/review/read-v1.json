@@ -1,0 +1,3222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/read",
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "texts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/text"
+      }
+    },
+    "clauseId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "header": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "formatVersion",
+        "modelVersion"
+      ],
+      "properties": {
+        "formatVersion": {
+          "const": 1
+        },
+        "modelVersion": {
+          "const": 1
+        }
+      }
+    },
+    "documentKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectId",
+        "documentId"
+      ],
+      "properties": {
+        "projectId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "documentId": {
+          "$ref": "#/$defs/uuid"
+        }
+      }
+    },
+    "revisionKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document",
+        "revisionId"
+      ],
+      "properties": {
+        "document": {
+          "$ref": "#/$defs/documentKey"
+        },
+        "revisionId": {
+          "$ref": "#/$defs/uuid"
+        }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document",
+        "clauseId"
+      ],
+      "properties": {
+        "document": {
+          "$ref": "#/$defs/documentKey"
+        },
+        "clauseId": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/clauseId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "clauseReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "revision",
+        "revisionDigest",
+        "clauseId",
+        "contentDigest"
+      ],
+      "properties": {
+        "kind": {
+          "const": "clause"
+        },
+        "revision": {
+          "$ref": "#/$defs/revisionKey"
+        },
+        "revisionDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "clauseId": {
+          "$ref": "#/$defs/clauseId"
+        },
+        "contentDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "contextReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "revision",
+        "revisionDigest",
+        "contextDigest"
+      ],
+      "properties": {
+        "kind": {
+          "const": "context"
+        },
+        "revision": {
+          "$ref": "#/$defs/revisionKey"
+        },
+        "revisionDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "contextDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "reference": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/clauseReference"
+        },
+        {
+          "$ref": "#/$defs/contextReference"
+        }
+      ]
+    },
+    "references": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/reference"
+      }
+    },
+    "contexts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/contextReference"
+      }
+    },
+    "clauses": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/clauseReference"
+      }
+    },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "endExclusive"
+      ],
+      "properties": {
+        "start": {
+          "$ref": "#/$defs/offset"
+        },
+        "endExclusive": {
+          "$ref": "#/$defs/offset"
+        }
+      }
+    },
+    "clauseSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "span"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/clauseId"
+        },
+        "span": {
+          "$ref": "#/$defs/range"
+        }
+      }
+    },
+    "structure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clauses",
+        "context"
+      ],
+      "properties": {
+        "clauses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/clauseSpan"
+          }
+        },
+        "context": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/range"
+          }
+        }
+      }
+    },
+    "reviewItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "target",
+        "before"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "target": {
+          "$ref": "#/$defs/reference"
+        },
+        "before": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/reference"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "packet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "question",
+        "scope",
+        "rationale",
+        "consequences",
+        "alternatives",
+        "uncertainties",
+        "contexts",
+        "dependencies",
+        "informationGaps"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/reviewItem"
+          }
+        },
+        "question": {
+          "$ref": "#/$defs/text"
+        },
+        "scope": {
+          "$ref": "#/$defs/text"
+        },
+        "rationale": {
+          "$ref": "#/$defs/text"
+        },
+        "consequences": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/texts"
+            },
+            {
+              "minItems": 1
+            }
+          ]
+        },
+        "alternatives": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/texts"
+            },
+            {
+              "minItems": 1
+            }
+          ]
+        },
+        "uncertainties": {
+          "$ref": "#/$defs/texts"
+        },
+        "contexts": {
+          "$ref": "#/$defs/contexts"
+        },
+        "dependencies": {
+          "$ref": "#/$defs/references"
+        },
+        "informationGaps": {
+          "$ref": "#/$defs/texts"
+        }
+      }
+    },
+    "comment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "itemId",
+        "text"
+      ],
+      "properties": {
+        "itemId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "text": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "answer": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "approve",
+                "reject"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "comments"
+          ],
+          "properties": {
+            "kind": {
+              "const": "changes-required"
+            },
+            "comments": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/comment"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "guard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "subject",
+        "generation"
+      ],
+      "properties": {
+        "subject": {
+          "$ref": "#/$defs/subject"
+        },
+        "generation": {
+          "$ref": "#/$defs/generation"
+        }
+      }
+    },
+    "link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "target"
+      ],
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/reference"
+        },
+        "target": {
+          "$ref": "#/$defs/reference"
+        }
+      }
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "origin",
+        "requestId",
+        "approvedBy",
+        "assessmentIds"
+      ],
+      "properties": {
+        "origin": {
+          "$ref": "#/$defs/reference"
+        },
+        "requestId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "approvedBy": {
+          "$ref": "#/$defs/uuid"
+        },
+        "assessmentIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/uuid"
+          }
+        }
+      }
+    },
+    "provenanceEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference",
+        "trace"
+      ],
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/reference"
+        },
+        "trace": {
+          "$ref": "#/$defs/trace"
+        }
+      }
+    },
+    "grantKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "principalId",
+        "projectId"
+      ],
+      "properties": {
+        "principalId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "projectId": {
+          "$ref": "#/$defs/uuid"
+        }
+      }
+    },
+    "revisionPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bodyDigest",
+        "bodyBytes",
+        "structure",
+        "structureDigest",
+        "revisionDigest",
+        "contextDigest"
+      ],
+      "properties": {
+        "bodyDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "bodyBytes": {
+          "$ref": "#/$defs/offset"
+        },
+        "structure": {
+          "$ref": "#/$defs/structure"
+        },
+        "structureDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "revisionDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "contextDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "proposalPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "principalId"
+      ],
+      "properties": {
+        "principalId": {
+          "$ref": "#/$defs/uuid"
+        }
+      }
+    },
+    "grantPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilities"
+      ],
+      "properties": {
+        "capabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "READ",
+              "PROPOSE",
+              "PLAN",
+              "APPROVE",
+              "MANAGE"
+            ]
+          }
+        }
+      }
+    },
+    "requestPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectId",
+        "proposedBy",
+        "packet",
+        "generations",
+        "packetDigest",
+        "requestDigest"
+      ],
+      "properties": {
+        "projectId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "proposedBy": {
+          "$ref": "#/$defs/uuid"
+        },
+        "packet": {
+          "$ref": "#/$defs/packet"
+        },
+        "generations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/guard"
+          }
+        },
+        "packetDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "requestDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "resolutionPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actorId",
+        "answer",
+        "approved"
+      ],
+      "properties": {
+        "actorId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "answer": {
+          "$ref": "#/$defs/answer"
+        },
+        "approved": {
+          "$ref": "#/$defs/references"
+        }
+      }
+    },
+    "continuityPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "assessmentId"
+      ],
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/reference"
+        },
+        "assessmentId": {
+          "$ref": "#/$defs/uuid"
+        }
+      }
+    },
+    "assessmentPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectId",
+        "actorId",
+        "references",
+        "rationale",
+        "links",
+        "blocked"
+      ],
+      "properties": {
+        "projectId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "actorId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "references": {
+          "$ref": "#/$defs/references"
+        },
+        "rationale": {
+          "$ref": "#/$defs/text"
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/link"
+          }
+        },
+        "blocked": {
+          "$ref": "#/$defs/references"
+        }
+      }
+    },
+    "manifestPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "consumerId",
+        "projectId",
+        "createdBy",
+        "clauses",
+        "contexts",
+        "dependencies",
+        "assessmentId",
+        "provenance"
+      ],
+      "properties": {
+        "consumerId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "projectId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "createdBy": {
+          "$ref": "#/$defs/uuid"
+        },
+        "clauses": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/clauses"
+            },
+            {
+              "minItems": 1
+            }
+          ]
+        },
+        "contexts": {
+          "$ref": "#/$defs/contexts"
+        },
+        "dependencies": {
+          "$ref": "#/$defs/references"
+        },
+        "assessmentId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "provenance": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/provenanceEntry"
+          }
+        }
+      }
+    },
+    "headPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference"
+      ],
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/reference"
+        }
+      }
+    },
+    "generationPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generation"
+      ],
+      "properties": {
+        "generation": {
+          "$ref": "#/$defs/generation"
+        }
+      }
+    },
+    "emptyPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 0
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "formatVersion",
+        "family",
+        "key",
+        "payload"
+      ],
+      "properties": {
+        "formatVersion": {
+          "const": 1
+        },
+        "family": {
+          "type": "string"
+        },
+        "key": {},
+        "payload": {}
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "family": {
+              "const": "revisions"
+            },
+            "key": {
+              "$ref": "#/$defs/revisionKey"
+            },
+            "payload": {
+              "$ref": "#/$defs/revisionPayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "family": {
+              "const": "proposals"
+            },
+            "key": {
+              "$ref": "#/$defs/revisionKey"
+            },
+            "payload": {
+              "$ref": "#/$defs/proposalPayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "family": {
+              "const": "grants"
+            },
+            "key": {
+              "$ref": "#/$defs/grantKey"
+            },
+            "payload": {
+              "$ref": "#/$defs/grantPayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "family": {
+              "const": "requests"
+            },
+            "key": {
+              "$ref": "#/$defs/uuid"
+            },
+            "payload": {
+              "$ref": "#/$defs/requestPayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "family": {
+              "const": "resolutions"
+            },
+            "key": {
+              "$ref": "#/$defs/uuid"
+            },
+            "payload": {
+              "$ref": "#/$defs/resolutionPayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "family": {
+              "const": "approvals"
+            },
+            "key": {
+              "$ref": "#/$defs/reference"
+            },
+            "payload": {
+              "$ref": "#/$defs/trace"
+            }
+          }
+        },
+        {
+          "properties": {
+            "family": {
+              "const": "continuity"
+            },
+            "key": {
+              "$ref": "#/$defs/reference"
+            },
+            "payload": {
+              "$ref": "#/$defs/continuityPayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "family": {
+              "const": "assessments"
+            },
+            "key": {
+              "$ref": "#/$defs/uuid"
+            },
+            "payload": {
+              "$ref": "#/$defs/assessmentPayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "family": {
+              "const": "manifests"
+            },
+            "key": {
+              "$ref": "#/$defs/uuid"
+            },
+            "payload": {
+              "$ref": "#/$defs/manifestPayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "family": {
+              "const": "heads"
+            },
+            "key": {
+              "$ref": "#/$defs/subject"
+            },
+            "payload": {
+              "$ref": "#/$defs/headPayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "family": {
+              "const": "generations"
+            },
+            "key": {
+              "$ref": "#/$defs/subject"
+            },
+            "payload": {
+              "$ref": "#/$defs/generationPayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "family": {
+              "const": "blocked"
+            },
+            "key": {
+              "$ref": "#/$defs/reference"
+            },
+            "payload": {
+              "$ref": "#/$defs/emptyPayload"
+            }
+          }
+        }
+      ]
+    },
+    "proposePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revisionKey",
+        "body",
+        "structure"
+      ],
+      "properties": {
+        "revisionKey": {
+          "$ref": "#/$defs/revisionKey"
+        },
+        "body": {
+          "type": "string"
+        },
+        "structure": {
+          "$ref": "#/$defs/structure"
+        }
+      }
+    },
+    "newRequestPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "packet"
+      ],
+      "properties": {
+        "requestId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "packet": {
+          "$ref": "#/$defs/packet"
+        }
+      }
+    },
+    "resolvePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "requestDigest",
+        "packetDigest",
+        "answer"
+      ],
+      "properties": {
+        "requestId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "requestDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "packetDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "answer": {
+          "$ref": "#/$defs/answer"
+        }
+      }
+    },
+    "newAssessmentPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assessmentId",
+        "references",
+        "rationale",
+        "links",
+        "blocked"
+      ],
+      "properties": {
+        "assessmentId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "references": {
+          "$ref": "#/$defs/references"
+        },
+        "rationale": {
+          "$ref": "#/$defs/text"
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/link"
+          }
+        },
+        "blocked": {
+          "$ref": "#/$defs/references"
+        }
+      }
+    },
+    "pinPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifestId",
+        "consumerId",
+        "clauses",
+        "contexts",
+        "dependencies",
+        "assessmentId"
+      ],
+      "properties": {
+        "manifestId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "consumerId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "clauses": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/clauses"
+            },
+            {
+              "minItems": 1
+            }
+          ]
+        },
+        "contexts": {
+          "$ref": "#/$defs/contexts"
+        },
+        "dependencies": {
+          "$ref": "#/$defs/references"
+        },
+        "assessmentId": {
+          "$ref": "#/$defs/uuid"
+        }
+      }
+    },
+    "revokePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "principalId"
+      ],
+      "properties": {
+        "principalId": {
+          "$ref": "#/$defs/uuid"
+        }
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "formatVersion",
+        "requestKey",
+        "projectId",
+        "operation",
+        "payload"
+      ],
+      "properties": {
+        "formatVersion": {
+          "const": 1
+        },
+        "requestKey": {
+          "$ref": "#/$defs/uuid"
+        },
+        "projectId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "payload": {}
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "operation": {
+              "const": "propose_revision"
+            },
+            "payload": {
+              "$ref": "#/$defs/proposePayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation": {
+              "const": "request_approval"
+            },
+            "payload": {
+              "$ref": "#/$defs/newRequestPayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation": {
+              "const": "resolve_approval"
+            },
+            "payload": {
+              "$ref": "#/$defs/resolvePayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation": {
+              "const": "record_assessment"
+            },
+            "payload": {
+              "$ref": "#/$defs/newAssessmentPayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation": {
+              "const": "pin_consumer"
+            },
+            "payload": {
+              "$ref": "#/$defs/pinPayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation": {
+              "const": "revoke_access"
+            },
+            "payload": {
+              "$ref": "#/$defs/revokePayload"
+            }
+          }
+        }
+      ]
+    },
+    "capabilities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "READ",
+          "PROPOSE",
+          "PLAN",
+          "APPROVE",
+          "MANAGE"
+        ]
+      }
+    },
+    "principal": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 0
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ownerPrincipalId",
+        "profileVersion"
+      ],
+      "properties": {
+        "ownerPrincipalId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "profileVersion": {
+          "const": 1
+        }
+      }
+    },
+    "credential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "storeId",
+        "projectId",
+        "principalId",
+        "verifierVersion",
+        "verifierDigest",
+        "status",
+        "generation",
+        "replacedBy"
+      ],
+      "properties": {
+        "storeId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "projectId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "principalId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "verifierVersion": {
+          "const": 1
+        },
+        "verifierDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "revoked"
+          ]
+        },
+        "generation": {
+          "$ref": "#/$defs/generation"
+        },
+        "replacedBy": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/uuid"
+            }
+          ]
+        }
+      },
+      "if": {
+        "properties": {
+          "status": {
+            "const": "active"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "replacedBy": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    "replaceGrants": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "principalId",
+        "expectedGeneration",
+        "expectedGrantDigest",
+        "capabilities"
+      ],
+      "properties": {
+        "principalId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "expectedGeneration": {
+          "$ref": "#/$defs/generation"
+        },
+        "expectedGrantDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/capabilities"
+        }
+      }
+    },
+    "revokeCredential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "credentialId",
+        "expectedGeneration"
+      ],
+      "properties": {
+        "credentialId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "expectedGeneration": {
+          "$ref": "#/$defs/generation"
+        }
+      }
+    },
+    "rotateCredential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "credentialId",
+        "expectedGeneration",
+        "newCredentialId",
+        "verifierVersion",
+        "newVerifierDigest"
+      ],
+      "properties": {
+        "credentialId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "expectedGeneration": {
+          "$ref": "#/$defs/generation"
+        },
+        "newCredentialId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "verifierVersion": {
+          "const": 1
+        },
+        "newVerifierDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "coreOperation": {
+      "enum": [
+        "propose_revision",
+        "request_approval",
+        "resolve_approval",
+        "record_assessment",
+        "pin_consumer",
+        "revoke_access"
+      ]
+    },
+    "authOperation": {
+      "enum": [
+        "replace_grants",
+        "revoke_credential",
+        "rotate_credential"
+      ]
+    },
+    "operation": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/coreOperation"
+        },
+        {
+          "$ref": "#/$defs/authOperation"
+        }
+      ]
+    },
+    "receiptKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "principalId",
+        "projectId",
+        "operation",
+        "requestKey"
+      ],
+      "properties": {
+        "principalId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "projectId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "operation": {
+          "$ref": "#/$defs/operation"
+        },
+        "requestKey": {
+          "$ref": "#/$defs/uuid"
+        }
+      }
+    },
+    "gitOid": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "hex"
+      ],
+      "properties": {
+        "algorithm": {
+          "enum": [
+            "sha1",
+            "sha256"
+          ]
+        },
+        "hex": {
+          "type": "string"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "algorithm": {
+              "const": "sha1"
+            },
+            "hex": {
+              "pattern": "^[0-9a-f]{40}$"
+            }
+          }
+        },
+        {
+          "properties": {
+            "algorithm": {
+              "const": "sha256"
+            },
+            "hex": {
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        }
+      ]
+    },
+    "nullableDigest": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/digest"
+        }
+      ]
+    },
+    "write": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "namespace",
+        "family",
+        "key",
+        "beforeDigest",
+        "afterDigest"
+      ],
+      "properties": {
+        "namespace": {
+          "enum": [
+            "core",
+            "auth"
+          ]
+        },
+        "family": {
+          "type": "string"
+        },
+        "key": {},
+        "beforeDigest": {
+          "$ref": "#/$defs/nullableDigest"
+        },
+        "afterDigest": {
+          "$ref": "#/$defs/nullableDigest"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "namespace": {
+              "const": "core"
+            },
+            "family": {
+              "enum": [
+                "revisions",
+                "proposals"
+              ]
+            },
+            "key": {
+              "$ref": "#/$defs/revisionKey"
+            }
+          }
+        },
+        {
+          "properties": {
+            "namespace": {
+              "const": "core"
+            },
+            "family": {
+              "const": "grants"
+            },
+            "key": {
+              "$ref": "#/$defs/grantKey"
+            }
+          }
+        },
+        {
+          "properties": {
+            "namespace": {
+              "const": "core"
+            },
+            "family": {
+              "enum": [
+                "requests",
+                "resolutions",
+                "assessments",
+                "manifests"
+              ]
+            },
+            "key": {
+              "$ref": "#/$defs/uuid"
+            }
+          }
+        },
+        {
+          "properties": {
+            "namespace": {
+              "const": "core"
+            },
+            "family": {
+              "enum": [
+                "approvals",
+                "continuity",
+                "blocked"
+              ]
+            },
+            "key": {
+              "$ref": "#/$defs/reference"
+            }
+          }
+        },
+        {
+          "properties": {
+            "namespace": {
+              "const": "core"
+            },
+            "family": {
+              "enum": [
+                "heads",
+                "generations"
+              ]
+            },
+            "key": {
+              "$ref": "#/$defs/subject"
+            }
+          }
+        },
+        {
+          "properties": {
+            "namespace": {
+              "const": "core"
+            },
+            "family": {
+              "const": "bodies"
+            },
+            "key": {
+              "$ref": "#/$defs/digest"
+            }
+          }
+        },
+        {
+          "properties": {
+            "namespace": {
+              "const": "auth"
+            },
+            "family": {
+              "enum": [
+                "principals",
+                "projects",
+                "credentials"
+              ]
+            },
+            "key": {
+              "$ref": "#/$defs/uuid"
+            }
+          }
+        },
+        {
+          "properties": {
+            "namespace": {
+              "const": "auth"
+            },
+            "family": {
+              "const": "grant-guards"
+            },
+            "key": {
+              "$ref": "#/$defs/grantKey"
+            }
+          }
+        }
+      ],
+      "not": {
+        "properties": {
+          "beforeDigest": {
+            "type": "null"
+          },
+          "afterDigest": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    "success": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "operation",
+        "result",
+        "domainReplayed"
+      ],
+      "properties": {
+        "kind": {
+          "const": "success"
+        },
+        "operation": {
+          "$ref": "#/$defs/operation"
+        },
+        "result": {},
+        "domainReplayed": {
+          "type": "boolean"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "operation": {
+              "const": "propose_revision"
+            },
+            "result": {
+              "$ref": "#/$defs/revisionKey"
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation": {
+              "enum": [
+                "request_approval",
+                "resolve_approval",
+                "record_assessment",
+                "pin_consumer",
+                "revoke_access",
+                "replace_grants",
+                "revoke_credential"
+              ]
+            },
+            "result": {
+              "$ref": "#/$defs/uuid"
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation": {
+              "const": "rotate_credential"
+            },
+            "result": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "credentialId",
+                "replacedCredentialId"
+              ],
+              "properties": {
+                "credentialId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "replacedCredentialId": {
+                  "$ref": "#/$defs/uuid"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "rejection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "domain",
+        "code"
+      ],
+      "properties": {
+        "kind": {
+          "const": "rejected"
+        },
+        "domain": {
+          "enum": [
+            "core",
+            "auth"
+          ]
+        },
+        "code": {
+          "type": "string"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "domain": {
+              "const": "core"
+            },
+            "code": {
+              "enum": [
+                "NOT_FOUND",
+                "DUPLICATE_ID",
+                "INVALID_REFERENCE",
+                "FOREIGN_REFERENCE",
+                "MISSING_CONTEXT",
+                "STALE_SUBJECT",
+                "DIGEST_MISMATCH",
+                "ALREADY_RESOLVED",
+                "UNKNOWN_COMMENT_ITEM",
+                "INCOMPLETE_PACKET",
+                "UNAPPROVED_INPUT",
+                "BLOCKED_INPUT",
+                "INVALID_CONTINUITY",
+                "CONTEXT_CHANGED",
+                "INCOMPLETE_ASSESSMENT",
+                "CONFLICTING_SELECTION",
+                "UNSUPPORTED_CONTEXT_MIX",
+                "LAST_AUTHORITY",
+                "GENERATION_EXHAUSTED"
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "domain": {
+              "const": "auth"
+            },
+            "code": {
+              "enum": [
+                "AUTH_TARGET_NOT_FOUND",
+                "AUTH_STALE_CREDENTIAL",
+                "AUTH_STALE_GRANT",
+                "AUTH_ALREADY_REVOKED",
+                "AUTH_ALREADY_REPLACED",
+                "AUTH_DUPLICATE_CREDENTIAL",
+                "AUTH_OWNER_LOCKOUT",
+                "AUTH_FIXED_OWNER_POLICY",
+                "AUTH_GENERATION_EXHAUSTED"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "formatVersion",
+        "family",
+        "key",
+        "payload"
+      ],
+      "properties": {
+        "formatVersion": {
+          "const": 2
+        },
+        "family": {
+          "const": "command-receipt"
+        },
+        "key": {
+          "$ref": "#/$defs/receiptKey"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "storeId",
+            "fingerprintVersion",
+            "fingerprint",
+            "validatedAt",
+            "authenticatedByCredentialId",
+            "outcome",
+            "writes"
+          ],
+          "properties": {
+            "storeId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "fingerprintVersion": {
+              "enum": [
+                1,
+                2
+              ]
+            },
+            "fingerprint": {
+              "$ref": "#/$defs/digest"
+            },
+            "validatedAt": {
+              "$ref": "#/$defs/gitOid"
+            },
+            "authenticatedByCredentialId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "outcome": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/success"
+                },
+                {
+                  "$ref": "#/$defs/rejection"
+                }
+              ]
+            },
+            "writes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/write"
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "key": {
+                "properties": {
+                  "operation": {
+                    "$ref": "#/$defs/coreOperation"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "fingerprintVersion": {
+                    "const": 1
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "fingerprintVersion": {
+                    "const": 2
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "outcome": {
+                    "properties": {
+                      "kind": {
+                        "const": "rejected"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "writes": {
+                    "maxItems": 0
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "httpCommand": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/command"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "requestKey",
+            "projectId",
+            "operation",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 2
+            },
+            "requestKey": {
+              "$ref": "#/$defs/uuid"
+            },
+            "projectId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "operation": {
+              "type": "string"
+            },
+            "payload": {}
+          },
+          "oneOf": [
+            {
+              "properties": {
+                "operation": {
+                  "const": "replace_grants"
+                },
+                "payload": {
+                  "$ref": "#/$defs/replaceGrants"
+                }
+              }
+            },
+            {
+              "properties": {
+                "operation": {
+                  "const": "revoke_credential"
+                },
+                "payload": {
+                  "$ref": "#/$defs/revokeCredential"
+                }
+              }
+            },
+            {
+              "properties": {
+                "operation": {
+                  "const": "rotate_credential"
+                },
+                "payload": {
+                  "$ref": "#/$defs/rotateCredential"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "agentCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "formatVersion",
+        "requestKey",
+        "projectId",
+        "operation",
+        "payload"
+      ],
+      "properties": {
+        "formatVersion": {
+          "const": 1
+        },
+        "requestKey": {
+          "$ref": "#/$defs/uuid"
+        },
+        "projectId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "payload": {}
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "operation": {
+              "const": "propose_revision"
+            },
+            "payload": {
+              "$ref": "#/$defs/proposePayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation": {
+              "const": "request_approval"
+            },
+            "payload": {
+              "$ref": "#/$defs/newRequestPayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation": {
+              "const": "record_assessment"
+            },
+            "payload": {
+              "$ref": "#/$defs/newAssessmentPayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation": {
+              "const": "pin_consumer"
+            },
+            "payload": {
+              "$ref": "#/$defs/pinPayload"
+            }
+          }
+        }
+      ]
+    },
+    "cursor": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f-]{36}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "pageSize": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 32
+    },
+    "read": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "projectId": {
+              "type": "null"
+            },
+            "operation": {
+              "const": "list_projects"
+            },
+            "subject": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "cursor": {
+                  "$ref": "#/$defs/cursor"
+                },
+                "pageSize": {
+                  "$ref": "#/$defs/pageSize"
+                }
+              },
+              "required": [
+                "cursor",
+                "pageSize"
+              ]
+            }
+          },
+          "required": [
+            "formatVersion",
+            "projectId",
+            "operation",
+            "subject"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "projectId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "operation": {
+              "const": "list_documents"
+            },
+            "subject": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "cursor": {
+                  "$ref": "#/$defs/cursor"
+                },
+                "pageSize": {
+                  "$ref": "#/$defs/pageSize"
+                }
+              },
+              "required": [
+                "cursor",
+                "pageSize"
+              ]
+            }
+          },
+          "required": [
+            "formatVersion",
+            "projectId",
+            "operation",
+            "subject"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "projectId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "operation": {
+              "const": "list_revisions"
+            },
+            "subject": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "documentId": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "cursor": {
+                  "$ref": "#/$defs/cursor"
+                },
+                "pageSize": {
+                  "$ref": "#/$defs/pageSize"
+                }
+              },
+              "required": [
+                "documentId",
+                "cursor",
+                "pageSize"
+              ]
+            }
+          },
+          "required": [
+            "formatVersion",
+            "projectId",
+            "operation",
+            "subject"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "projectId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "operation": {
+              "const": "list_requests"
+            },
+            "subject": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "pendingOnly": {
+                  "type": "boolean"
+                },
+                "cursor": {
+                  "$ref": "#/$defs/cursor"
+                },
+                "pageSize": {
+                  "$ref": "#/$defs/pageSize"
+                }
+              },
+              "required": [
+                "pendingOnly",
+                "cursor",
+                "pageSize"
+              ]
+            }
+          },
+          "required": [
+            "formatVersion",
+            "projectId",
+            "operation",
+            "subject"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "projectId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "operation": {
+              "const": "list_manifests"
+            },
+            "subject": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "cursor": {
+                  "$ref": "#/$defs/cursor"
+                },
+                "pageSize": {
+                  "$ref": "#/$defs/pageSize"
+                }
+              },
+              "required": [
+                "cursor",
+                "pageSize"
+              ]
+            }
+          },
+          "required": [
+            "formatVersion",
+            "projectId",
+            "operation",
+            "subject"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "projectId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "operation": {
+              "const": "read_revision"
+            },
+            "subject": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "revisionKey": {
+                  "$ref": "#/$defs/revisionKey"
+                },
+                "revisionDigest": {
+                  "$ref": "#/$defs/digest"
+                }
+              },
+              "required": [
+                "revisionKey",
+                "revisionDigest"
+              ]
+            }
+          },
+          "required": [
+            "formatVersion",
+            "projectId",
+            "operation",
+            "subject"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "projectId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "operation": {
+              "const": "read_clause"
+            },
+            "subject": {
+              "$ref": "#/$defs/clauseReference"
+            }
+          },
+          "required": [
+            "formatVersion",
+            "projectId",
+            "operation",
+            "subject"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "projectId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "operation": {
+              "const": "read_context"
+            },
+            "subject": {
+              "$ref": "#/$defs/contextReference"
+            }
+          },
+          "required": [
+            "formatVersion",
+            "projectId",
+            "operation",
+            "subject"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "projectId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "operation": {
+              "const": "read_request"
+            },
+            "subject": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/uuid"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          "required": [
+            "formatVersion",
+            "projectId",
+            "operation",
+            "subject"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "projectId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "operation": {
+              "const": "read_resolution"
+            },
+            "subject": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/uuid"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          "required": [
+            "formatVersion",
+            "projectId",
+            "operation",
+            "subject"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "projectId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "operation": {
+              "const": "read_manifest"
+            },
+            "subject": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/uuid"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          "required": [
+            "formatVersion",
+            "projectId",
+            "operation",
+            "subject"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "projectId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "operation": {
+              "const": "read_approval_trace"
+            },
+            "subject": {
+              "$ref": "#/$defs/reference"
+            }
+          },
+          "required": [
+            "formatVersion",
+            "projectId",
+            "operation",
+            "subject"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "projectId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "operation": {
+              "const": "read_review_bundle"
+            },
+            "subject": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/uuid"
+                },
+                "requestDigest": {
+                  "$ref": "#/$defs/digest"
+                },
+                "packetDigest": {
+                  "$ref": "#/$defs/digest"
+                }
+              },
+              "required": [
+                "id",
+                "requestDigest",
+                "packetDigest"
+              ]
+            }
+          },
+          "required": [
+            "formatVersion",
+            "projectId",
+            "operation",
+            "subject"
+          ]
+        }
+      ]
+    },
+    "oid": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "hex"
+      ],
+      "properties": {
+        "algorithm": {
+          "enum": [
+            "sha1",
+            "sha256"
+          ]
+        },
+        "hex": {
+          "type": "string"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "algorithm": {
+              "const": "sha1"
+            },
+            "hex": {
+              "pattern": "^[0-9a-f]{40}$"
+            }
+          }
+        },
+        {
+          "properties": {
+            "algorithm": {
+              "const": "sha256"
+            },
+            "hex": {
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        }
+      ]
+    },
+    "material": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/reference"
+        },
+        "fragments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "span": {
+                "$ref": "#/$defs/range"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "span",
+              "text"
+            ]
+          }
+        },
+        "observation": {
+          "type": "string"
+        },
+        "trace": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/trace"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "reference",
+        "fragments",
+        "observation",
+        "trace"
+      ]
+    },
+    "revisionRead": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "revisionKey": {
+          "$ref": "#/$defs/revisionKey"
+        },
+        "revisionDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "bodyDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "structure": {
+          "$ref": "#/$defs/structure"
+        },
+        "body": {
+          "type": "string"
+        },
+        "proposedBy": {
+          "$ref": "#/$defs/uuid"
+        }
+      },
+      "required": [
+        "revisionKey",
+        "revisionDigest",
+        "bodyDigest",
+        "structure",
+        "body",
+        "proposedBy"
+      ]
+    },
+    "bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "request": {
+          "$ref": "#/$defs/record"
+        },
+        "resolution": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/record"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "materials": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/material"
+          }
+        },
+        "actionable": {
+          "type": "boolean"
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "complete": {
+          "const": true
+        }
+      },
+      "required": [
+        "request",
+        "resolution",
+        "materials",
+        "actionable",
+        "blockers",
+        "complete"
+      ]
+    },
+    "listItem": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "projectId": {
+              "$ref": "#/$defs/uuid"
+            }
+          },
+          "required": [
+            "projectId"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "document": {
+              "$ref": "#/$defs/documentKey"
+            }
+          },
+          "required": [
+            "document"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "revisionKey": {
+              "$ref": "#/$defs/revisionKey"
+            },
+            "revisionDigest": {
+              "$ref": "#/$defs/digest"
+            }
+          },
+          "required": [
+            "revisionKey",
+            "revisionDigest"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/uuid"
+            },
+            "requestDigest": {
+              "$ref": "#/$defs/digest"
+            },
+            "packetDigest": {
+              "$ref": "#/$defs/digest"
+            },
+            "pending": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "requestDigest",
+            "packetDigest",
+            "pending"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/uuid"
+            },
+            "consumerId": {
+              "$ref": "#/$defs/uuid"
+            }
+          },
+          "required": [
+            "id",
+            "consumerId"
+          ]
+        }
+      ]
+    },
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "snapshotId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "nextCursor": {
+          "$ref": "#/$defs/cursor"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/listItem"
+          }
+        }
+      },
+      "required": [
+        "snapshotId",
+        "nextCursor",
+        "complete",
+        "items"
+      ]
+    },
+    "errorCode": {
+      "enum": [
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "INVALID_INPUT",
+        "UNSUPPORTED",
+        "INGRESS_TOO_LARGE",
+        "RATE_LIMIT",
+        "UNAVAILABLE",
+        "SNAPSHOT_EXPIRED",
+        "NOT_FOUND",
+        "IDENTITY_CONFLICT",
+        "INTEGRITY",
+        "PUBLICATION_UNKNOWN",
+        "INCOMPLETE_PACKET"
+      ]
+    },
+    "result": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "kind": {
+              "const": "read"
+            },
+            "basis": {
+              "$ref": "#/$defs/oid"
+            },
+            "operation": {
+              "const": "list_projects"
+            },
+            "data": {
+              "$ref": "#/$defs/page"
+            }
+          },
+          "required": [
+            "formatVersion",
+            "kind",
+            "basis",
+            "operation",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "kind": {
+              "const": "read"
+            },
+            "basis": {
+              "$ref": "#/$defs/oid"
+            },
+            "operation": {
+              "const": "list_documents"
+            },
+            "data": {
+              "$ref": "#/$defs/page"
+            }
+          },
+          "required": [
+            "formatVersion",
+            "kind",
+            "basis",
+            "operation",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "kind": {
+              "const": "read"
+            },
+            "basis": {
+              "$ref": "#/$defs/oid"
+            },
+            "operation": {
+              "const": "list_revisions"
+            },
+            "data": {
+              "$ref": "#/$defs/page"
+            }
+          },
+          "required": [
+            "formatVersion",
+            "kind",
+            "basis",
+            "operation",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "kind": {
+              "const": "read"
+            },
+            "basis": {
+              "$ref": "#/$defs/oid"
+            },
+            "operation": {
+              "const": "list_requests"
+            },
+            "data": {
+              "$ref": "#/$defs/page"
+            }
+          },
+          "required": [
+            "formatVersion",
+            "kind",
+            "basis",
+            "operation",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "kind": {
+              "const": "read"
+            },
+            "basis": {
+              "$ref": "#/$defs/oid"
+            },
+            "operation": {
+              "const": "list_manifests"
+            },
+            "data": {
+              "$ref": "#/$defs/page"
+            }
+          },
+          "required": [
+            "formatVersion",
+            "kind",
+            "basis",
+            "operation",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "kind": {
+              "const": "read"
+            },
+            "basis": {
+              "$ref": "#/$defs/oid"
+            },
+            "operation": {
+              "const": "read_revision"
+            },
+            "data": {
+              "$ref": "#/$defs/revisionRead"
+            }
+          },
+          "required": [
+            "formatVersion",
+            "kind",
+            "basis",
+            "operation",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "kind": {
+              "const": "read"
+            },
+            "basis": {
+              "$ref": "#/$defs/oid"
+            },
+            "operation": {
+              "const": "read_clause"
+            },
+            "data": {
+              "$ref": "#/$defs/material"
+            }
+          },
+          "required": [
+            "formatVersion",
+            "kind",
+            "basis",
+            "operation",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "kind": {
+              "const": "read"
+            },
+            "basis": {
+              "$ref": "#/$defs/oid"
+            },
+            "operation": {
+              "const": "read_context"
+            },
+            "data": {
+              "$ref": "#/$defs/material"
+            }
+          },
+          "required": [
+            "formatVersion",
+            "kind",
+            "basis",
+            "operation",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "kind": {
+              "const": "read"
+            },
+            "basis": {
+              "$ref": "#/$defs/oid"
+            },
+            "operation": {
+              "const": "read_request"
+            },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "record": {
+                  "$ref": "#/$defs/record"
+                }
+              },
+              "required": [
+                "record"
+              ]
+            }
+          },
+          "required": [
+            "formatVersion",
+            "kind",
+            "basis",
+            "operation",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "kind": {
+              "const": "read"
+            },
+            "basis": {
+              "$ref": "#/$defs/oid"
+            },
+            "operation": {
+              "const": "read_resolution"
+            },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "record": {
+                  "$ref": "#/$defs/record"
+                }
+              },
+              "required": [
+                "record"
+              ]
+            }
+          },
+          "required": [
+            "formatVersion",
+            "kind",
+            "basis",
+            "operation",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "kind": {
+              "const": "read"
+            },
+            "basis": {
+              "$ref": "#/$defs/oid"
+            },
+            "operation": {
+              "const": "read_manifest"
+            },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "record": {
+                  "$ref": "#/$defs/record"
+                }
+              },
+              "required": [
+                "record"
+              ]
+            }
+          },
+          "required": [
+            "formatVersion",
+            "kind",
+            "basis",
+            "operation",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "kind": {
+              "const": "read"
+            },
+            "basis": {
+              "$ref": "#/$defs/oid"
+            },
+            "operation": {
+              "const": "read_approval_trace"
+            },
+            "data": {
+              "$ref": "#/$defs/material"
+            }
+          },
+          "required": [
+            "formatVersion",
+            "kind",
+            "basis",
+            "operation",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "kind": {
+              "const": "read"
+            },
+            "basis": {
+              "$ref": "#/$defs/oid"
+            },
+            "operation": {
+              "const": "read_review_bundle"
+            },
+            "data": {
+              "$ref": "#/$defs/bundle"
+            }
+          },
+          "required": [
+            "formatVersion",
+            "kind",
+            "basis",
+            "operation",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "kind": {
+              "const": "settled"
+            },
+            "identity": {
+              "$ref": "#/$defs/receiptKey"
+            },
+            "fingerprint": {
+              "$ref": "#/$defs/digest"
+            },
+            "validatedAt": {
+              "$ref": "#/$defs/oid"
+            },
+            "authenticatedByCredentialId": {
+              "$ref": "#/$defs/uuid"
+            },
+            "outcome": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/success"
+                },
+                {
+                  "$ref": "#/$defs/rejection"
+                }
+              ]
+            },
+            "commandReplayed": {
+              "type": "boolean"
+            },
+            "publication": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/oid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "formatVersion",
+            "kind",
+            "identity",
+            "fingerprint",
+            "validatedAt",
+            "authenticatedByCredentialId",
+            "outcome",
+            "commandReplayed",
+            "publication"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "kind": {
+              "const": "error"
+            },
+            "code": {
+              "$ref": "#/$defs/errorCode"
+            }
+          },
+          "required": [
+            "formatVersion",
+            "kind",
+            "code"
+          ]
+        }
+      ]
+    }
+  }
+}

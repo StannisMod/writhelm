@@ -1,0 +1,36 @@
+{
+  "formatVersion": 1,
+  "family": "recoveries",
+  "key": {
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "id": "00000000-0000-0000-0000-000000000001"
+  },
+  "payload": {
+    "assignment": {
+      "assignmentId": "00000000-0000-0000-0000-000000000001",
+      "generation": 0
+    },
+    "decision": "bind-existing",
+    "basis": [
+      {
+        "kind": "knowledge",
+        "reference": {
+          "kind": "clause",
+          "revision": {
+            "document": {
+              "projectId": "00000000-0000-0000-0000-000000000001",
+              "documentId": "00000000-0000-0000-0000-000000000001"
+            },
+            "revisionId": "00000000-0000-0000-0000-000000000001"
+          },
+          "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+          "clauseId": "synthetic",
+          "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    ],
+    "isolatedResources": [],
+    "retainedClaims": [],
+    "remainingUncertainty": []
+  }
+}

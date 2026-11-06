@@ -8,8 +8,9 @@ without making a conversation transcript the source of truth.
 
 ## Status
 
-Design stage. There is no working Writhelm service yet. The roadmap describes intended capabilities,
-not implemented guarantees or measured performance.
+Implementation in progress. Portable service/work mechanisms exist, but an operational Writhelm
+service and complete H1 pilot are not qualified. The roadmap distinguishes intended capabilities
+from implemented and verified guarantees.
 
 The selected direction is a Writhelm-owned core with selective reuse, not a maintained
 [Task Orchestrator](https://github.com/jpicklyk/task-orchestrator) fork. Its pinned source baseline
@@ -21,9 +22,9 @@ OpenCode Desktop plugin candidate. Bounded independent reviews and targeted comb
 run; this is not a qualified launched service. Installed OpenCode rendering/IPC, abnormal recovery,
 other-OS operation and M1 acceptance remain open; one earlier component-start timeout is unexplained.
 Dependency license qualification remains open.
-The H1 connected-work contracts are approved, and a bounded portable implementation candidate has
-scoped independent review and parent acceptance in isolated worktrees. It is not yet integrated into
-this source tree or qualified for installed native execution. See the [completion plan](docs/roadmap.md).
+The approved H1 connected-work implementation is included in this source tree after scoped review
+and portable acceptance. Its real OpenCode bridge and installed execution remain unqualified. See
+the [completion plan](docs/roadmap.md) and [portable test inputs](backend/server/src/test/resources/h1/README.md).
 Linux, Windows and macOS are target service platforms. The current native store is Linux-specific;
 other platform adapters and cross-platform operational qualification are not implemented or verified.
 See [upstream provenance](docs/upstream.md).

@@ -19,7 +19,8 @@ internal class AppOptions(val limits: AppLimits=AppLimits(),val admission: Admis
     val publication: PublicationDriver=PublicationDriver.Native,val fileRead: (String)->Unit={ })
 internal class BoundState(val core: ApprovalWorkflow,val authority: AuthorityView,val entryBytes: Long=0)
 /** Typed protected service projection; no raw store/path or caller-supplied actor. */
-internal class AppAccessView(val basis: GitOid,val projectId: UUID,val principalId: UUID,capabilities: Set<Capability>) {
+internal class AppAccessView(val basis: GitOid,val projectId: UUID,val principalId: UUID,capabilities: Set<Capability>,
+    val scope: dev.writhelm.core.auth2.CredentialScope=dev.writhelm.core.auth2.CredentialScope.Project,val storeId: UUID?=null) {
     val capabilities=frozenSet(capabilities)
 }
 internal class AppReadView(val access: AppAccessView,val workflow: ApprovalWorkflow)

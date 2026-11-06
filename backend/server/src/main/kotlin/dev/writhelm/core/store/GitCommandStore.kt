@@ -29,11 +29,18 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
     }
     private var validated: ValidatedHead?=null
     private var closed=false
-    private val commandHeader=obj("formatVersion" to num(2))
+    private val journalVersion=if(ports.h1==null)2 else 3
+    private val policyVersion=if(ports.h1==null)1 else 2
+    private val commandHeader=obj("formatVersion" to num(journalVersion))
     private val expectedNamespaces: Map<String,JsonValue> = mapOf("core" to CoreRecordCodec.header(),"commands" to commandHeader)+ports.namespaces.mapValues { it.value.header }
     init {
         val policyHeader=ports.namespaces["policy"]?.header ?: fail(StoreProblem.UNSUPPORTED)
-        if(!StrictJson.encode(policyHeader).contentEquals(StrictJson.encode(obj("formatVersion" to num(1)))))fail(StoreProblem.UNSUPPORTED)
+        if(!StrictJson.encode(policyHeader).contentEquals(StrictJson.encode(obj("formatVersion" to num(policyVersion)))))fail(StoreProblem.UNSUPPORTED)
+        if(ports.h1!=null) {
+            integrity(ports.namespaces.keys==setOf("auth","policy","work"))
+            if(!StrictJson.encode(ports.namespaces.getValue("auth").header).contentEquals(StrictJson.encode(obj("formatVersion" to num(2),"profileVersion" to num(2)))))fail(StoreProblem.UNSUPPORTED)
+            if(!StrictJson.encode(ports.namespaces.getValue("work").header).contentEquals(StrictJson.encode(obj("formatVersion" to num(1),"modelVersion" to num(2)))))fail(StoreProblem.UNSUPPORTED)
+        }
     }
     private fun header(): JsonValue=obj("formatVersion" to num(1),"storeId" to uuid(storeId),"gitObjectFormat" to str("sha1"),"namespaces" to JObject(expectedNamespaces))
 
@@ -47,35 +54,53 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
         git.deadlineNanos=System.nanoTime()+TimeUnit.MILLISECONDS.toNanos(bounds.commandMillis)
         try {
             usable(); var originalIdentity: CommandIdentity?=null; var originalCredential: UUID?=null
-            var reconciled: Pair<ValidatedHead,AuthenticatedActor>?=null
+            if(command.fingerprintVersion==3 && (ports.h1==null || command.h1Admission!==ports.h1))fail(StoreProblem.UNSUPPORTED)
+            var consumed=0L
+            fun bounded(s: StoreSnapshot)=if(ports.h1==null)s else s.withMeter { n ->
+                if(n.toLong()>64L*1024*1024-consumed)fail(StoreProblem.UNAVAILABLE)
+                consumed+=n
+            }
+            fun scope(h: StoreSnapshot): CurrentCommandScope=if(ports.h1!=null)ports.h1.authorize(h,command)
+                else access.authorize(h,command)?.let { CurrentCommandScope.NewEffect(it) } ?: CurrentCommandScope.Denied
+            fun scopedActor(s: CurrentCommandScope): AuthenticatedActor?=when(s) { is CurrentCommandScope.NewEffect -> s.actor; is CurrentCommandScope.ReplayOnly -> s.actor; CurrentCommandScope.Denied -> null }
+            var reconciled: Pair<ValidatedHead,CurrentCommandScope>?=null
             repeat(bounds.attempts) {
                 // A qualified absence below may supply the next attempt's already captured H and
                 // current access. Do not recapture or substitute another credential in between;
                 // expected-old CAS still fences any subsequent head movement.
                 val prepared=reconciled; reconciled=null
-                val base=prepared?.first ?: capture(); val h=base.snapshot
+                val base=prepared?.first ?: capture(); val h=bounded(base.snapshot)
                 // The callback closes over the SAME presented credential. It must authenticate and
                 // authorize in this H, including on every CAS rebuild and before any receipt lookup.
-                val actor=prepared?.second ?: access.authorize(h,command) ?: return CommandResult.Denied
+                val currentScope=prepared?.second ?: scope(h)
+                val actor=scopedActor(currentScope) ?: return CommandResult.Denied
                 originalCredential?.let { integrity(it==actor.credentialId) }; originalCredential=actor.credentialId
                 val policy=AdmissionPolicy.decode(h.file("policy/admission.json") ?: fail(StoreProblem.INTEGRITY))
                 policy.command(command)
                 val identity=CommandIdentity(actor.principalId,command.projectId,command.operation,command.requestKey)
                 originalIdentity?.let { integrity(it==identity) }; originalIdentity=identity
                 h.file(identity.path)?.let { bytes ->
-                    val receipt=JournalCodec.decode(bytes,identity.path)
+                    val receipt=decodeReceipt(bytes,identity.path)
                     integrity(receipt.identity==identity && receipt.storeId==storeId)
                     return if(receipt.fingerprintVersion==command.fingerprintVersion && receipt.fingerprint==command.fingerprint)
                         CommandResult.Settled(receipt,true,null) else CommandResult.IdentityConflict
                 }
+                // A current terminal scope may reconcile ONLY an existing original key. Absence is
+                // not a domain rejection, cannot consume history, and MUST NOT reach a reducer/CAS.
+                if(currentScope is CurrentCommandScope.ReplayOnly)return CommandResult.Denied
                 // Authorization and original receipt recovery precede this operational growth cap.
                 // Every new outcome needs one commit, including rejection/domain-replay receipts.
                 // No evaluator, candidate, CAS or durable rejection is allocated at capacity.
                 if(base.publishedCommitCount>=bounds.historyCommits)return CommandResult.Refused(StoreProblem.UNAVAILABLE)
+                ports.h1?.preflight?.invoke(h,command,actor)
                 val evaluation=evaluator.evaluate(h,command,actor)
                 val changes=evaluation.changes
                 if(changes.size>policy.writeDescriptors)fail(StoreProblem.ADMISSION)
                 integrity(changes.map { it.key.path }.distinct().size==changes.size)
+                if(ports.h1!=null)changes.forEach { change -> change.bytes()?.let {
+                    if(it.size.toLong()>64L*1024*1024-consumed)fail(StoreProblem.UNAVAILABLE)
+                    consumed+=it.size
+                } }
                 if(evaluation.outcome is LogicalOutcome.Rejected || evaluation.outcome is LogicalOutcome.Success && evaluation.outcome.domainReplayed)integrity(changes.isEmpty())
                 if(evaluation.outcome is LogicalOutcome.Success) {
                     integrity(evaluation.outcome.operation==command.operation)
@@ -106,7 +131,7 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
                 // Required domain-specific affected-reference validation is never replaced by shape
                 // checks or a full-state import. Port must enforce reducer outcome and graph laws.
                 ports.validateTransition(h,command,actor,evaluation)
-                val receipt=Receipt(storeId,identity,command.fingerprintVersion,command.fingerprint,h.oid,actor.credentialId,evaluation.outcome,descriptors)
+                val receipt=Receipt(storeId,identity,command.fingerprintVersion,command.fingerprint,h.oid,actor.credentialId,evaluation.outcome,descriptors,journalVersion)
                 ports.validateHistoricalReceipt(h,receipt)
                 val receiptBytes=JournalCodec.encode(receipt,policy.receiptBytes)
                 val entries=LinkedHashMap(h.entries)
@@ -118,7 +143,7 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
                 if(entries.size>bounds.files)fail(StoreProblem.UNAVAILABLE)
                 val tree=writeTree(entries); val c=git.commit(tree,h.oid)
                 // Candidate's actual diff is independently checked against the immutable descriptors.
-                val candidate=snapshot(c); validateBoundary(h,candidate,receipt)
+                val candidate=snapshot(c); validateBoundary(h,bounded(candidate),receipt)
                 owner.beginPublication(); publicationStarted=true
                 val published=publication.compareAndSet(git,h.oid,c)
                 if(published.exit==0 && published.stderr.isEmpty()) {
@@ -138,9 +163,11 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
                 // does not by itself establish the command outcome. Keep ambiguity/barrier until
                 // the published line, current rights and original receipt are resolved. These calls
                 // retain the ORIGINAL aggregate deadline; any unresolved failure stays Unknown.
-                validated=null
-                val currentBase=capture(); val current=currentBase.snapshot
-                val currentActor=access.authorize(current,command)
+                // Retain the old-H ancestry anchor while auditing this changed head. The barrier
+                // remains set until the same current-authority/receipt reconciliation completes.
+                val currentBase=capture(); val current=bounded(currentBase.snapshot)
+                val recapturedScope=scope(current)
+                val currentActor=scopedActor(recapturedScope)
                 if(currentActor==null) {
                     owner.finishPublication(); publicationStarted=false
                     return CommandResult.Denied
@@ -150,7 +177,7 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
                     // No protected result/conflict is disclosed under a substituted identity.
                     integrity(samePresentation)
                     val bytes=current.file(identity.path) ?: fail(StoreProblem.INTEGRITY)
-                    val original=JournalCodec.decode(bytes,identity.path)
+                    val original=decodeReceipt(bytes,identity.path)
                     integrity(original.identity==identity && original.storeId==storeId)
                     val recovered=if(original.fingerprintVersion==command.fingerprintVersion && original.fingerprint==command.fingerprint)
                         CommandResult.Settled(original,true,null) else CommandResult.IdentityConflict
@@ -162,7 +189,8 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
                 // no receipt is disclosed and no new evaluator/CAS runs for that invalid port.
                 owner.finishPublication(); publicationStarted=false
                 integrity(samePresentation)
-                reconciled=currentBase to currentActor
+                if(recapturedScope is CurrentCommandScope.ReplayOnly)return CommandResult.Denied
+                reconciled=currentBase to recapturedScope
             }
             return CommandResult.Refused(StoreProblem.UNAVAILABLE)
         } catch(e: StoreFault) {
@@ -177,8 +205,15 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
         } finally { git.deadlineNanos=Long.MAX_VALUE }
     }
     private fun usable() { if(closed)fail(StoreProblem.RECOVERY_REQUIRED); owner.requireUsable() }
+    private fun decodeReceipt(bytes: ByteArray,path: String): Receipt=JournalCodec.decode(bytes,path).also { if(it.journalVersion!=journalVersion)fail(StoreProblem.UNSUPPORTED) }
     private fun capture(): ValidatedHead {
-        val head=git.head(); validated?.let { if(it.snapshot.oid==head)return it }
+        val head=git.head(); validated?.let {
+            if(it.snapshot.oid==head)return it
+            // An unrecognized ref is not permission to forget already observed publication.
+            // A legitimate competing publication must extend this exact validated H.
+            val ancestry=git.call(listOf("merge-base","--is-ancestor",it.snapshot.oid.hex,head.hex))
+            integrity(ancestry.exit==0 && ancestry.stderr.isEmpty() && ancestry.output.isEmpty())
+        }
         return audit(head).also { validated=it }
     }
     private fun snapshot(oid: GitOid): StoreSnapshot {
@@ -204,7 +239,21 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
         if(path=="$namespace/format.json")return
         when(namespace) {
             "core" -> CoreEntryKey.parse(path)
-            "auth" -> integrity(Regex("auth/records/(principals|projects|credentials|grant-guards)/([0-9a-f]{2})/([0-9a-f]{64})\\.json").matchEntire(path)?.let { it.groupValues[2]==it.groupValues[3].take(2) }==true)
+            "auth" -> {
+                if(ports.h1==null) {
+                    val h1=Regex("auth/records/(controllers|work-grants|delegations)/([0-9a-f]{2})/([0-9a-f]{64})\\.json").matchEntire(path)
+                    if(h1!=null && h1.groupValues[2]==h1.groupValues[3].take(2))fail(StoreProblem.UNSUPPORTED)
+                }
+                val families=if(ports.h1==null)"principals|projects|credentials|grant-guards" else "principals|projects|credentials|grant-guards|controllers|work-grants|delegations"
+                integrity(Regex("auth/records/($families)/([0-9a-f]{2})/([0-9a-f]{64})\\.json").matchEntire(path)?.let { it.groupValues[2]==it.groupValues[3].take(2) }==true)
+            }
+            "work" -> {
+                val body=Regex("work/bodies/([0-9a-f]{2})/([0-9a-f]{64})\\.txt").matchEntire(path)
+                if(body!=null)integrity(body.groupValues[1]==body.groupValues[2].take(2)) else {
+                    val m=Regex("work/records/([a-z-]+)/([0-9a-f]{2})/([0-9a-f]{64})\\.json").matchEntire(path) ?: fail(StoreProblem.INTEGRITY)
+                    H1Catalog.family(m.groupValues[1]); integrity(m.groupValues[2]==m.groupValues[3].take(2))
+                }
+            }
             "commands" -> integrity(Regex("commands/receipts/([0-9a-f]{2})/([0-9a-f]{64})\\.json").matchEntire(path)?.let { it.groupValues[1]==it.groupValues[2].take(2) }==true)
             "policy" -> integrity(path=="policy/admission.json")
         }
@@ -224,7 +273,8 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
     }
     private fun validateSnapshot(s: StoreSnapshot) {
         validateHeaders(s)
-        AdmissionPolicy.decode(s.file("policy/admission.json") ?: fail(StoreProblem.INTEGRITY))
+        val policy=AdmissionPolicy.decode(s.file("policy/admission.json") ?: fail(StoreProblem.INTEGRITY))
+        if(policy.formatVersion!=policyVersion)fail(StoreProblem.UNSUPPORTED)
         val paths=s.entries.keys.filter { it.startsWith("core/") }
         val ordered=listOf("core/format.json")+paths.filter { it!="core/format.json" }.sorted()
         CoreSnapshotCodec().restore(ordered.asSequence().map { CoreEntry(it,s.file(it) ?: fail(StoreProblem.INTEGRITY)) })
@@ -265,7 +315,7 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
                 integrity(p==listOf(previous.oid))
                 val added=s.entries.keys.filter { it.startsWith("commands/receipts/") && it !in previous.entries }
                 integrity(added.size==1)
-                val receipt=JournalCodec.decode(s.file(added.single())!!,added.single())
+                val receipt=decodeReceipt(s.file(added.single())!!,added.single())
                 validateBoundary(previous,s,receipt)
                 ports.validateHistoricalReceipt(previous,receipt)
             }
@@ -281,17 +331,62 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
         integrity(receipt.path !in h.entries && receipt.path in c.entries)
         val actual=(h.entries.keys+c.entries.keys).filter { h.entries[it]!=c.entries[it] }.toSet()
         integrity(actual==receipt.writes.map { it.path }.toSet()+receipt.path)
+        if(receipt.journalVersion!=journalVersion)fail(StoreProblem.UNSUPPORTED)
         receipt.writes.forEach { w ->
             val before=h.file(w.path); val after=c.file(w.path)
             integrity(before?.let(::sha)==w.beforeDigest && after?.let(::sha)==w.afterDigest)
             validateRecord(w.record,before,after,false)
         }
+        if(receipt.identity.operation=="register_delegation" && receipt.outcome is LogicalOutcome.Success)validateRegistrationBoundary(h,c,receipt)
         validateResultReference(c,receipt)
+        // Required H1 joint/historical validation sees this exact original edge, not a later head.
+        // Both snapshots retain their active command/audit meters; no temporary after-record join.
+        ports.h1?.validateBoundary?.invoke(h,c,receipt)
+    }
+    /** Cross-namespace enrollment coupling is a publication invariant, not three independent writes.
+     * Full delegation authority/reference laws still belong to the required AUTH/CORE validators. */
+    private fun validateRegistrationBoundary(h: StoreSnapshot,c: StoreSnapshot,r: Receipt) {
+        val outcome=r.outcome as LogicalOutcome.Success
+        fun payload(s: StoreSnapshot,key: RecordKey): Map<String,JsonValue> {
+            val raw=s.file(key.path) ?: fail(StoreProblem.INTEGRITY)
+            val e=StrictJson.decode(raw,JsonLimits(bytes=4*1024*1024,stringBytes=262144,depth=128,collection=4096,tokens=500000)).fields("formatVersion","family","key","payload")
+            return (e.getValue("payload") as? JObject)?.entries ?: fail(StoreProblem.INTEGRITY)
+        }
+        fun equal(a: JsonValue,b: JsonValue)=integrity(StrictJson.encode(a).contentEquals(StrictJson.encode(b)))
+        val delegation=payload(c,RecordKey("auth","delegations",outcome.result))
+        val binding=(delegation.getValue("binding") as? JObject)?.entries ?: fail(StoreProblem.INTEGRITY)
+        integrity(uuid(binding.getValue("projectId"))==r.identity.projectId)
+        integrity(delegation.getValue("generation").long()==0L && delegation.getValue("status").string()=="active")
+        val principal=binding.getValue("principalId")
+        val grant=obj("principalId" to principal,"projectId" to uuid(r.identity.projectId))
+        val required=setOf(RecordKey("auth","delegations",outcome.result).path,
+            RecordKey("auth","principals",principal).path,RecordKey("auth","credentials",binding.getValue("initialCredentialId")).path,
+            RecordKey("auth","grant-guards",grant).path,RecordKey("auth","work-grants",grant).path,RecordKey("core","grants",grant).path,
+            RecordKey("work","assignments",obj("projectId" to uuid(r.identity.projectId),"id" to binding.getValue("assignmentId"))).path)
+        integrity(r.writes.map { it.path }.toSet()==required)
+        equal(payload(c,RecordKey("core","grants",grant)).getValue("capabilities"),JArray(listOf(str("READ"))))
+        integrity(payload(c,RecordKey("auth","grant-guards",grant)).getValue("generation").long()==0L)
+        val work=payload(c,RecordKey("auth","work-grants",grant))
+        integrity(work.getValue("generation").long()==0L && work.getValue("permissions").list().isEmpty())
+        val credential=payload(c,RecordKey("auth","credentials",binding.getValue("initialCredentialId")))
+        equal(credential.getValue("principalId"),principal); equal(credential.getValue("projectId"),uuid(r.identity.projectId)); equal(credential.getValue("storeId"),uuid(storeId))
+        integrity(credential.getValue("generation").long()==0L && credential.getValue("status").string()=="active" && credential.getValue("replacedBy")===JNull)
+        equal(credential.getValue("scope"),obj("kind" to str("assignment"),"delegationId" to outcome.result))
+        val assignmentKey=RecordKey("work","assignments",obj("projectId" to uuid(r.identity.projectId),"id" to binding.getValue("assignmentId")))
+        val old=payload(h,assignmentKey); val next=payload(c,assignmentKey)
+        integrity(old.getValue("state").string()=="reserved" && old.getValue("delegationId")===JNull && old.getValue("execution")===JNull && old.getValue("binding")===JNull)
+        equal(next.getValue("delegationId"),outcome.result)
+        equal(JObject(old-setOf("generation","delegationId")),JObject(next-setOf("generation","delegationId")))
+        val generation=old.getValue("generation").long(); integrity(generation<Long.MAX_VALUE && next.getValue("generation").long()==generation+1)
     }
     private fun validateRecord(key: RecordKey,before: ByteArray?,after: ByteArray?,admission: Boolean=true) {
         integrity(before!=null || after!=null)
         if(before!=null)integrity(key.mutable)
         if(after==null) { integrity(key.removable); return }
+        if(ports.h1!=null && key.namespace in setOf("auth","work")) {
+            validateH1Record(key,before,after,!admission)
+            return
+        }
         val maximum=if(key.namespace=="auth")16384 else if(key.family=="bodies")1024*1024 else 4*1024*1024
         if(admission && after.size>maximum)fail(StoreProblem.ADMISSION)
         if(key.namespace=="core" && key.family=="bodies") {
@@ -323,8 +418,48 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
             }
         }
     }
+    private fun validateH1Record(key: RecordKey,before: ByteArray?,after: ByteArray,historical: Boolean) {
+        if(key.namespace=="work" && key.family=="bodies") {
+            if(after.size>4*1024*1024)fail(StoreProblem.UNAVAILABLE)
+            integrity(Utf8Content.fromBytes(after).digest==digest(key.key)); return
+        }
+        val limits=if(key.namespace=="auth")JsonLimits(bytes=65536,stringBytes=1024,depth=32,collection=256,tokens=32768)
+            else JsonLimits(bytes=4*1024*1024,stringBytes=262144,depth=128,collection=4096,tokens=500000)
+        fun payload(bytes: ByteArray): JsonValue {
+            val value=StrictJson.decode(bytes,limits,true)
+            integrity(bytes.contentEquals(StrictJson.encode(value,limits.bytes,maxDepth=limits.depth)))
+            val f=value.fields("formatVersion","family","key","payload")
+            integrity(f.getValue("formatVersion").int()==if(key.namespace=="auth")2 else 1)
+            integrity(f.getValue("family").string()==key.family && StrictJson.encode(f.getValue("key")).contentEquals(StrictJson.encode(key.key)))
+            return f.getValue("payload")
+        }
+        val next=payload(after)
+        if(key.mutable) {
+            fun generation(value: JsonValue)=(value as? JObject)?.entries?.get("generation")?.long() ?: fail(StoreProblem.INTEGRITY)
+            val n=generation(next)
+            if(before==null)integrity(n==0L) else { val old=generation(payload(before)); integrity(old<Long.MAX_VALUE && n==old+1) }
+        }
+        ports.h1!!.validateRecord(key,after,historical)
+    }
     private fun validateResultReference(c: StoreSnapshot,r: Receipt) {
         val outcome=r.outcome as? LogicalOutcome.Success ?: return
+        if(outcome.operation in H1Catalog.workOperations) {
+            val key=H1Catalog.result(outcome.operation,outcome.result)
+            val raw=c.file(key.path) ?: fail(StoreProblem.INTEGRITY)
+            val result=outcome.result.fields("key","generation","digest")
+            integrity(sha(raw)==digest(result.getValue("digest")).hex)
+            if(key.mutable) {
+                val envelope=StrictJson.decode(raw,JsonLimits(bytes=4*1024*1024,stringBytes=262144,depth=128,collection=4096,tokens=500000)).fields("formatVersion","family","key","payload")
+                val payload=envelope.getValue("payload") as? JObject ?: fail(StoreProblem.INTEGRITY)
+                integrity(payload.entries.getValue("generation").long()==result.getValue("generation").long())
+            }
+            return
+        }
+        if(outcome.operation in H1Catalog.authOperations) {
+            val family=when(outcome.operation) { "register_delegation","revoke_delegation" -> "delegations"; "replace_work_grants" -> "work-grants"; else -> "credentials" }
+            val key=when(outcome.operation) { "replace_work_grants" -> obj("principalId" to outcome.result,"projectId" to uuid(r.identity.projectId)); "rotate_delegated_credential" -> outcome.result.fields("credentialId","replacedCredentialId").getValue("credentialId"); else -> outcome.result }
+            integrity(RecordKey("auth",family,key).path in c.entries); return
+        }
         val family=when(outcome.operation) {
             "propose_revision" -> "revisions"
             "request_approval" -> "requests"
@@ -341,6 +476,16 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
     }
     private fun validateCommandResult(c: StoreCommand,o: LogicalOutcome.Success) {
         val payload=(c.payload as JObject).entries
+        if(c.operation in H1Catalog.workOperations) {
+            val key=H1Catalog.result(c.operation,o.result)
+            val expected=when(c.operation) {
+                "reserve_assignment","bind_assignment","rebind_assignment","complete_assignment" -> obj("projectId" to uuid(c.projectId),"id" to payload.getValue("assignmentId"))
+                "request_native_transition","observe_native_transition" -> obj("projectId" to uuid(c.projectId),"id" to payload.getValue("intentId"))
+                "observe_integration" -> payload.getValue("intent")
+                else -> payload.getValue("key")
+            }
+            integrity(StrictJson.encode(key.key).contentEquals(StrictJson.encode(expected))); return
+        }
         val expected=when(c.operation) {
             "propose_revision" -> payload.getValue("revisionKey")
             "request_approval","resolve_approval" -> payload.getValue("requestId")
@@ -348,6 +493,9 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
             "pin_consumer" -> payload.getValue("manifestId")
             "revoke_access","replace_grants" -> payload.getValue("principalId")
             "revoke_credential" -> payload.getValue("credentialId")
+            "replace_work_grants" -> payload.getValue("principalId")
+            "register_delegation","revoke_delegation" -> payload.getValue("delegationId")
+            "revoke_delegated_credential" -> payload.getValue("credentialId")
             else -> obj("credentialId" to payload.getValue("newCredentialId"),"replacedCredentialId" to payload.getValue("credentialId"))
         }
         integrity(StrictJson.encode(expected).contentEquals(StrictJson.encode(o.result)))
@@ -363,6 +511,23 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
             integrity((path !in h.entries)==new)
         }
         when(c.operation) {
+            "register_delegation" -> {
+                val binding=(p.getValue("binding") as? JObject)?.entries ?: fail(StoreProblem.INTEGRITY)
+                val principal=binding.getValue("principalId")
+                val grant=obj("principalId" to principal,"projectId" to uuid(c.projectId))
+                integrity(uuid(binding.getValue("projectId"))==c.projectId)
+                requireChange("core","grants",grant,true)
+                requireChange("auth","principals",principal,true)
+                requireChange("auth","grant-guards",grant,true)
+                requireChange("auth","work-grants",grant,true)
+                requireChange("auth","credentials",binding.getValue("initialCredentialId"),true)
+                requireChange("auth","delegations",p.getValue("delegationId"),true)
+                requireChange("work","assignments",obj("projectId" to uuid(c.projectId),"id" to binding.getValue("assignmentId")))
+            }
+            "replace_work_grants" -> requireChange("auth","work-grants",obj("principalId" to p.getValue("principalId"),"projectId" to uuid(c.projectId)))
+            "revoke_delegation" -> requireChange("auth","delegations",p.getValue("delegationId"))
+            "revoke_delegated_credential" -> requireChange("auth","credentials",p.getValue("credentialId"))
+            "rotate_delegated_credential" -> { requireChange("auth","credentials",p.getValue("credentialId")); requireChange("auth","credentials",p.getValue("newCredentialId"),true) }
             "propose_revision" -> { requireChange("core","revisions",p.getValue("revisionKey"),true); requireChange("core","proposals",p.getValue("revisionKey"),true) }
             "request_approval" -> requireChange("core","requests",p.getValue("requestId"),true)
             "resolve_approval" -> requireChange("core","resolutions",p.getValue("requestId"),true)
@@ -378,6 +543,11 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
         }
     }
     private fun allowedPaths(h: StoreSnapshot,c: StoreCommand): Set<String> {
+        if(c.operation in H1Catalog.operations) {
+            val keys=ports.h1?.allowedWrites?.invoke(h,c) ?: fail(StoreProblem.UNSUPPORTED)
+            if(keys.size>4096)fail(StoreProblem.UNAVAILABLE)
+            return keys.map { it.path }.toSet()
+        }
         val paths=HashSet<String>(); val p=(c.payload as JObject).entries
         fun add(namespace: String,family: String,key: JsonValue) { paths.add(RecordKey(namespace,family,key).path) }
         fun core(family: String,key: JsonValue)=add("core",family,key)
@@ -427,7 +597,8 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
             try {
                 // Only explicit empty designated directories, apart from our own owner artifacts.
                 Files.list(directory).use { stream -> integrity(stream.allMatch { it.fileName.toString() in setOf("owner.lock","runtime-active") }) }
-                integrity(ports.namespaces.keys==setOf("auth","policy"))
+                integrity(ports.namespaces.keys==if(ports.h1==null)setOf("auth","policy") else setOf("auth","policy","work"))
+                if(admission.formatVersion!=if(ports.h1==null)1 else 2)fail(StoreProblem.UNSUPPORTED)
                 val git=NativeGit(owner,processBounds); git.qualify(); git.initialize()
                 val store=GitCommandStore(owner,git,storeId,ports,bounds,publication)
                 val entries=LinkedHashMap<String,GitOid>()

@@ -1,0 +1,852 @@
+[
+  {
+    "operation": "record_condition",
+    "before": null,
+    "after": {
+      "formatVersion": 1,
+      "family": "conditions",
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000029"
+      },
+      "payload": {
+        "consumerTask": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "consumer": {
+          "assignmentId": "00000000-0000-0000-0000-000000000001",
+          "generation": 0
+        },
+        "responsibleTask": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "condition": {
+          "digest": "75c265ef11923fbb4f5a4f8a51a71d08bcca399239e899fa21575e5d0c6dd67f",
+          "byteLength": 29
+        },
+        "assessor": {
+          "kind": "controller",
+          "controllerId": "00000000-0000-0000-0000-000000000001"
+        },
+        "requiredGateIds": [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "agreement": [
+          {
+            "kind": "knowledge",
+            "reference": {
+              "kind": "clause",
+              "revision": {
+                "document": {
+                  "projectId": "00000000-0000-0000-0000-000000000001",
+                  "documentId": "00000000-0000-0000-0000-000000000001"
+                },
+                "revisionId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+              "clauseId": "x",
+              "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        ],
+        "recordedBy": "00000000-0000-0000-0000-000000000009",
+        "consumerNotice": {
+          "digest": "75c265ef11923fbb4f5a4f8a51a71d08bcca399239e899fa21575e5d0c6dd67f",
+          "byteLength": 29
+        },
+        "governingPlan": {
+          "family": "verification-plans",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-000000000001",
+            "revision": 0
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "supersedes": [],
+        "decisionSources": []
+      }
+    },
+    "receipt": {
+      "formatVersion": 3,
+      "family": "command-receipt",
+      "key": {
+        "principalId": "00000000-0000-0000-0000-000000000009",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "operation": "record_condition",
+        "requestKey": "00000000-0000-0000-0000-000000000190"
+      },
+      "payload": {
+        "storeId": "00000000-0000-0000-0000-000000000007",
+        "fingerprintVersion": 3,
+        "fingerprint": "637841fc9596db320fed46f331b96ad897530b4f4d2e2ff74d65821c7f92d672",
+        "validatedAt": {
+          "algorithm": "sha1",
+          "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "authenticatedByCredentialId": "00000000-0000-0000-0000-00000000000a",
+        "outcome": {
+          "kind": "success",
+          "operation": "record_condition",
+          "result": {
+            "key": {
+              "projectId": "00000000-0000-0000-0000-000000000001",
+              "id": "00000000-0000-0000-0000-000000000029"
+            },
+            "generation": null,
+            "digest": "88d554429dc3fbbe8dcd058f2911b134aa8e53a0df96327a5faa92e557e94e8e"
+          },
+          "domainReplayed": false
+        },
+        "writes": [
+          {
+            "namespace": "work",
+            "family": "conditions",
+            "key": {
+              "projectId": "00000000-0000-0000-0000-000000000001",
+              "id": "00000000-0000-0000-0000-000000000029"
+            },
+            "beforeDigest": null,
+            "afterDigest": "88d554429dc3fbbe8dcd058f2911b134aa8e53a0df96327a5faa92e557e94e8e"
+          }
+        ]
+      }
+    },
+    "reply": {
+      "formatVersion": 1,
+      "kind": "settled",
+      "identity": {
+        "principalId": "00000000-0000-0000-0000-000000000009",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "operation": "record_condition",
+        "requestKey": "00000000-0000-0000-0000-000000000190"
+      },
+      "fingerprint": "637841fc9596db320fed46f331b96ad897530b4f4d2e2ff74d65821c7f92d672",
+      "validatedAt": {
+        "algorithm": "sha1",
+        "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "authenticatedByCredentialId": "00000000-0000-0000-0000-00000000000a",
+      "outcome": {
+        "kind": "success",
+        "operation": "record_condition",
+        "result": {
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-000000000029"
+          },
+          "generation": null,
+          "digest": "88d554429dc3fbbe8dcd058f2911b134aa8e53a0df96327a5faa92e557e94e8e"
+        },
+        "domainReplayed": false
+      },
+      "commandReplayed": false,
+      "publication": {
+        "algorithm": "sha1",
+        "hex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    },
+    "status": "metadata-only effect example; directly referenced bodies already retained"
+  },
+  {
+    "operation": "confirm_condition",
+    "before": null,
+    "after": {
+      "formatVersion": 1,
+      "family": "condition-confirmations",
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-00000000002a"
+      },
+      "payload": {
+        "condition": {
+          "family": "conditions",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-000000000029"
+          },
+          "digest": "88d554429dc3fbbe8dcd058f2911b134aa8e53a0df96327a5faa92e557e94e8e"
+        },
+        "result": {
+          "family": "results",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-000000000001"
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "evidence": [],
+        "assessment": {
+          "digest": "75c265ef11923fbb4f5a4f8a51a71d08bcca399239e899fa21575e5d0c6dd67f",
+          "byteLength": 29
+        },
+        "decision": "resolved",
+        "assessedBy": {
+          "kind": "controller",
+          "controllerId": "00000000-0000-0000-0000-000000000001",
+          "principalId": "00000000-0000-0000-0000-000000000009",
+          "credentialId": "00000000-0000-0000-0000-00000000000a",
+          "executionId": "00000000-0000-0000-0000-00000000000b",
+          "nativeHostId": "00000000-0000-0000-0000-00000000000c",
+          "nativeSessionId": "ses_controller"
+        },
+        "supersedes": [],
+        "correctionBasis": [],
+        "applicability": null
+      }
+    },
+    "receipt": {
+      "formatVersion": 3,
+      "family": "command-receipt",
+      "key": {
+        "principalId": "00000000-0000-0000-0000-000000000009",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "operation": "confirm_condition",
+        "requestKey": "00000000-0000-0000-0000-000000000191"
+      },
+      "payload": {
+        "storeId": "00000000-0000-0000-0000-000000000007",
+        "fingerprintVersion": 3,
+        "fingerprint": "950c4ff3b40e63368a93039ae4e500765f7ea55ebe91fb1e5984716e9353e2e0",
+        "validatedAt": {
+          "algorithm": "sha1",
+          "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "authenticatedByCredentialId": "00000000-0000-0000-0000-00000000000a",
+        "outcome": {
+          "kind": "success",
+          "operation": "confirm_condition",
+          "result": {
+            "key": {
+              "projectId": "00000000-0000-0000-0000-000000000001",
+              "id": "00000000-0000-0000-0000-00000000002a"
+            },
+            "generation": null,
+            "digest": "26dfb047076ecd3ea931a67fd8070f0ab21786423b5be0df0a0d9042af7da482"
+          },
+          "domainReplayed": false
+        },
+        "writes": [
+          {
+            "namespace": "work",
+            "family": "condition-confirmations",
+            "key": {
+              "projectId": "00000000-0000-0000-0000-000000000001",
+              "id": "00000000-0000-0000-0000-00000000002a"
+            },
+            "beforeDigest": null,
+            "afterDigest": "26dfb047076ecd3ea931a67fd8070f0ab21786423b5be0df0a0d9042af7da482"
+          }
+        ]
+      }
+    },
+    "reply": {
+      "formatVersion": 1,
+      "kind": "settled",
+      "identity": {
+        "principalId": "00000000-0000-0000-0000-000000000009",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "operation": "confirm_condition",
+        "requestKey": "00000000-0000-0000-0000-000000000191"
+      },
+      "fingerprint": "950c4ff3b40e63368a93039ae4e500765f7ea55ebe91fb1e5984716e9353e2e0",
+      "validatedAt": {
+        "algorithm": "sha1",
+        "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "authenticatedByCredentialId": "00000000-0000-0000-0000-00000000000a",
+      "outcome": {
+        "kind": "success",
+        "operation": "confirm_condition",
+        "result": {
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-00000000002a"
+          },
+          "generation": null,
+          "digest": "26dfb047076ecd3ea931a67fd8070f0ab21786423b5be0df0a0d9042af7da482"
+        },
+        "domainReplayed": false
+      },
+      "commandReplayed": false,
+      "publication": {
+        "algorithm": "sha1",
+        "hex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    },
+    "status": "metadata-only effect example; directly referenced bodies already retained"
+  },
+  {
+    "operation": "prepare_continuation",
+    "before": null,
+    "after": {
+      "formatVersion": 1,
+      "family": "continuations",
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-00000000002b"
+      },
+      "payload": {
+        "origin": {
+          "assignmentId": "00000000-0000-0000-0000-000000000001",
+          "generation": 0
+        },
+        "assignment": {
+          "assignmentId": "00000000-0000-0000-0000-000000000001",
+          "generation": 0
+        },
+        "binding": {
+          "family": "assignment-bindings",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "assignmentId": "00000000-0000-0000-0000-000000000001",
+            "generation": 0
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "checkpoint": {
+          "family": "checkpoints",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-000000000005"
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "sourceCheckpoint": {
+          "family": "checkpoints",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-000000000005"
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "conditions": [
+          {
+            "condition": {
+              "family": "conditions",
+              "key": {
+                "projectId": "00000000-0000-0000-0000-000000000001",
+                "id": "00000000-0000-0000-0000-000000000029"
+              },
+              "digest": "88d554429dc3fbbe8dcd058f2911b134aa8e53a0df96327a5faa92e557e94e8e"
+            },
+            "confirmation": {
+              "family": "condition-confirmations",
+              "key": {
+                "projectId": "00000000-0000-0000-0000-000000000001",
+                "id": "00000000-0000-0000-0000-00000000002a"
+              },
+              "digest": "26dfb047076ecd3ea931a67fd8070f0ab21786423b5be0df0a0d9042af7da482"
+            }
+          }
+        ],
+        "coverage": {
+          "basisH": {
+            "algorithm": "sha1",
+            "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "conditionsDigest": "098e53aa94c5cc6e2e336d64c8a66da8a16955c89af0e93bed65c10cd5dbca15",
+          "conditionCount": 1
+        },
+        "expectedAssignmentGeneration": 0,
+        "before": {
+          "repositoryId": "00000000-0000-0000-0000-000000000001",
+          "commit": null,
+          "tree": {
+            "algorithm": "sha1",
+            "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "dirtyContentDigest": null,
+          "retainedLocatorId": "00000000-0000-0000-0000-000000000001"
+        },
+        "after": {
+          "repositoryId": "00000000-0000-0000-0000-000000000001",
+          "commit": null,
+          "tree": {
+            "algorithm": "sha1",
+            "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "dirtyContentDigest": null,
+          "retainedLocatorId": "00000000-0000-0000-0000-000000000001"
+        },
+        "mode": "unchanged-base",
+        "rebind": null,
+        "preparationBasis": [
+          {
+            "kind": "knowledge",
+            "reference": {
+              "kind": "clause",
+              "revision": {
+                "document": {
+                  "projectId": "00000000-0000-0000-0000-000000000001",
+                  "documentId": "00000000-0000-0000-0000-000000000001"
+                },
+                "revisionId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+              "clauseId": "x",
+              "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        ],
+        "nativeMessageId": "msg_connected_notice",
+        "notification": {
+          "digest": "75c265ef11923fbb4f5a4f8a51a71d08bcca399239e899fa21575e5d0c6dd67f",
+          "byteLength": 29
+        },
+        "supersedes": null,
+        "generation": 0,
+        "phase": "prepared",
+        "stage": "environment",
+        "observations": [],
+        "evidence": [],
+        "delivery": null,
+        "nativeIntent": null,
+        "reason": null,
+        "effect": {
+          "attemptId": "00000000-0000-0000-0000-000000000001",
+          "requestKey": "00000000-0000-0000-0000-000000000001",
+          "requestDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+          "state": "not-issued",
+          "previousAttempt": null,
+          "basis": []
+        }
+      }
+    },
+    "receipt": {
+      "formatVersion": 3,
+      "family": "command-receipt",
+      "key": {
+        "principalId": "00000000-0000-0000-0000-000000000009",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "operation": "prepare_continuation",
+        "requestKey": "00000000-0000-0000-0000-000000000192"
+      },
+      "payload": {
+        "storeId": "00000000-0000-0000-0000-000000000007",
+        "fingerprintVersion": 3,
+        "fingerprint": "0132487396293a5f89da64b3fc51fcce1f7fd20d9a4b9ab30c449175ca1f3395",
+        "validatedAt": {
+          "algorithm": "sha1",
+          "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "authenticatedByCredentialId": "00000000-0000-0000-0000-00000000000a",
+        "outcome": {
+          "kind": "success",
+          "operation": "prepare_continuation",
+          "result": {
+            "key": {
+              "projectId": "00000000-0000-0000-0000-000000000001",
+              "id": "00000000-0000-0000-0000-00000000002b"
+            },
+            "generation": 0,
+            "digest": "8805db94d1a9fcf067129c93807fe767aa70383a13d4c3881fa986862c5ec65a"
+          },
+          "domainReplayed": false
+        },
+        "writes": [
+          {
+            "namespace": "work",
+            "family": "continuations",
+            "key": {
+              "projectId": "00000000-0000-0000-0000-000000000001",
+              "id": "00000000-0000-0000-0000-00000000002b"
+            },
+            "beforeDigest": null,
+            "afterDigest": "8805db94d1a9fcf067129c93807fe767aa70383a13d4c3881fa986862c5ec65a"
+          }
+        ]
+      }
+    },
+    "reply": {
+      "formatVersion": 1,
+      "kind": "settled",
+      "identity": {
+        "principalId": "00000000-0000-0000-0000-000000000009",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "operation": "prepare_continuation",
+        "requestKey": "00000000-0000-0000-0000-000000000192"
+      },
+      "fingerprint": "0132487396293a5f89da64b3fc51fcce1f7fd20d9a4b9ab30c449175ca1f3395",
+      "validatedAt": {
+        "algorithm": "sha1",
+        "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "authenticatedByCredentialId": "00000000-0000-0000-0000-00000000000a",
+      "outcome": {
+        "kind": "success",
+        "operation": "prepare_continuation",
+        "result": {
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-00000000002b"
+          },
+          "generation": 0,
+          "digest": "8805db94d1a9fcf067129c93807fe767aa70383a13d4c3881fa986862c5ec65a"
+        },
+        "domainReplayed": false
+      },
+      "commandReplayed": false,
+      "publication": {
+        "algorithm": "sha1",
+        "hex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    },
+    "status": "metadata-only effect example; directly referenced bodies already retained"
+  },
+  {
+    "operation": "observe_continuation",
+    "before": {
+      "formatVersion": 1,
+      "family": "continuations",
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-00000000002b"
+      },
+      "payload": {
+        "origin": {
+          "assignmentId": "00000000-0000-0000-0000-000000000001",
+          "generation": 0
+        },
+        "assignment": {
+          "assignmentId": "00000000-0000-0000-0000-000000000001",
+          "generation": 0
+        },
+        "binding": {
+          "family": "assignment-bindings",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "assignmentId": "00000000-0000-0000-0000-000000000001",
+            "generation": 0
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "checkpoint": {
+          "family": "checkpoints",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-000000000005"
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "sourceCheckpoint": {
+          "family": "checkpoints",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-000000000005"
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "conditions": [
+          {
+            "condition": {
+              "family": "conditions",
+              "key": {
+                "projectId": "00000000-0000-0000-0000-000000000001",
+                "id": "00000000-0000-0000-0000-000000000029"
+              },
+              "digest": "88d554429dc3fbbe8dcd058f2911b134aa8e53a0df96327a5faa92e557e94e8e"
+            },
+            "confirmation": {
+              "family": "condition-confirmations",
+              "key": {
+                "projectId": "00000000-0000-0000-0000-000000000001",
+                "id": "00000000-0000-0000-0000-00000000002a"
+              },
+              "digest": "26dfb047076ecd3ea931a67fd8070f0ab21786423b5be0df0a0d9042af7da482"
+            }
+          }
+        ],
+        "coverage": {
+          "basisH": {
+            "algorithm": "sha1",
+            "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "conditionsDigest": "098e53aa94c5cc6e2e336d64c8a66da8a16955c89af0e93bed65c10cd5dbca15",
+          "conditionCount": 1
+        },
+        "expectedAssignmentGeneration": 0,
+        "before": {
+          "repositoryId": "00000000-0000-0000-0000-000000000001",
+          "commit": null,
+          "tree": {
+            "algorithm": "sha1",
+            "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "dirtyContentDigest": null,
+          "retainedLocatorId": "00000000-0000-0000-0000-000000000001"
+        },
+        "after": {
+          "repositoryId": "00000000-0000-0000-0000-000000000001",
+          "commit": null,
+          "tree": {
+            "algorithm": "sha1",
+            "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "dirtyContentDigest": null,
+          "retainedLocatorId": "00000000-0000-0000-0000-000000000001"
+        },
+        "mode": "unchanged-base",
+        "rebind": null,
+        "preparationBasis": [
+          {
+            "kind": "knowledge",
+            "reference": {
+              "kind": "clause",
+              "revision": {
+                "document": {
+                  "projectId": "00000000-0000-0000-0000-000000000001",
+                  "documentId": "00000000-0000-0000-0000-000000000001"
+                },
+                "revisionId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+              "clauseId": "x",
+              "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        ],
+        "nativeMessageId": "msg_connected_notice",
+        "notification": {
+          "digest": "75c265ef11923fbb4f5a4f8a51a71d08bcca399239e899fa21575e5d0c6dd67f",
+          "byteLength": 29
+        },
+        "supersedes": null,
+        "generation": 1,
+        "phase": "in-flight",
+        "stage": "environment",
+        "observations": [],
+        "evidence": [],
+        "delivery": null,
+        "nativeIntent": null,
+        "reason": null,
+        "effect": {
+          "attemptId": "00000000-0000-0000-0000-000000000001",
+          "requestKey": "00000000-0000-0000-0000-000000000001",
+          "requestDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+          "state": "armed",
+          "previousAttempt": null,
+          "basis": []
+        }
+      }
+    },
+    "after": {
+      "formatVersion": 1,
+      "family": "continuations",
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-00000000002b"
+      },
+      "payload": {
+        "origin": {
+          "assignmentId": "00000000-0000-0000-0000-000000000001",
+          "generation": 0
+        },
+        "assignment": {
+          "assignmentId": "00000000-0000-0000-0000-000000000001",
+          "generation": 0
+        },
+        "binding": {
+          "family": "assignment-bindings",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "assignmentId": "00000000-0000-0000-0000-000000000001",
+            "generation": 0
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "checkpoint": {
+          "family": "checkpoints",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-000000000005"
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "sourceCheckpoint": {
+          "family": "checkpoints",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-000000000005"
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "conditions": [
+          {
+            "condition": {
+              "family": "conditions",
+              "key": {
+                "projectId": "00000000-0000-0000-0000-000000000001",
+                "id": "00000000-0000-0000-0000-000000000029"
+              },
+              "digest": "88d554429dc3fbbe8dcd058f2911b134aa8e53a0df96327a5faa92e557e94e8e"
+            },
+            "confirmation": {
+              "family": "condition-confirmations",
+              "key": {
+                "projectId": "00000000-0000-0000-0000-000000000001",
+                "id": "00000000-0000-0000-0000-00000000002a"
+              },
+              "digest": "26dfb047076ecd3ea931a67fd8070f0ab21786423b5be0df0a0d9042af7da482"
+            }
+          }
+        ],
+        "coverage": {
+          "basisH": {
+            "algorithm": "sha1",
+            "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "conditionsDigest": "098e53aa94c5cc6e2e336d64c8a66da8a16955c89af0e93bed65c10cd5dbca15",
+          "conditionCount": 1
+        },
+        "expectedAssignmentGeneration": 0,
+        "before": {
+          "repositoryId": "00000000-0000-0000-0000-000000000001",
+          "commit": null,
+          "tree": {
+            "algorithm": "sha1",
+            "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "dirtyContentDigest": null,
+          "retainedLocatorId": "00000000-0000-0000-0000-000000000001"
+        },
+        "after": {
+          "repositoryId": "00000000-0000-0000-0000-000000000001",
+          "commit": null,
+          "tree": {
+            "algorithm": "sha1",
+            "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "dirtyContentDigest": null,
+          "retainedLocatorId": "00000000-0000-0000-0000-000000000001"
+        },
+        "mode": "unchanged-base",
+        "rebind": null,
+        "preparationBasis": [
+          {
+            "kind": "knowledge",
+            "reference": {
+              "kind": "clause",
+              "revision": {
+                "document": {
+                  "projectId": "00000000-0000-0000-0000-000000000001",
+                  "documentId": "00000000-0000-0000-0000-000000000001"
+                },
+                "revisionId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+              "clauseId": "x",
+              "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        ],
+        "nativeMessageId": "msg_connected_notice",
+        "notification": {
+          "digest": "75c265ef11923fbb4f5a4f8a51a71d08bcca399239e899fa21575e5d0c6dd67f",
+          "byteLength": 29
+        },
+        "supersedes": null,
+        "generation": 2,
+        "phase": "environment-confirmed",
+        "stage": "environment",
+        "observations": [],
+        "evidence": [],
+        "delivery": null,
+        "nativeIntent": null,
+        "reason": null,
+        "effect": {
+          "attemptId": "00000000-0000-0000-0000-000000000001",
+          "requestKey": "00000000-0000-0000-0000-000000000001",
+          "requestDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+          "state": "confirmed",
+          "previousAttempt": null,
+          "basis": []
+        }
+      }
+    },
+    "receipt": {
+      "formatVersion": 3,
+      "family": "command-receipt",
+      "key": {
+        "principalId": "00000000-0000-0000-0000-000000000009",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "operation": "observe_continuation",
+        "requestKey": "00000000-0000-0000-0000-000000000193"
+      },
+      "payload": {
+        "storeId": "00000000-0000-0000-0000-000000000007",
+        "fingerprintVersion": 3,
+        "fingerprint": "5477a24e979ba2a75239a8e8435485ff8ea4cf50646415dfc201e7a13f8b3b18",
+        "validatedAt": {
+          "algorithm": "sha1",
+          "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "authenticatedByCredentialId": "00000000-0000-0000-0000-00000000000a",
+        "outcome": {
+          "kind": "success",
+          "operation": "observe_continuation",
+          "result": {
+            "key": {
+              "projectId": "00000000-0000-0000-0000-000000000001",
+              "id": "00000000-0000-0000-0000-00000000002b"
+            },
+            "generation": 2,
+            "digest": "b103f930fc11441a9d6c0465adb9f74dd6b603e55db414a2095df3a96201abe5"
+          },
+          "domainReplayed": false
+        },
+        "writes": [
+          {
+            "namespace": "work",
+            "family": "continuations",
+            "key": {
+              "projectId": "00000000-0000-0000-0000-000000000001",
+              "id": "00000000-0000-0000-0000-00000000002b"
+            },
+            "beforeDigest": "d6b7349dfe3d39f73d0f53d5b329566d4af7a272ee096437fa1ecf2f7a2b3783",
+            "afterDigest": "b103f930fc11441a9d6c0465adb9f74dd6b603e55db414a2095df3a96201abe5"
+          }
+        ]
+      }
+    },
+    "reply": {
+      "formatVersion": 1,
+      "kind": "settled",
+      "identity": {
+        "principalId": "00000000-0000-0000-0000-000000000009",
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "operation": "observe_continuation",
+        "requestKey": "00000000-0000-0000-0000-000000000193"
+      },
+      "fingerprint": "5477a24e979ba2a75239a8e8435485ff8ea4cf50646415dfc201e7a13f8b3b18",
+      "validatedAt": {
+        "algorithm": "sha1",
+        "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "authenticatedByCredentialId": "00000000-0000-0000-0000-00000000000a",
+      "outcome": {
+        "kind": "success",
+        "operation": "observe_continuation",
+        "result": {
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-00000000002b"
+          },
+          "generation": 2,
+          "digest": "b103f930fc11441a9d6c0465adb9f74dd6b603e55db414a2095df3a96201abe5"
+        },
+        "domainReplayed": false
+      },
+      "commandReplayed": false,
+      "publication": {
+        "algorithm": "sha1",
+        "hex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    },
+    "status": "metadata-only effect example; directly referenced bodies already retained"
+  }
+]

@@ -1,0 +1,65 @@
+{
+  "formatVersion": 1,
+  "family": "input-manifests",
+  "key": {
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "id": "00000000-0000-0000-0000-000000000001"
+  },
+  "payload": {
+    "task": {
+      "projectId": "00000000-0000-0000-0000-000000000001",
+      "taskId": "00000000-0000-0000-0000-000000000001",
+      "revision": 0
+    },
+    "base": {
+      "code": [],
+      "knowledgeManifestId": "00000000-0000-0000-0000-000000000001",
+      "knowledgeManifestDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "applicability": {
+      "projectId": "00000000-0000-0000-0000-000000000001",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "revision": 0
+    },
+    "items": [
+      {
+        "source": {
+          "kind": "knowledge",
+          "reference": {
+            "kind": "clause",
+            "revision": {
+              "document": {
+                "projectId": "00000000-0000-0000-0000-000000000001",
+                "documentId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionId": "00000000-0000-0000-0000-000000000001"
+            },
+            "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+            "clauseId": "synthetic",
+            "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        "mandatory": false,
+        "reason": "synthetic",
+        "exactFragments": []
+      }
+    ],
+    "declaredClosureAssessment": {
+      "kind": "knowledge",
+      "reference": {
+        "kind": "clause",
+        "revision": {
+          "document": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "documentId": "00000000-0000-0000-0000-000000000001"
+          },
+          "revisionId": "00000000-0000-0000-0000-000000000001"
+        },
+        "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+        "clauseId": "synthetic",
+        "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    "knownGaps": []
+  }
+}

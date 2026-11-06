@@ -1,0 +1,14 @@
+{
+  "formatVersion": 1,
+  "family": "task-heads",
+  "key": {
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "taskId": "00000000-0000-0000-0000-000000000001"
+  },
+  "payload": {
+    "generation": 0,
+    "title": "synthetic",
+    "draft": null,
+    "executable": null
+  }
+}

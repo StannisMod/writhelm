@@ -1,0 +1,23 @@
+{
+  "name": "writhelm-opencode",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { "./gui-experimental": "./dist/gui-experimental.cjs" },
+  "dependencies": {
+    "@opencode/plugin": "2.2.5",
+    "ajv": "8.17.1",
+    "effect": "4.0.6",
+    "lossless-json": "4.3.0",
+    "solid-js": "1.9.17"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "electron": "44.9.1",
+    "linkedom": "0.18.12",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vite": "7.3.7",
+    "vite-plugin-solid": "2.11.10"
+  },
+  "overrides": { "rollup": "npm:@rollup/wasm-node@4.43.0" }
+}

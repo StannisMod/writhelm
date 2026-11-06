@@ -1,0 +1,1725 @@
+{
+  "accept_result": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "accept_result",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001"
+      },
+      "data": {
+        "result": {
+          "family": "task-revisions",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "taskId": "00000000-0000-0000-0000-000000000001",
+            "revision": 0
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "task": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "verificationPlan": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "evidence": [],
+        "reports": [],
+        "dispositions": [],
+        "applicability": {
+          "family": "task-revisions",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "taskId": "00000000-0000-0000-0000-000000000001",
+            "revision": 0
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "criterionIds": [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "permittedTargets": [],
+        "basis": {
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000",
+          "byteLength": 0
+        }
+      },
+      "bodies": []
+    }
+  },
+  "bind_assignment": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "bind_assignment",
+    "payload": {
+      "assignmentId": "00000000-0000-0000-0000-000000000001",
+      "expectedGeneration": 0,
+      "intentId": "00000000-0000-0000-0000-000000000001",
+      "expectedIntentGeneration": 0,
+      "nativeHostId": "00000000-0000-0000-0000-000000000001",
+      "nativeSessionId": "synthetic",
+      "workspaceId": "00000000-0000-0000-0000-000000000001",
+      "observations": [
+        {
+          "kind": "knowledge",
+          "reference": {
+            "kind": "clause",
+            "revision": {
+              "document": {
+                "projectId": "00000000-0000-0000-0000-000000000001",
+                "documentId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionId": "00000000-0000-0000-0000-000000000001"
+            },
+            "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+            "clauseId": "synthetic",
+            "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "bodies": []
+    }
+  },
+  "complete_assignment": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "complete_assignment",
+    "payload": {
+      "assignmentId": "00000000-0000-0000-0000-000000000001",
+      "expectedGeneration": 0,
+      "checkpoint": {
+        "family": "task-revisions",
+        "key": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "completionBasis": [
+        {
+          "kind": "knowledge",
+          "reference": {
+            "kind": "clause",
+            "revision": {
+              "document": {
+                "projectId": "00000000-0000-0000-0000-000000000001",
+                "documentId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionId": "00000000-0000-0000-0000-000000000001"
+            },
+            "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+            "clauseId": "synthetic",
+            "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "releaseResources": [],
+      "bodies": []
+    }
+  },
+  "create_profile": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "create_profile",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "profileId": "00000000-0000-0000-0000-000000000001",
+        "revision": 0
+      },
+      "data": {
+        "nativeProfileId": "synthetic",
+        "qualificationEvidence": [],
+        "model": {
+          "providerId": "synthetic",
+          "modelId": "model-free-fixture",
+          "variant": null
+        },
+        "route": "synthetic",
+        "effort": "synthetic",
+        "contextTokens": 1,
+        "outputReserveTokens": 1,
+        "toolReserveTokens": 1,
+        "compactionReserveTokens": 1,
+        "compactionPolicyId": "synthetic",
+        "requestAccountingProfileId": "synthetic",
+        "executionAssurance": "E-COOP-1",
+        "permissions": [],
+        "platform": "linux",
+        "qualification": "unqualified"
+      },
+      "bodies": []
+    }
+  },
+  "create_task_revision": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "create_task_revision",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "taskId": "00000000-0000-0000-0000-000000000001",
+        "revision": 0
+      },
+      "data": {
+        "kind": "research",
+        "state": "draft",
+        "objective": "synthetic",
+        "base": null,
+        "scope": {
+          "read": "synthetic",
+          "write": "synthetic",
+          "decision": "synthetic",
+          "exclusions": []
+        },
+        "constraints": [],
+        "dependencies": [],
+        "criteria": [
+          {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "statement": "synthetic",
+            "clauses": []
+          }
+        ],
+        "escalation": [
+          "synthetic"
+        ],
+        "expectedOutput": "synthetic",
+        "executionProfile": null,
+        "verificationPlan": null,
+        "approvedDesign": [],
+        "unresolved": []
+      },
+      "newVerificationPlan": null,
+      "bodies": []
+    }
+  },
+  "observe_integration": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "observe_integration",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001"
+      },
+      "intent": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001"
+      },
+      "expectedGeneration": 0,
+      "outcome": "confirmed",
+      "resultingSnapshot": {
+        "repositoryId": "00000000-0000-0000-0000-000000000001",
+        "commit": null,
+        "tree": {
+          "algorithm": "sha1",
+          "hex": "0000000000000000000000000000000000000000"
+        },
+        "dirtyContentDigest": null,
+        "retainedLocatorId": "00000000-0000-0000-0000-000000000001"
+      },
+      "applicability": {
+        "family": "task-revisions",
+        "key": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "evidence": [],
+      "observations": [
+        {
+          "kind": "knowledge",
+          "reference": {
+            "kind": "clause",
+            "revision": {
+              "document": {
+                "projectId": "00000000-0000-0000-0000-000000000001",
+                "documentId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionId": "00000000-0000-0000-0000-000000000001"
+            },
+            "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+            "clauseId": "synthetic",
+            "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "pending": [],
+      "bodies": []
+    }
+  },
+  "observe_native_transition": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "observe_native_transition",
+    "payload": {
+      "assignmentId": "00000000-0000-0000-0000-000000000001",
+      "expectedGeneration": 0,
+      "intentId": "00000000-0000-0000-0000-000000000001",
+      "expectedIntentGeneration": 0,
+      "outcome": "confirmed",
+      "observations": [
+        {
+          "kind": "knowledge",
+          "reference": {
+            "kind": "clause",
+            "revision": {
+              "document": {
+                "projectId": "00000000-0000-0000-0000-000000000001",
+                "documentId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionId": "00000000-0000-0000-0000-000000000001"
+            },
+            "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+            "clauseId": "synthetic",
+            "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "bodies": []
+    }
+  },
+  "pin_input_manifest": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "pin_input_manifest",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001"
+      },
+      "data": {
+        "task": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "base": {
+          "code": [],
+          "knowledgeManifestId": "00000000-0000-0000-0000-000000000001",
+          "knowledgeManifestDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "applicability": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "items": [
+          {
+            "source": {
+              "kind": "knowledge",
+              "reference": {
+                "kind": "clause",
+                "revision": {
+                  "document": {
+                    "projectId": "00000000-0000-0000-0000-000000000001",
+                    "documentId": "00000000-0000-0000-0000-000000000001"
+                  },
+                  "revisionId": "00000000-0000-0000-0000-000000000001"
+                },
+                "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+                "clauseId": "synthetic",
+                "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+              }
+            },
+            "mandatory": false,
+            "reason": "synthetic",
+            "exactFragments": []
+          }
+        ],
+        "declaredClosureAssessment": {
+          "kind": "knowledge",
+          "reference": {
+            "kind": "clause",
+            "revision": {
+              "document": {
+                "projectId": "00000000-0000-0000-0000-000000000001",
+                "documentId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionId": "00000000-0000-0000-0000-000000000001"
+            },
+            "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+            "clauseId": "synthetic",
+            "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        "knownGaps": []
+      },
+      "bodies": []
+    }
+  },
+  "prepare_integration": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "prepare_integration",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001"
+      },
+      "result": {
+        "family": "task-revisions",
+        "key": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "acceptance": {
+        "family": "task-revisions",
+        "key": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "targetRepositoryId": "00000000-0000-0000-0000-000000000001",
+      "targetId": "00000000-0000-0000-0000-000000000001",
+      "expectedTarget": {
+        "algorithm": "sha1",
+        "hex": "0000000000000000000000000000000000000000"
+      },
+      "expectedTree": {
+        "algorithm": "sha1",
+        "hex": "0000000000000000000000000000000000000000"
+      },
+      "expectedDirtyDigest": null,
+      "resources": [
+        {
+          "resource": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "resourceId": "00000000-0000-0000-0000-000000000001"
+          },
+          "expectedGeneration": null
+        }
+      ],
+      "correlationId": "00000000-0000-0000-0000-000000000001",
+      "bodies": []
+    }
+  },
+  "rebind_assignment": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "rebind_assignment",
+    "payload": {
+      "assignmentId": "00000000-0000-0000-0000-000000000001",
+      "expectedGeneration": 0,
+      "task": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "taskId": "00000000-0000-0000-0000-000000000001",
+        "revision": 0
+      },
+      "manifest": {
+        "family": "task-revisions",
+        "key": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "profile": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "profileId": "00000000-0000-0000-0000-000000000001",
+        "revision": 0
+      },
+      "checkpoint": {
+        "family": "task-revisions",
+        "key": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "recovery": {
+        "family": "task-revisions",
+        "key": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "intentId": "00000000-0000-0000-0000-000000000001",
+      "correlationId": "00000000-0000-0000-0000-000000000001",
+      "bodies": [],
+      "intendedExecution": {
+        "controllerId": "00000000-0000-0000-0000-000000000001",
+        "executionId": "00000000-0000-0000-0000-000000000001",
+        "template": "executor-v1",
+        "nativeHostId": "00000000-0000-0000-0000-000000000001",
+        "nativeSessionId": "ses_h1synthetic"
+      }
+    }
+  },
+  "record_checkpoint": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "record_checkpoint",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001"
+      },
+      "data": {
+        "task": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "assignment": {
+          "assignmentId": "00000000-0000-0000-0000-000000000001",
+          "generation": 0
+        },
+        "manifest": {
+          "family": "task-revisions",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "taskId": "00000000-0000-0000-0000-000000000001",
+            "revision": 0
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "loadedView": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "sourceCutId": "00000000-0000-0000-0000-000000000001",
+        "plan": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "planGeneration": 0,
+        "memory": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "planSteps": [],
+        "artifacts": [],
+        "pending": [],
+        "report": {
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000",
+          "byteLength": 0
+        },
+        "handoff": "unfinished",
+        "retrospective": null,
+        "result": null,
+        "notification": null
+      },
+      "expectedAssignmentGeneration": 0,
+      "bodies": []
+    }
+  },
+  "record_delivery": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "record_delivery",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001"
+      },
+      "assignment": {
+        "assignmentId": "00000000-0000-0000-0000-000000000001",
+        "generation": 0
+      },
+      "sourceCutId": "00000000-0000-0000-0000-000000000001",
+      "destinationTask": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "taskId": "00000000-0000-0000-0000-000000000001",
+        "revision": 0
+      },
+      "content": {
+        "digest": "0000000000000000000000000000000000000000000000000000000000000000",
+        "byteLength": 0
+      },
+      "expectedGeneration": null,
+      "state": "pending",
+      "basis": [],
+      "bodies": []
+    }
+  },
+  "record_disposition": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "record_disposition",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001"
+      },
+      "data": {
+        "result": {
+          "family": "task-revisions",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "taskId": "00000000-0000-0000-0000-000000000001",
+            "revision": 0
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "report": {
+          "family": "task-revisions",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "taskId": "00000000-0000-0000-0000-000000000001",
+            "revision": 0
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "findingId": "00000000-0000-0000-0000-000000000001",
+        "gateIds": [],
+        "decision": "confirmed-blocking",
+        "basis": [
+          {
+            "kind": "knowledge",
+            "reference": {
+              "kind": "clause",
+              "revision": {
+                "document": {
+                  "projectId": "00000000-0000-0000-0000-000000000001",
+                  "documentId": "00000000-0000-0000-0000-000000000001"
+                },
+                "revisionId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+              "clauseId": "synthetic",
+              "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        ],
+        "replacementResult": null,
+        "ownerDecision": null
+      },
+      "bodies": []
+    }
+  },
+  "record_evidence": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "record_evidence",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001"
+      },
+      "data": {
+        "subjects": [
+          {
+            "kind": "knowledge",
+            "reference": {
+              "kind": "clause",
+              "revision": {
+                "document": {
+                  "projectId": "00000000-0000-0000-0000-000000000001",
+                  "documentId": "00000000-0000-0000-0000-000000000001"
+                },
+                "revisionId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+              "clauseId": "synthetic",
+              "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        ],
+        "significantInputs": [],
+        "method": "synthetic",
+        "boundary": "mock",
+        "environment": {
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000",
+          "byteLength": 0
+        },
+        "runId": "00000000-0000-0000-0000-000000000001",
+        "outcome": "passed",
+        "artifacts": [],
+        "clauseCases": [],
+        "limits": [],
+        "report": {
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000",
+          "byteLength": 0
+        }
+      },
+      "bodies": []
+    }
+  },
+  "record_evidence_applicability": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "record_evidence_applicability",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001"
+      },
+      "data": {
+        "result": {
+          "family": "task-revisions",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "taskId": "00000000-0000-0000-0000-000000000001",
+            "revision": 0
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "evidence": [],
+        "heldGateIds": [],
+        "basis": [
+          {
+            "kind": "knowledge",
+            "reference": {
+              "kind": "clause",
+              "revision": {
+                "document": {
+                  "projectId": "00000000-0000-0000-0000-000000000001",
+                  "documentId": "00000000-0000-0000-0000-000000000001"
+                },
+                "revisionId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+              "clauseId": "synthetic",
+              "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        ]
+      },
+      "bodies": []
+    }
+  },
+  "record_loaded_view": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "record_loaded_view",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "revision": 0
+      },
+      "data": {
+        "task": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "manifest": {
+          "family": "task-revisions",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "taskId": "00000000-0000-0000-0000-000000000001",
+            "revision": 0
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "assignment": {
+          "assignmentId": "00000000-0000-0000-0000-000000000001",
+          "generation": 0
+        },
+        "previous": null,
+        "additions": [],
+        "discoveredGaps": []
+      },
+      "bodies": []
+    }
+  },
+  "record_memory": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "record_memory",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "revision": 0
+      },
+      "data": {
+        "task": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "assignment": {
+          "assignmentId": "00000000-0000-0000-0000-000000000001",
+          "generation": 0
+        },
+        "previous": null,
+        "sourceCutId": "00000000-0000-0000-0000-000000000001",
+        "entries": [],
+        "gaps": [],
+        "pending": []
+      },
+      "bodies": []
+    }
+  },
+  "record_recovery": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "record_recovery",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001"
+      },
+      "expectedGeneration": 0,
+      "data": {
+        "assignment": {
+          "assignmentId": "00000000-0000-0000-0000-000000000001",
+          "generation": 0
+        },
+        "decision": "bind-existing",
+        "basis": [
+          {
+            "kind": "knowledge",
+            "reference": {
+              "kind": "clause",
+              "revision": {
+                "document": {
+                  "projectId": "00000000-0000-0000-0000-000000000001",
+                  "documentId": "00000000-0000-0000-0000-000000000001"
+                },
+                "revisionId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+              "clauseId": "synthetic",
+              "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        ],
+        "isolatedResources": [],
+        "retainedClaims": [],
+        "remainingUncertainty": []
+      },
+      "bodies": []
+    }
+  },
+  "record_retrospective": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "record_retrospective",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001"
+      },
+      "data": {
+        "task": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "assignment": {
+          "assignmentId": "00000000-0000-0000-0000-000000000001",
+          "generation": 0
+        },
+        "result": null,
+        "outcome": "no-significant-new-findings",
+        "observations": []
+      },
+      "bodies": []
+    }
+  },
+  "request_native_transition": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "request_native_transition",
+    "payload": {
+      "assignmentId": "00000000-0000-0000-0000-000000000001",
+      "expectedGeneration": 0,
+      "intentId": "00000000-0000-0000-0000-000000000001",
+      "correlationId": "00000000-0000-0000-0000-000000000001",
+      "transition": "start",
+      "checkpoint": null,
+      "bodies": []
+    }
+  },
+  "reserve_assignment": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "reserve_assignment",
+    "payload": {
+      "assignmentId": "00000000-0000-0000-0000-000000000001",
+      "task": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "taskId": "00000000-0000-0000-0000-000000000001",
+        "revision": 0
+      },
+      "manifest": {
+        "family": "task-revisions",
+        "key": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "profile": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "profileId": "00000000-0000-0000-0000-000000000001",
+        "revision": 0
+      },
+      "workspaceId": "00000000-0000-0000-0000-000000000001",
+      "resources": [
+        {
+          "resource": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "resourceId": "00000000-0000-0000-0000-000000000001"
+          },
+          "expectedGeneration": null
+        }
+      ],
+      "reviewSubjects": [],
+      "intentId": "00000000-0000-0000-0000-000000000001",
+      "correlationId": "00000000-0000-0000-0000-000000000001",
+      "bodies": [],
+      "intendedExecution": {
+        "controllerId": "00000000-0000-0000-0000-000000000001",
+        "executionId": "00000000-0000-0000-0000-000000000001",
+        "template": "executor-v1",
+        "nativeHostId": "00000000-0000-0000-0000-000000000001",
+        "nativeSessionId": "ses_h1synthetic"
+      }
+    }
+  },
+  "revise_applicability": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "revise_applicability",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "revision": 0
+      },
+      "data": {
+        "previous": null,
+        "entries": [],
+        "basis": [
+          {
+            "kind": "knowledge",
+            "reference": {
+              "kind": "clause",
+              "revision": {
+                "document": {
+                  "projectId": "00000000-0000-0000-0000-000000000001",
+                  "documentId": "00000000-0000-0000-0000-000000000001"
+                },
+                "revisionId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+              "clauseId": "synthetic",
+              "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        ]
+      },
+      "bodies": []
+    }
+  },
+  "revise_verification_plan": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "revise_verification_plan",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "revision": 0
+      },
+      "data": {
+        "task": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "previous": null,
+        "criteria": [
+          {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "statement": "synthetic",
+            "clauses": []
+          }
+        ],
+        "gates": [
+          {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "criterionIds": [
+              "00000000-0000-0000-0000-000000000001"
+            ],
+            "boundary": "pure",
+            "independent": false,
+            "stage": "dispatch",
+            "groupId": null,
+            "deferred": false,
+            "reason": "synthetic"
+          }
+        ],
+        "reason": "synthetic",
+        "authorizedChanges": []
+      },
+      "bodies": []
+    }
+  },
+  "set_task_head": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "set_task_head",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "taskId": "00000000-0000-0000-0000-000000000001"
+      },
+      "expectedGeneration": null,
+      "title": "synthetic",
+      "draft": null,
+      "executable": null,
+      "bodies": []
+    }
+  },
+  "submit_result": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "submit_result",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001"
+      },
+      "data": {
+        "task": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "assignment": {
+          "assignmentId": "00000000-0000-0000-0000-000000000001",
+          "generation": 0
+        },
+        "manifest": {
+          "family": "task-revisions",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "taskId": "00000000-0000-0000-0000-000000000001",
+            "revision": 0
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "artifacts": [
+          {
+            "repositoryId": "00000000-0000-0000-0000-000000000001",
+            "commit": null,
+            "tree": {
+              "algorithm": "sha1",
+              "hex": "0000000000000000000000000000000000000000"
+            },
+            "dirtyContentDigest": null,
+            "retainedLocatorId": "00000000-0000-0000-0000-000000000001"
+          }
+        ],
+        "changes": {
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000",
+          "byteLength": 0
+        },
+        "claimedCriteria": [],
+        "evidence": [],
+        "retrospective": {
+          "family": "task-revisions",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "taskId": "00000000-0000-0000-0000-000000000001",
+            "revision": 0
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "pending": []
+      },
+      "bodies": []
+    }
+  },
+  "submit_verification_report": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "submit_verification_report",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001"
+      },
+      "data": {
+        "task": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "assignment": {
+          "assignmentId": "00000000-0000-0000-0000-000000000001",
+          "generation": 0
+        },
+        "subjects": [
+          {
+            "family": "task-revisions",
+            "key": {
+              "projectId": "00000000-0000-0000-0000-000000000001",
+              "taskId": "00000000-0000-0000-0000-000000000001",
+              "revision": 0
+            },
+            "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        ],
+        "plan": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "gateIds": [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "freshContextBasis": {
+          "kind": "knowledge",
+          "reference": {
+            "kind": "clause",
+            "revision": {
+              "document": {
+                "projectId": "00000000-0000-0000-0000-000000000001",
+                "documentId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionId": "00000000-0000-0000-0000-000000000001"
+            },
+            "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+            "clauseId": "synthetic",
+            "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        "readOnlySnapshotBasis": [
+          {
+            "kind": "knowledge",
+            "reference": {
+              "kind": "clause",
+              "revision": {
+                "document": {
+                  "projectId": "00000000-0000-0000-0000-000000000001",
+                  "documentId": "00000000-0000-0000-0000-000000000001"
+                },
+                "revisionId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+              "clauseId": "synthetic",
+              "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        ],
+        "findings": [],
+        "evidence": [],
+        "report": {
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000",
+          "byteLength": 0
+        },
+        "limits": []
+      },
+      "bodies": []
+    }
+  },
+  "update_plan": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000000a",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "update_plan",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "revision": 0
+      },
+      "task": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "taskId": "00000000-0000-0000-0000-000000000001",
+        "revision": 0
+      },
+      "expectedGeneration": null,
+      "steps": [],
+      "reason": "synthetic",
+      "previousCheckpoint": null,
+      "bodies": [],
+      "assignment": null
+    }
+  },
+  "record_source_cut": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-000000000001",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "record_source_cut",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001"
+      },
+      "data": {
+        "nativeHostId": "00000000-0000-0000-0000-000000000001",
+        "nativeSessionId": "ses_h1synthetic",
+        "sourceFormatVersion": 1,
+        "renderedRequestDigest": "1111111111111111111111111111111111111111111111111111111111111111",
+        "packetDigest": "2222222222222222222222222222222222222222222222222222222222222222",
+        "retainedLocatorId": "00000000-0000-0000-0000-000000000001",
+        "nativeMessages": [
+          {
+            "messageId": "msg_synthetic",
+            "digest": "3333333333333333333333333333333333333333333333333333333333333333"
+          }
+        ],
+        "retainedFragments": [],
+        "task": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "assignment": {
+          "assignmentId": "00000000-0000-0000-0000-000000000001",
+          "generation": 0
+        },
+        "profile": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "profileId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "pending": []
+      },
+      "bodies": []
+    }
+  },
+  "record_controller_continuation": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-000000000001",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "record_controller_continuation",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "controllerId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001"
+      },
+      "data": {
+        "profile": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "profileId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "previous": null,
+        "source": {
+          "nativeHostId": "00000000-0000-0000-0000-000000000001",
+          "nativeSessionId": "ses_h1synthetic",
+          "sourceFormatVersion": 1,
+          "renderedRequestDigest": "1111111111111111111111111111111111111111111111111111111111111111",
+          "packetDigest": "2222222222222222222222222222222222222222222222222222222222222222",
+          "retainedLocatorId": "00000000-0000-0000-0000-000000000001",
+          "nativeMessages": [
+            {
+              "messageId": "msg_synthetic",
+              "digest": "3333333333333333333333333333333333333333333333333333333333333333"
+            }
+          ],
+          "retainedFragments": []
+        },
+        "frontier": [
+          {
+            "task": {
+              "projectId": "00000000-0000-0000-0000-000000000001",
+              "taskId": "00000000-0000-0000-0000-000000000001",
+              "revision": 0
+            },
+            "assignments": [],
+            "obligationIds": []
+          }
+        ],
+        "entries": [],
+        "gaps": [],
+        "pending": [],
+        "report": {
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000",
+          "byteLength": 0
+        }
+      },
+      "bodies": []
+    }
+  },
+  "replace_work_grants": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000001e",
+    "projectId": "00000000-0000-0000-0000-000000000002",
+    "operation": "replace_work_grants",
+    "payload": {
+      "principalId": "00000000-0000-0000-0000-00000000000a",
+      "expectedGeneration": 0,
+      "expectedWorkGrantDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "permissions": [
+        "RESULT_ACCEPT",
+        "TARGET_INTEGRATE",
+        "TASK_DISPATCH",
+        "TASK_PLAN"
+      ]
+    }
+  },
+  "register_delegation": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000001e",
+    "projectId": "00000000-0000-0000-0000-000000000002",
+    "operation": "register_delegation",
+    "payload": {
+      "delegationId": "00000000-0000-0000-0000-00000000000f",
+      "binding": {
+        "controllerId": "00000000-0000-0000-0000-00000000000b",
+        "projectId": "00000000-0000-0000-0000-000000000002",
+        "principalId": "00000000-0000-0000-0000-000000000003",
+        "initialCredentialId": "00000000-0000-0000-0000-000000000004",
+        "taskId": "00000000-0000-0000-0000-00000000000c",
+        "assignmentId": "00000000-0000-0000-0000-00000000000d",
+        "executionId": "00000000-0000-0000-0000-00000000000e",
+        "executionGeneration": 0,
+        "template": "executor-v1",
+        "subjectResults": []
+      },
+      "expectedAssignmentGeneration": 0,
+      "verifierVersion": 1,
+      "verifierDigest": "d7e7768bfbb2a58f9417759671900e7f9fc779700b0b00116f080d5825763cb2",
+      "knowledgeCapabilities": [
+        "READ"
+      ]
+    }
+  },
+  "rotate_delegated_credential": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000001e",
+    "projectId": "00000000-0000-0000-0000-000000000002",
+    "operation": "rotate_delegated_credential",
+    "payload": {
+      "delegationId": "00000000-0000-0000-0000-00000000000f",
+      "credentialId": "00000000-0000-0000-0000-000000000004",
+      "expectedGeneration": 0,
+      "expectedDelegationGeneration": 0,
+      "expectedAssignmentGeneration": 0,
+      "newCredentialId": "00000000-0000-0000-0000-000000000028",
+      "verifierVersion": 1,
+      "newVerifierDigest": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+  },
+  "revoke_delegated_credential": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000001e",
+    "projectId": "00000000-0000-0000-0000-000000000002",
+    "operation": "revoke_delegated_credential",
+    "payload": {
+      "delegationId": "00000000-0000-0000-0000-00000000000f",
+      "credentialId": "00000000-0000-0000-0000-000000000004",
+      "expectedGeneration": 0,
+      "expectedDelegationGeneration": 0
+    }
+  },
+  "revoke_delegation": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000001e",
+    "projectId": "00000000-0000-0000-0000-000000000002",
+    "operation": "revoke_delegation",
+    "payload": {
+      "delegationId": "00000000-0000-0000-0000-00000000000f",
+      "expectedGeneration": 0
+    }
+  },
+  "replace_isolated_assignment": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-00000000001f",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "replace_isolated_assignment",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000003"
+      },
+      "previous": null,
+      "old": {
+        "key": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "id": "00000000-0000-0000-0000-000000000002"
+        },
+        "expectedGeneration": 7,
+        "executionGeneration": 2,
+        "digest": "e378f0e074f253812960e9bf6641eb901a836602ba66e9bc8b3648fa58daaeec"
+      },
+      "recovery": null,
+      "next": {
+        "assignmentId": "00000000-0000-0000-0000-000000000004",
+        "task": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-00000000000c",
+          "revision": 0
+        },
+        "manifest": {
+          "family": "input-manifests",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-00000000000e"
+          },
+          "digest": "1111111111111111111111111111111111111111111111111111111111111111"
+        },
+        "profile": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "profileId": "00000000-0000-0000-0000-00000000000d",
+          "revision": 0
+        },
+        "workspaceId": "00000000-0000-0000-0000-000000000020",
+        "resources": [
+          {
+            "resource": {
+              "projectId": "00000000-0000-0000-0000-000000000001",
+              "resourceId": "00000000-0000-0000-0000-000000000021"
+            },
+            "expectedGeneration": null
+          }
+        ],
+        "intendedExecution": {
+          "controllerId": "00000000-0000-0000-0000-000000000009",
+          "executionId": "00000000-0000-0000-0000-00000000001e",
+          "template": "executor-v1",
+          "nativeHostId": "00000000-0000-0000-0000-00000000000b",
+          "nativeSessionId": "ses_new"
+        },
+        "intentId": "00000000-0000-0000-0000-000000000022",
+        "correlationId": "00000000-0000-0000-0000-000000000023"
+      },
+      "continuation": {
+        "checkpoint": null,
+        "gaps": [],
+        "pending": []
+      },
+      "proof": {
+        "retainedLocatorId": "00000000-0000-0000-0000-000000000024",
+        "digest": "4444444444444444444444444444444444444444444444444444444444444444"
+      },
+      "bodies": []
+    }
+  },
+  "record_condition": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-000000000190",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "record_condition",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000029"
+      },
+      "data": {
+        "consumerTask": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "consumer": {
+          "assignmentId": "00000000-0000-0000-0000-000000000001",
+          "generation": 0
+        },
+        "responsibleTask": {
+          "projectId": "00000000-0000-0000-0000-000000000001",
+          "taskId": "00000000-0000-0000-0000-000000000001",
+          "revision": 0
+        },
+        "condition": {
+          "digest": "75c265ef11923fbb4f5a4f8a51a71d08bcca399239e899fa21575e5d0c6dd67f",
+          "byteLength": 29
+        },
+        "assessor": {
+          "kind": "controller",
+          "controllerId": "00000000-0000-0000-0000-000000000001"
+        },
+        "requiredGateIds": [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "agreement": [
+          {
+            "kind": "knowledge",
+            "reference": {
+              "kind": "clause",
+              "revision": {
+                "document": {
+                  "projectId": "00000000-0000-0000-0000-000000000001",
+                  "documentId": "00000000-0000-0000-0000-000000000001"
+                },
+                "revisionId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+              "clauseId": "x",
+              "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        ],
+        "consumerNotice": {
+          "digest": "75c265ef11923fbb4f5a4f8a51a71d08bcca399239e899fa21575e5d0c6dd67f",
+          "byteLength": 29
+        },
+        "governingPlan": {
+          "family": "verification-plans",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-000000000001",
+            "revision": 0
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "supersedes": [],
+        "decisionSources": []
+      },
+      "bodies": [
+        {
+          "digest": "75c265ef11923fbb4f5a4f8a51a71d08bcca399239e899fa21575e5d0c6dd67f",
+          "body": "Blocker B resolved; continue."
+        }
+      ]
+    }
+  },
+  "confirm_condition": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-000000000191",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "confirm_condition",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-00000000002a"
+      },
+      "data": {
+        "condition": {
+          "family": "conditions",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-000000000029"
+          },
+          "digest": "88d554429dc3fbbe8dcd058f2911b134aa8e53a0df96327a5faa92e557e94e8e"
+        },
+        "result": {
+          "family": "results",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-000000000001"
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "evidence": [],
+        "assessment": {
+          "digest": "75c265ef11923fbb4f5a4f8a51a71d08bcca399239e899fa21575e5d0c6dd67f",
+          "byteLength": 29
+        },
+        "decision": "resolved",
+        "supersedes": [],
+        "correctionBasis": [],
+        "applicability": null
+      },
+      "bodies": []
+    }
+  },
+  "prepare_continuation": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-000000000192",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "prepare_continuation",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-00000000002b"
+      },
+      "data": {
+        "origin": {
+          "assignmentId": "00000000-0000-0000-0000-000000000001",
+          "generation": 0
+        },
+        "assignment": {
+          "assignmentId": "00000000-0000-0000-0000-000000000001",
+          "generation": 0
+        },
+        "binding": {
+          "family": "assignment-bindings",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "assignmentId": "00000000-0000-0000-0000-000000000001",
+            "generation": 0
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "checkpoint": {
+          "family": "checkpoints",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-000000000005"
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "sourceCheckpoint": {
+          "family": "checkpoints",
+          "key": {
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "id": "00000000-0000-0000-0000-000000000005"
+          },
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "conditions": [
+          {
+            "condition": {
+              "family": "conditions",
+              "key": {
+                "projectId": "00000000-0000-0000-0000-000000000001",
+                "id": "00000000-0000-0000-0000-000000000029"
+              },
+              "digest": "88d554429dc3fbbe8dcd058f2911b134aa8e53a0df96327a5faa92e557e94e8e"
+            },
+            "confirmation": {
+              "family": "condition-confirmations",
+              "key": {
+                "projectId": "00000000-0000-0000-0000-000000000001",
+                "id": "00000000-0000-0000-0000-00000000002a"
+              },
+              "digest": "26dfb047076ecd3ea931a67fd8070f0ab21786423b5be0df0a0d9042af7da482"
+            }
+          }
+        ],
+        "coverage": {
+          "basisH": {
+            "algorithm": "sha1",
+            "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "conditionsDigest": "098e53aa94c5cc6e2e336d64c8a66da8a16955c89af0e93bed65c10cd5dbca15",
+          "conditionCount": 1
+        },
+        "expectedAssignmentGeneration": 0,
+        "before": {
+          "repositoryId": "00000000-0000-0000-0000-000000000001",
+          "commit": null,
+          "tree": {
+            "algorithm": "sha1",
+            "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "dirtyContentDigest": null,
+          "retainedLocatorId": "00000000-0000-0000-0000-000000000001"
+        },
+        "after": {
+          "repositoryId": "00000000-0000-0000-0000-000000000001",
+          "commit": null,
+          "tree": {
+            "algorithm": "sha1",
+            "hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "dirtyContentDigest": null,
+          "retainedLocatorId": "00000000-0000-0000-0000-000000000001"
+        },
+        "mode": "unchanged-base",
+        "rebind": null,
+        "preparationBasis": [
+          {
+            "kind": "knowledge",
+            "reference": {
+              "kind": "clause",
+              "revision": {
+                "document": {
+                  "projectId": "00000000-0000-0000-0000-000000000001",
+                  "documentId": "00000000-0000-0000-0000-000000000001"
+                },
+                "revisionId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+              "clauseId": "x",
+              "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        ],
+        "nativeMessageId": "msg_connected_notice",
+        "notification": {
+          "digest": "75c265ef11923fbb4f5a4f8a51a71d08bcca399239e899fa21575e5d0c6dd67f",
+          "byteLength": 29
+        },
+        "supersedes": null
+      },
+      "bodies": []
+    }
+  },
+  "observe_continuation": {
+    "formatVersion": 3,
+    "requestKey": "00000000-0000-0000-0000-000000000193",
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "operation": "observe_continuation",
+    "payload": {
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-00000000002b"
+      },
+      "expectedGeneration": 1,
+      "stage": "environment",
+      "outcome": "confirmed",
+      "observations": [
+        {
+          "kind": "knowledge",
+          "reference": {
+            "kind": "clause",
+            "revision": {
+              "document": {
+                "projectId": "00000000-0000-0000-0000-000000000001",
+                "documentId": "00000000-0000-0000-0000-000000000001"
+              },
+              "revisionId": "00000000-0000-0000-0000-000000000001"
+            },
+            "revisionDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+            "clauseId": "x",
+            "contentDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "evidence": [],
+      "delivery": null,
+      "nativeIntent": null,
+      "reason": null,
+      "effect": {
+        "attemptId": "00000000-0000-0000-0000-000000000001",
+        "requestKey": "00000000-0000-0000-0000-000000000001",
+        "requestDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+        "state": "confirmed",
+        "previousAttempt": null,
+        "basis": []
+      },
+      "bodies": []
+    }
+  }
+}

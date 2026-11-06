@@ -1,0 +1,26 @@
+{
+  "formatVersion": 1,
+  "family": "profiles",
+  "key": {
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "profileId": "00000000-0000-0000-0000-000000000001",
+    "revision": 0
+  },
+  "payload": {
+    "nativeProfileId": "synthetic",
+    "qualificationEvidence": [],
+    "model": "synthetic",
+    "route": "synthetic",
+    "effort": "synthetic",
+    "contextTokens": 1,
+    "outputReserveTokens": 1,
+    "toolReserveTokens": 1,
+    "compactionReserveTokens": 1,
+    "compactionPolicyId": "synthetic",
+    "requestAccountingProfileId": "synthetic",
+    "executionAssurance": "E-COOP-1",
+    "permissions": [],
+    "platform": "linux",
+    "qualification": "unqualified"
+  }
+}

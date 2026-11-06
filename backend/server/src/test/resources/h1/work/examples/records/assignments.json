@@ -1,0 +1,45 @@
+{
+  "formatVersion": 1,
+  "family": "assignments",
+  "key": {
+    "projectId": "00000000-0000-0000-0000-000000000001",
+    "id": "00000000-0000-0000-0000-000000000001"
+  },
+  "payload": {
+    "task": {
+      "projectId": "00000000-0000-0000-0000-000000000001",
+      "taskId": "00000000-0000-0000-0000-000000000001",
+      "revision": 0
+    },
+    "manifest": {
+      "family": "task-revisions",
+      "key": {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "taskId": "00000000-0000-0000-0000-000000000001",
+        "revision": 0
+      },
+      "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "profile": {
+      "projectId": "00000000-0000-0000-0000-000000000001",
+      "profileId": "00000000-0000-0000-0000-000000000001",
+      "revision": 0
+    },
+    "generation": 0,
+    "executionGeneration": 0,
+    "execution": null,
+    "binding": null,
+    "workspaceId": "00000000-0000-0000-0000-000000000001",
+    "requiredResources": [
+      {
+        "projectId": "00000000-0000-0000-0000-000000000001",
+        "resourceId": "00000000-0000-0000-0000-000000000001"
+      }
+    ],
+    "reviewSubjects": [],
+    "state": "reserved",
+    "currentIntent": null,
+    "checkpoint": null,
+    "recovery": null
+  }
+}

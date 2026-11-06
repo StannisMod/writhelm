@@ -1,0 +1,6257 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:writhelm:work:model2",
+  "$comment": "ONE composed model2 candidate: exact recovery R2 plus connected conditions/continuation. Earlier unaccepted model2 proposals are historical, NOT separately recognized writers. No migration.",
+  "oneOf": [
+    {
+      "$ref": "urn:writhelm:work:model2#/$defs/header"
+    },
+    {
+      "$ref": "urn:writhelm:work:model2#/$defs/record"
+    }
+  ],
+  "$defs": {
+    "header": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "formatVersion",
+        "modelVersion"
+      ],
+      "properties": {
+        "formatVersion": {
+          "const": 1
+        },
+        "modelVersion": {
+          "const": 2
+        }
+      }
+    },
+    "taskKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectId",
+        "taskId"
+      ],
+      "properties": {
+        "projectId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "taskId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        }
+      }
+    },
+    "taskRevisionKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectId",
+        "taskId",
+        "revision"
+      ],
+      "properties": {
+        "projectId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "taskId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "revision": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+        }
+      }
+    },
+    "profileKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectId",
+        "profileId",
+        "revision"
+      ],
+      "properties": {
+        "projectId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "profileId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "revision": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+        }
+      }
+    },
+    "revisionKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectId",
+        "id",
+        "revision"
+      ],
+      "properties": {
+        "projectId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "id": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "revision": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+        }
+      }
+    },
+    "idKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectId",
+        "id"
+      ],
+      "properties": {
+        "projectId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "id": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        }
+      }
+    },
+    "resourceKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectId",
+        "resourceId"
+      ],
+      "properties": {
+        "projectId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "resourceId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        }
+      }
+    },
+    "workRef": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "task-revisions"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "input-manifests"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "loaded-views"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "profiles"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/profileKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "assignment-bindings"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/assignmentBindingKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "recoveries"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "checkpoints"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "memory"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "retrospectives"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "results"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "verification-plans"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "verification-reports"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "evidence"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "dispositions"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "acceptances"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "integrations"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "applicability"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "evidence-applicability"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "source-cuts"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "controller-continuations"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/controllerContinuationKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "assignment-replacements"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "conditions"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "condition-confirmations"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        }
+      ]
+    },
+    "bodyRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "digest",
+        "byteLength"
+      ],
+      "properties": {
+        "digest": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+        },
+        "byteLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repositoryId",
+        "commit",
+        "tree",
+        "dirtyContentDigest",
+        "retainedLocatorId"
+      ],
+      "properties": {
+        "repositoryId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "commit": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:auth-service:v1#/$defs/gitOid"
+            }
+          ]
+        },
+        "tree": {
+          "$ref": "urn:writhelm:auth-service:v1#/$defs/gitOid"
+        },
+        "dirtyContentDigest": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          ]
+        },
+        "retainedLocatorId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        }
+      }
+    },
+    "source": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "reference"
+          ],
+          "properties": {
+            "kind": {
+              "const": "knowledge"
+            },
+            "reference": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/reference"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "artifact"
+          ],
+          "properties": {
+            "kind": {
+              "const": "artifact"
+            },
+            "artifact": {
+              "$ref": "urn:writhelm:work:model2#/$defs/snapshot"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "reference"
+          ],
+          "properties": {
+            "kind": {
+              "const": "work"
+            },
+            "reference": {
+              "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+            }
+          }
+        }
+      ]
+    },
+    "base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "knowledgeManifestId",
+        "knowledgeManifestDigest"
+      ],
+      "properties": {
+        "code": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/snapshot"
+          },
+          "minItems": 0,
+          "maxItems": 128
+        },
+        "knowledgeManifestId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "knowledgeManifestDigest": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "read",
+        "write",
+        "decision",
+        "exclusions"
+      ],
+      "properties": {
+        "read": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "write": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "decision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "exclusions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "minItems": 0,
+          "maxItems": 256
+        }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "producer",
+        "readiness",
+        "selectedResult",
+        "deferredGateIds",
+        "rationale"
+      ],
+      "properties": {
+        "producer": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        },
+        "readiness": {
+          "enum": [
+            "implemented",
+            "cheap-checked",
+            "reviewed",
+            "accepted",
+            "integrated"
+          ]
+        },
+        "selectedResult": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+            }
+          ]
+        },
+        "deferredGateIds": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        }
+      }
+    },
+    "criterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "statement",
+        "clauses"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "clauses": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "criterionIds",
+        "boundary",
+        "independent",
+        "stage",
+        "groupId",
+        "deferred",
+        "reason"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "criterionIds": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "boundary": {
+          "enum": [
+            "pure",
+            "joint",
+            "native",
+            "live",
+            "platform"
+          ]
+        },
+        "independent": {
+          "type": "boolean"
+        },
+        "stage": {
+          "enum": [
+            "dispatch",
+            "acceptance",
+            "integration",
+            "milestone"
+          ]
+        },
+        "groupId": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+            }
+          ]
+        },
+        "deferred": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        }
+      }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "description",
+        "state",
+        "obligations",
+        "blockers"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "active",
+            "blocked",
+            "complete"
+          ]
+        },
+        "obligations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        }
+      }
+    },
+    "loadedItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "reason",
+        "obligationIds"
+      ],
+      "properties": {
+        "source": {
+          "$ref": "urn:writhelm:work:model2#/$defs/source"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "obligationIds": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        }
+      }
+    },
+    "manifestItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "mandatory",
+        "reason",
+        "exactFragments"
+      ],
+      "properties": {
+        "source": {
+          "$ref": "urn:writhelm:work:model2#/$defs/source"
+        },
+        "mandatory": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "exactFragments": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/bodyRef"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "executionId",
+        "principalId",
+        "credentialId",
+        "nativeHostId",
+        "nativeSessionId",
+        "workspaceId"
+      ],
+      "properties": {
+        "executionId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "principalId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "credentialId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "nativeHostId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "nativeSessionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "workspaceId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        }
+      }
+    },
+    "assignmentSubject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assignmentId",
+        "generation"
+      ],
+      "properties": {
+        "assignmentId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "generation": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+        }
+      }
+    },
+    "assignmentBindingKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectId",
+        "assignmentId",
+        "generation"
+      ],
+      "properties": {
+        "projectId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "assignmentId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "generation": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+        }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nativeProfileId",
+        "qualificationEvidence",
+        "model",
+        "route",
+        "effort",
+        "contextTokens",
+        "outputReserveTokens",
+        "toolReserveTokens",
+        "compactionReserveTokens",
+        "compactionPolicyId",
+        "requestAccountingProfileId",
+        "executionAssurance",
+        "permissions",
+        "platform",
+        "qualification"
+      ],
+      "properties": {
+        "nativeProfileId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "qualificationEvidence": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "model": {
+          "$ref": "urn:writhelm:work:model2#/$defs/modelRef"
+        },
+        "route": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "effort": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "contextTokens": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "outputReserveTokens": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "toolReserveTokens": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "compactionReserveTokens": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "compactionPolicyId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "requestAccountingProfileId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "executionAssurance": {
+          "const": "E-COOP-1"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "tool",
+              "action",
+              "scope"
+            ],
+            "properties": {
+              "tool": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "action": {
+                "enum": [
+                  "allow",
+                  "ask",
+                  "deny"
+                ]
+              },
+              "scope": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              }
+            }
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "platform": {
+          "enum": [
+            "linux",
+            "windows",
+            "macos"
+          ]
+        },
+        "qualification": {
+          "enum": [
+            "unqualified",
+            "qualified"
+          ]
+        }
+      }
+    },
+    "memoryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "content",
+        "sources",
+        "remainingObligationIds",
+        "uncertainty",
+        "exactRequiredFragments"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "status": {
+          "enum": [
+            "reported",
+            "observed",
+            "inferred",
+            "hypothesis",
+            "proposed",
+            "accepted-reference"
+          ]
+        },
+        "content": {
+          "$ref": "urn:writhelm:work:model2#/$defs/bodyRef"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "remainingObligationIds": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "uncertainty": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 65536
+        },
+        "exactRequiredFragments": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/bodyRef"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        }
+      }
+    },
+    "pending": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "source",
+        "description",
+        "responsibleTask"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "kind": {
+          "enum": [
+            "effect",
+            "event",
+            "decision",
+            "obligation",
+            "delivery"
+          ]
+        },
+        "source": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/source"
+            }
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "responsibleTask": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "category",
+        "requirement",
+        "scenario",
+        "expected",
+        "actual",
+        "evidence",
+        "affectedGateIds",
+        "affectedResultIds",
+        "blocking"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "category": {
+          "enum": [
+            "violation",
+            "missing-check",
+            "failed-check",
+            "historical-unexplained",
+            "hypothesis",
+            "recommendation"
+          ]
+        },
+        "requirement": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/source"
+            }
+          ]
+        },
+        "scenario": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "expected": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "actual": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "affectedGateIds": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "affectedResultIds": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "blocking": {
+          "type": "boolean"
+        }
+      }
+    },
+    "significantInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "scope"
+      ],
+      "properties": {
+        "source": {
+          "$ref": "urn:writhelm:work:model2#/$defs/source"
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        }
+      }
+    },
+    "applicabilityEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "areas",
+        "dependencies",
+        "state",
+        "reason"
+      ],
+      "properties": {
+        "source": {
+          "$ref": "urn:writhelm:work:model2#/$defs/source"
+        },
+        "areas": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "state": {
+          "enum": [
+            "applicable",
+            "withdrawn",
+            "uncertain"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        }
+      }
+    },
+    "task-revisions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "state",
+        "objective",
+        "base",
+        "scope",
+        "constraints",
+        "dependencies",
+        "criteria",
+        "escalation",
+        "expectedOutput",
+        "executionProfile",
+        "verificationPlan",
+        "approvedDesign",
+        "unresolved"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "research",
+            "design",
+            "implementation",
+            "verification",
+            "remediation",
+            "integration"
+          ]
+        },
+        "state": {
+          "enum": [
+            "draft",
+            "executable"
+          ]
+        },
+        "objective": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "base": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/base"
+            }
+          ]
+        },
+        "scope": {
+          "$ref": "urn:writhelm:work:model2#/$defs/scope"
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/dependency"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "criteria": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/criterion"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "escalation": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "expectedOutput": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "executionProfile": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/profileKey"
+            }
+          ]
+        },
+        "verificationPlan": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+            }
+          ]
+        },
+        "approvedDesign": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:core-codec:v1#/$defs/reference"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "unresolved": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "minItems": 0,
+          "maxItems": 256
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "executable"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "unresolved": {
+                "maxItems": 0
+              },
+              "base": {
+                "$ref": "urn:writhelm:work:model2#/$defs/base"
+              },
+              "executionProfile": {
+                "$ref": "urn:writhelm:work:model2#/$defs/profileKey"
+              },
+              "verificationPlan": {
+                "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "task-heads": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generation",
+        "title",
+        "draft",
+        "executable"
+      ],
+      "properties": {
+        "generation": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "draft": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+            }
+          ]
+        },
+        "executable": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+            }
+          ]
+        }
+      }
+    },
+    "plans": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task",
+        "generation",
+        "steps",
+        "reason",
+        "previousCheckpoint",
+        "assignment"
+      ],
+      "properties": {
+        "task": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        },
+        "generation": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/step"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "previousCheckpoint": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+            }
+          ]
+        },
+        "assignment": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/assignmentSubject"
+            }
+          ]
+        }
+      }
+    },
+    "input-manifests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task",
+        "base",
+        "applicability",
+        "items",
+        "declaredClosureAssessment",
+        "knownGaps"
+      ],
+      "properties": {
+        "task": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        },
+        "base": {
+          "$ref": "urn:writhelm:work:model2#/$defs/base"
+        },
+        "applicability": {
+          "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/manifestItem"
+          },
+          "minItems": 1,
+          "maxItems": 1024
+        },
+        "declaredClosureAssessment": {
+          "$ref": "urn:writhelm:work:model2#/$defs/source"
+        },
+        "knownGaps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "minItems": 0,
+          "maxItems": 256
+        }
+      }
+    },
+    "loaded-views": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task",
+        "manifest",
+        "assignment",
+        "previous",
+        "additions",
+        "discoveredGaps"
+      ],
+      "properties": {
+        "task": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        },
+        "manifest": {
+          "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+        },
+        "assignment": {
+          "$ref": "urn:writhelm:work:model2#/$defs/assignmentSubject"
+        },
+        "previous": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+            }
+          ]
+        },
+        "additions": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/loadedItem"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "discoveredGaps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "minItems": 0,
+          "maxItems": 256
+        }
+      }
+    },
+    "profiles": {
+      "$ref": "urn:writhelm:work:model2#/$defs/profile"
+    },
+    "assignments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task",
+        "manifest",
+        "profile",
+        "generation",
+        "executionGeneration",
+        "execution",
+        "binding",
+        "workspaceId",
+        "requiredResources",
+        "reviewSubjects",
+        "state",
+        "currentIntent",
+        "checkpoint",
+        "recovery",
+        "intendedExecution",
+        "delegationId"
+      ],
+      "properties": {
+        "task": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        },
+        "manifest": {
+          "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+        },
+        "profile": {
+          "$ref": "urn:writhelm:work:model2#/$defs/profileKey"
+        },
+        "generation": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+        },
+        "executionGeneration": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+        },
+        "execution": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/execution"
+            }
+          ]
+        },
+        "binding": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+            }
+          ]
+        },
+        "workspaceId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "requiredResources": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/resourceKey"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "reviewSubjects": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/resultRef"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "state": {
+          "enum": [
+            "reserved",
+            "bound",
+            "active",
+            "pausing",
+            "paused",
+            "stopping",
+            "stopped",
+            "unknown",
+            "quarantined",
+            "completed",
+            "replaced"
+          ]
+        },
+        "currentIntent": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            }
+          ]
+        },
+        "checkpoint": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+            }
+          ]
+        },
+        "recovery": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+            }
+          ]
+        },
+        "intendedExecution": {
+          "$ref": "urn:writhelm:work:model2#/$defs/executionIntent"
+        },
+        "delegationId": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "intendedExecution": {
+                "properties": {
+                  "template": {
+                    "const": "executor-v1"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reviewSubjects": {
+                "maxItems": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "reviewSubjects": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "bound"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "delegationId": {
+                "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+              },
+              "execution": {
+                "$ref": "urn:writhelm:work:model2#/$defs/execution"
+              },
+              "binding": {
+                "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "active"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "delegationId": {
+                "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+              },
+              "execution": {
+                "$ref": "urn:writhelm:work:model2#/$defs/execution"
+              },
+              "binding": {
+                "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "pausing"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "delegationId": {
+                "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+              },
+              "execution": {
+                "$ref": "urn:writhelm:work:model2#/$defs/execution"
+              },
+              "binding": {
+                "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "paused"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "delegationId": {
+                "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+              },
+              "execution": {
+                "$ref": "urn:writhelm:work:model2#/$defs/execution"
+              },
+              "binding": {
+                "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "stopping"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "delegationId": {
+                "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+              },
+              "execution": {
+                "$ref": "urn:writhelm:work:model2#/$defs/execution"
+              },
+              "binding": {
+                "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "stopped"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "delegationId": {
+                "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+              },
+              "execution": {
+                "$ref": "urn:writhelm:work:model2#/$defs/execution"
+              },
+              "binding": {
+                "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "completed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "delegationId": {
+                "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+              },
+              "execution": {
+                "$ref": "urn:writhelm:work:model2#/$defs/execution"
+              },
+              "binding": {
+                "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "assignment-bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task",
+        "manifest",
+        "profile",
+        "execution",
+        "workspaceId",
+        "resources",
+        "intendedExecution",
+        "delegationId",
+        "reviewSubjects"
+      ],
+      "properties": {
+        "task": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        },
+        "manifest": {
+          "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+        },
+        "profile": {
+          "$ref": "urn:writhelm:work:model2#/$defs/profileKey"
+        },
+        "execution": {
+          "$ref": "urn:writhelm:work:model2#/$defs/execution"
+        },
+        "workspaceId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/resourceKey"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "intendedExecution": {
+          "$ref": "urn:writhelm:work:model2#/$defs/executionIntent"
+        },
+        "delegationId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "reviewSubjects": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/resultRef"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "intendedExecution": {
+                "properties": {
+                  "template": {
+                    "const": "executor-v1"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reviewSubjects": {
+                "maxItems": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "reviewSubjects": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generation",
+        "holder",
+        "workspaceId",
+        "state",
+        "incompatible",
+        "basis"
+      ],
+      "properties": {
+        "generation": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+        },
+        "holder": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "kind",
+                    "subject"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "assignment"
+                    },
+                    "subject": {
+                      "$ref": "urn:writhelm:work:model2#/$defs/assignmentSubject"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "kind",
+                    "integrationIntentId"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "integration"
+                    },
+                    "integrationIntentId": {
+                      "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "workspaceId": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+            }
+          ]
+        },
+        "state": {
+          "enum": [
+            "free",
+            "held",
+            "isolated"
+          ]
+        },
+        "incompatible": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/resourceKey"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "basis": {
+          "$ref": "urn:writhelm:work:model2#/$defs/source"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "free"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "holder": {
+                "const": null
+              },
+              "workspaceId": {
+                "const": null
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "holder": {
+                "not": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "native-intents": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assignment",
+        "generation",
+        "correlationId",
+        "operation",
+        "expectedSession",
+        "expectedWorkspace",
+        "outcome",
+        "observations",
+        "reconciliation"
+      ],
+      "properties": {
+        "assignment": {
+          "$ref": "urn:writhelm:work:model2#/$defs/assignmentSubject"
+        },
+        "generation": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+        },
+        "correlationId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "operation": {
+          "enum": [
+            "prepare",
+            "bind",
+            "start",
+            "pause",
+            "stop",
+            "resume",
+            "rebind"
+          ]
+        },
+        "expectedSession": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          ]
+        },
+        "expectedWorkspace": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "outcome": {
+          "enum": [
+            "pending",
+            "confirmed",
+            "not-performed",
+            "unknown"
+          ]
+        },
+        "observations": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "reconciliation": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+            }
+          ]
+        }
+      }
+    },
+    "recoveries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assignment",
+        "decision",
+        "basis",
+        "isolatedResources",
+        "retainedClaims",
+        "remainingUncertainty"
+      ],
+      "properties": {
+        "assignment": {
+          "$ref": "urn:writhelm:work:model2#/$defs/assignmentSubject"
+        },
+        "decision": {
+          "enum": [
+            "bind-existing",
+            "not-started",
+            "revoked-isolated",
+            "operator-required"
+          ]
+        },
+        "basis": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "isolatedResources": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/resourceKey"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "retainedClaims": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/resourceKey"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "remainingUncertainty": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "minItems": 0,
+          "maxItems": 256
+        }
+      }
+    },
+    "checkpoints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task",
+        "assignment",
+        "manifest",
+        "loadedView",
+        "sourceCutId",
+        "plan",
+        "planGeneration",
+        "memory",
+        "planSteps",
+        "artifacts",
+        "pending",
+        "report",
+        "handoff",
+        "retrospective",
+        "result",
+        "notification"
+      ],
+      "properties": {
+        "task": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        },
+        "assignment": {
+          "$ref": "urn:writhelm:work:model2#/$defs/assignmentSubject"
+        },
+        "manifest": {
+          "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+        },
+        "loadedView": {
+          "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+        },
+        "sourceCutId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "plan": {
+          "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+        },
+        "planGeneration": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+        },
+        "memory": {
+          "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+        },
+        "planSteps": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/step"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/snapshot"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "pending": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/pending"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "report": {
+          "$ref": "urn:writhelm:work:model2#/$defs/bodyRef"
+        },
+        "handoff": {
+          "enum": [
+            "unfinished",
+            "finished"
+          ]
+        },
+        "retrospective": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+            }
+          ]
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+            }
+          ]
+        },
+        "notification": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            }
+          ]
+        }
+      }
+    },
+    "deliveries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assignment",
+        "sourceCutId",
+        "destinationTask",
+        "content",
+        "generation",
+        "state",
+        "basis"
+      ],
+      "properties": {
+        "assignment": {
+          "$ref": "urn:writhelm:work:model2#/$defs/assignmentSubject"
+        },
+        "sourceCutId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "destinationTask": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        },
+        "content": {
+          "$ref": "urn:writhelm:work:model2#/$defs/bodyRef"
+        },
+        "generation": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "durable-delivered"
+          ]
+        },
+        "basis": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task",
+        "assignment",
+        "previous",
+        "sourceCutId",
+        "entries",
+        "gaps",
+        "pending"
+      ],
+      "properties": {
+        "task": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        },
+        "assignment": {
+          "$ref": "urn:writhelm:work:model2#/$defs/assignmentSubject"
+        },
+        "previous": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+            }
+          ]
+        },
+        "sourceCutId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/memoryEntry"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "gaps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "pending": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/pending"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        }
+      }
+    },
+    "retrospectives": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task",
+        "assignment",
+        "result",
+        "outcome",
+        "observations"
+      ],
+      "properties": {
+        "task": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        },
+        "assignment": {
+          "$ref": "urn:writhelm:work:model2#/$defs/assignmentSubject"
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+            }
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "no-significant-new-findings",
+            "findings"
+          ]
+        },
+        "observations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "observed",
+              "expectation",
+              "newExpectation",
+              "consequence",
+              "causeHypothesis",
+              "uncertainty",
+              "measure",
+              "proposal",
+              "status",
+              "normativeDecision",
+              "effectEvidence"
+            ],
+            "properties": {
+              "observed": {
+                "$ref": "urn:writhelm:work:model2#/$defs/source"
+              },
+              "expectation": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "urn:writhelm:work:model2#/$defs/source"
+                  }
+                ]
+              },
+              "newExpectation": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 65536
+                  }
+                ]
+              },
+              "consequence": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 65536
+              },
+              "causeHypothesis": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 65536
+              },
+              "uncertainty": {
+                "type": "string",
+                "minLength": 0,
+                "maxLength": 65536
+              },
+              "measure": {
+                "enum": [
+                  "task-input",
+                  "factual-memory",
+                  "owner-question",
+                  "enforce-existing",
+                  "boundary-fix",
+                  "propose-norm",
+                  "retain-case"
+                ]
+              },
+              "proposal": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "urn:writhelm:work:model2#/$defs/bodyRef"
+                  }
+                ]
+              },
+              "status": {
+                "enum": [
+                  "proposed",
+                  "rejected",
+                  "accepted-reference",
+                  "open"
+                ]
+              },
+              "normativeDecision": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "urn:writhelm:core-codec:v1#/$defs/reference"
+                  }
+                ]
+              },
+              "effectEvidence": {
+                "type": "array",
+                "items": {
+                  "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+                },
+                "minItems": 0,
+                "maxItems": 256
+              }
+            }
+          },
+          "minItems": 0,
+          "maxItems": 256
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "no-significant-new-findings"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "observations": {
+                "maxItems": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "observations": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "results": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task",
+        "assignment",
+        "producer",
+        "manifest",
+        "artifacts",
+        "changes",
+        "claimedCriteria",
+        "evidence",
+        "retrospective",
+        "pending"
+      ],
+      "properties": {
+        "task": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        },
+        "assignment": {
+          "$ref": "urn:writhelm:work:model2#/$defs/assignmentSubject"
+        },
+        "producer": {
+          "$ref": "urn:writhelm:work:model2#/$defs/execution"
+        },
+        "manifest": {
+          "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/snapshot"
+          },
+          "minItems": 1,
+          "maxItems": 128
+        },
+        "changes": {
+          "$ref": "urn:writhelm:work:model2#/$defs/bodyRef"
+        },
+        "claimedCriteria": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "retrospective": {
+          "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+        },
+        "pending": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/pending"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        }
+      }
+    },
+    "verification-plans": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task",
+        "previous",
+        "criteria",
+        "gates",
+        "reason",
+        "authorizedChanges"
+      ],
+      "properties": {
+        "task": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        },
+        "previous": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+            }
+          ]
+        },
+        "criteria": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/criterion"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "gates": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/gate"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "authorizedChanges": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:core-codec:v1#/$defs/reference"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        }
+      }
+    },
+    "verification-reports": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task",
+        "assignment",
+        "reviewer",
+        "subjects",
+        "plan",
+        "gateIds",
+        "freshContextBasis",
+        "readOnlySnapshotBasis",
+        "findings",
+        "evidence",
+        "report",
+        "limits"
+      ],
+      "properties": {
+        "task": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        },
+        "assignment": {
+          "$ref": "urn:writhelm:work:model2#/$defs/assignmentSubject"
+        },
+        "reviewer": {
+          "$ref": "urn:writhelm:work:model2#/$defs/execution"
+        },
+        "subjects": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "plan": {
+          "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+        },
+        "gateIds": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "freshContextBasis": {
+          "$ref": "urn:writhelm:work:model2#/$defs/source"
+        },
+        "readOnlySnapshotBasis": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/finding"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "report": {
+          "$ref": "urn:writhelm:work:model2#/$defs/bodyRef"
+        },
+        "limits": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "minItems": 0,
+          "maxItems": 256
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "subjects",
+        "significantInputs",
+        "method",
+        "boundary",
+        "environment",
+        "runId",
+        "outcome",
+        "artifacts",
+        "clauseCases",
+        "limits",
+        "report"
+      ],
+      "properties": {
+        "subjects": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "significantInputs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/significantInput"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "boundary": {
+          "enum": [
+            "mock",
+            "pure",
+            "component",
+            "joint",
+            "native",
+            "live",
+            "platform"
+          ]
+        },
+        "environment": {
+          "$ref": "urn:writhelm:work:model2#/$defs/bodyRef"
+        },
+        "runId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "outcome": {
+          "enum": [
+            "passed",
+            "failed",
+            "not-run",
+            "unknown"
+          ]
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/bodyRef"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "clauseCases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "clause",
+              "caseId",
+              "testId"
+            ],
+            "properties": {
+              "clause": {
+                "$ref": "urn:writhelm:work:model2#/$defs/source"
+              },
+              "caseId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "testId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            }
+          },
+          "minItems": 0,
+          "maxItems": 1024
+        },
+        "limits": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "report": {
+          "$ref": "urn:writhelm:work:model2#/$defs/bodyRef"
+        }
+      }
+    },
+    "dispositions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "result",
+        "report",
+        "findingId",
+        "gateIds",
+        "decision",
+        "basis",
+        "replacementResult",
+        "ownerDecision",
+        "recordedBy"
+      ],
+      "properties": {
+        "result": {
+          "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+        },
+        "report": {
+          "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+        },
+        "findingId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "gateIds": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "decision": {
+          "enum": [
+            "confirmed-blocking",
+            "fixed-by-result",
+            "not-applicable",
+            "retained-held",
+            "owner-exception"
+          ]
+        },
+        "basis": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "replacementResult": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+            }
+          ]
+        },
+        "ownerDecision": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/reference"
+            }
+          ]
+        },
+        "recordedBy": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        }
+      }
+    },
+    "acceptances": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "result",
+        "task",
+        "verificationPlan",
+        "evidence",
+        "reports",
+        "dispositions",
+        "applicability",
+        "criterionIds",
+        "permittedTargets",
+        "basis",
+        "acceptedBy"
+      ],
+      "properties": {
+        "result": {
+          "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+        },
+        "task": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        },
+        "verificationPlan": {
+          "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "reports": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "dispositions": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "applicability": {
+          "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+        },
+        "criterionIds": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "permittedTargets": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+          },
+          "minItems": 0,
+          "maxItems": 128
+        },
+        "basis": {
+          "$ref": "urn:writhelm:work:model2#/$defs/bodyRef"
+        },
+        "acceptedBy": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        }
+      }
+    },
+    "integration-intents": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "result",
+        "acceptance",
+        "targetRepositoryId",
+        "targetId",
+        "expectedTarget",
+        "expectedTree",
+        "expectedDirtyDigest",
+        "requiredResources",
+        "correlationId",
+        "generation",
+        "state",
+        "observation"
+      ],
+      "properties": {
+        "result": {
+          "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+        },
+        "acceptance": {
+          "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+        },
+        "targetRepositoryId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "targetId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "expectedTarget": {
+          "$ref": "urn:writhelm:auth-service:v1#/$defs/gitOid"
+        },
+        "expectedTree": {
+          "$ref": "urn:writhelm:auth-service:v1#/$defs/gitOid"
+        },
+        "expectedDirtyDigest": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          ]
+        },
+        "requiredResources": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/resourceKey"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "correlationId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "generation": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+        },
+        "state": {
+          "enum": [
+            "prepared",
+            "unknown",
+            "confirmed",
+            "not-performed"
+          ]
+        },
+        "observation": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+            }
+          ]
+        }
+      }
+    },
+    "integrations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intent",
+        "intentGeneration",
+        "result",
+        "resultingSnapshot",
+        "applicability",
+        "evidence",
+        "observations",
+        "integratedBy",
+        "pending"
+      ],
+      "properties": {
+        "intent": {
+          "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+        },
+        "intentGeneration": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+        },
+        "result": {
+          "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+        },
+        "resultingSnapshot": {
+          "$ref": "urn:writhelm:work:model2#/$defs/snapshot"
+        },
+        "applicability": {
+          "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "observations": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "integratedBy": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "pending": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/pending"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        }
+      }
+    },
+    "applicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "previous",
+        "entries",
+        "basis"
+      ],
+      "properties": {
+        "previous": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+            }
+          ]
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/applicabilityEntry"
+          },
+          "minItems": 0,
+          "maxItems": 1024
+        },
+        "basis": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        }
+      }
+    },
+    "evidence-applicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "result",
+        "evidence",
+        "heldGateIds",
+        "basis",
+        "assessedBy"
+      ],
+      "properties": {
+        "result": {
+          "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "evidence",
+              "state",
+              "significantInputComparison",
+              "rationale"
+            ],
+            "properties": {
+              "evidence": {
+                "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+              },
+              "state": {
+                "enum": [
+                  "retained",
+                  "needs-check",
+                  "inapplicable",
+                  "uncertain"
+                ]
+              },
+              "significantInputComparison": {
+                "type": "array",
+                "items": {
+                  "$ref": "urn:writhelm:work:model2#/$defs/significantInput"
+                },
+                "minItems": 0,
+                "maxItems": 256
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 65536
+              }
+            }
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        "heldGateIds": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "basis": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "assessedBy": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        }
+      }
+    },
+    "mutableSelector": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "generation"
+          ],
+          "properties": {
+            "family": {
+              "const": "task-heads"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/taskKey"
+            },
+            "generation": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "generation"
+          ],
+          "properties": {
+            "family": {
+              "const": "plans"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+            },
+            "generation": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "generation"
+          ],
+          "properties": {
+            "family": {
+              "const": "assignments"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "generation": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "generation"
+          ],
+          "properties": {
+            "family": {
+              "const": "claims"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/resourceKey"
+            },
+            "generation": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "generation"
+          ],
+          "properties": {
+            "family": {
+              "const": "native-intents"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "generation": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "generation"
+          ],
+          "properties": {
+            "family": {
+              "const": "deliveries"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "generation": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "generation"
+          ],
+          "properties": {
+            "family": {
+              "const": "integration-intents"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "generation": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+            }
+          }
+        }
+      ]
+    },
+    "record": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "task-revisions"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/task-revisions"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "task-heads"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/taskKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/task-heads"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "plans"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/plans"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "input-manifests"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/input-manifests"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "loaded-views"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/loaded-views"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "profiles"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/profileKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/profiles"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "assignments"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/assignments"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "assignment-bindings"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/assignmentBindingKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/assignment-bindings"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "claims"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/resourceKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/claims"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "native-intents"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/native-intents"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "recoveries"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/recoveries"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "checkpoints"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/checkpoints"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "deliveries"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/deliveries"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "memory"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/memory"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "retrospectives"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/retrospectives"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "results"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/results"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "verification-plans"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/verification-plans"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "verification-reports"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/verification-reports"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "evidence"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/evidence"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "dispositions"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/dispositions"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "acceptances"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/acceptances"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "integration-intents"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/integration-intents"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "integrations"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/integrations"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "applicability"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/applicability"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "evidence-applicability"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/evidence-applicability"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "source-cuts"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/source-cuts"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "controller-continuations"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/controllerContinuationKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/controller-continuations"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "assignment-replacements"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/assignment-replacements"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "conditions"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/conditions"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "condition-confirmations"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/condition-confirmations"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formatVersion",
+            "family",
+            "key",
+            "payload"
+          ],
+          "properties": {
+            "formatVersion": {
+              "const": 1
+            },
+            "family": {
+              "const": "continuations"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/continuations"
+            }
+          }
+        }
+      ]
+    },
+    "modelRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerId",
+        "modelId",
+        "variant"
+      ],
+      "properties": {
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "modelId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "variant": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          ]
+        }
+      }
+    },
+    "executionIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "controllerId",
+        "executionId",
+        "template",
+        "nativeHostId",
+        "nativeSessionId"
+      ],
+      "properties": {
+        "controllerId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "executionId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "template": {
+          "enum": [
+            "executor-v1",
+            "reviewer-v1"
+          ]
+        },
+        "nativeHostId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "nativeSessionId": {
+          "type": "string",
+          "pattern": "^ses",
+          "minLength": 3,
+          "maxLength": 256
+        }
+      }
+    },
+    "resultRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "family",
+        "key",
+        "digest"
+      ],
+      "properties": {
+        "family": {
+          "const": "results"
+        },
+        "key": {
+          "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+        },
+        "digest": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+        }
+      }
+    },
+    "source-cuts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task",
+        "assignment",
+        "nativeHostId",
+        "nativeSessionId",
+        "profile",
+        "sourceFormatVersion",
+        "renderedRequestDigest",
+        "packetDigest",
+        "retainedLocatorId",
+        "nativeMessages",
+        "retainedFragments",
+        "pending"
+      ],
+      "properties": {
+        "task": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        },
+        "assignment": {
+          "$ref": "urn:writhelm:work:model2#/$defs/assignmentSubject"
+        },
+        "nativeHostId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "nativeSessionId": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 256,
+          "pattern": "^ses"
+        },
+        "profile": {
+          "$ref": "urn:writhelm:work:model2#/$defs/profileKey"
+        },
+        "sourceFormatVersion": {
+          "const": 1
+        },
+        "renderedRequestDigest": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+        },
+        "packetDigest": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+        },
+        "retainedLocatorId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "nativeMessages": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 4096,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "messageId",
+              "digest"
+            ],
+            "properties": {
+              "messageId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "digest": {
+                "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+              }
+            }
+          }
+        },
+        "retainedFragments": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 256,
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/bodyRef"
+          }
+        },
+        "pending": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 256,
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/pending"
+          }
+        }
+      }
+    },
+    "controllerContinuationKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectId",
+        "controllerId",
+        "id"
+      ],
+      "properties": {
+        "projectId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "controllerId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "id": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        }
+      }
+    },
+    "nativeSourceBasis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nativeHostId",
+        "nativeSessionId",
+        "sourceFormatVersion",
+        "renderedRequestDigest",
+        "packetDigest",
+        "retainedLocatorId",
+        "nativeMessages",
+        "retainedFragments"
+      ],
+      "properties": {
+        "nativeHostId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "nativeSessionId": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 256,
+          "pattern": "^ses"
+        },
+        "sourceFormatVersion": {
+          "const": 1
+        },
+        "renderedRequestDigest": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+        },
+        "packetDigest": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+        },
+        "retainedLocatorId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "nativeMessages": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 4096,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "messageId",
+              "digest"
+            ],
+            "properties": {
+              "messageId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "digest": {
+                "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+              }
+            }
+          }
+        },
+        "retainedFragments": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 256,
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/bodyRef"
+          }
+        }
+      }
+    },
+    "controller-continuations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "previous",
+        "source",
+        "frontier",
+        "entries",
+        "gaps",
+        "pending",
+        "report"
+      ],
+      "properties": {
+        "profile": {
+          "$ref": "urn:writhelm:work:model2#/$defs/profileKey"
+        },
+        "previous": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "digest"
+              ],
+              "properties": {
+                "key": {
+                  "$ref": "urn:writhelm:work:model2#/$defs/controllerContinuationKey"
+                },
+                "digest": {
+                  "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+                }
+              }
+            }
+          ]
+        },
+        "source": {
+          "$ref": "urn:writhelm:work:model2#/$defs/nativeSourceBasis"
+        },
+        "frontier": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "task",
+              "assignments",
+              "obligationIds"
+            ],
+            "properties": {
+              "task": {
+                "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+              },
+              "assignments": {
+                "type": "array",
+                "minItems": 0,
+                "maxItems": 256,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "assignmentId",
+                    "recordGeneration",
+                    "executionGeneration"
+                  ],
+                  "properties": {
+                    "assignmentId": {
+                      "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+                    },
+                    "recordGeneration": {
+                      "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+                    },
+                    "executionGeneration": {
+                      "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+                    }
+                  }
+                }
+              },
+              "obligationIds": {
+                "type": "array",
+                "minItems": 0,
+                "maxItems": 256,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+                }
+              }
+            }
+          }
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "tasks",
+              "entry"
+            ],
+            "properties": {
+              "tasks": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 256,
+                "items": {
+                  "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+                }
+              },
+              "entry": {
+                "$ref": "urn:writhelm:work:model2#/$defs/memoryEntry"
+              }
+            }
+          }
+        },
+        "gaps": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          }
+        },
+        "pending": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 256,
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/pending"
+          }
+        },
+        "report": {
+          "$ref": "urn:writhelm:work:model2#/$defs/bodyRef"
+        }
+      }
+    },
+    "assignment-replacements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision",
+        "previous",
+        "oldRecord",
+        "recovery",
+        "next",
+        "continuation",
+        "proof",
+        "basisH",
+        "isolatedResources",
+        "retainedClaims"
+      ],
+      "properties": {
+        "decision": {
+          "const": "execution-closed-isolated-replacement"
+        },
+        "previous": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "family",
+                "key",
+                "digest"
+              ],
+              "properties": {
+                "family": {
+                  "const": "assignment-replacements"
+                },
+                "key": {
+                  "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+                },
+                "digest": {
+                  "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+                }
+              }
+            }
+          ]
+        },
+        "oldRecord": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "digest",
+            "payload"
+          ],
+          "properties": {
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            },
+            "payload": {
+              "$ref": "urn:writhelm:work:model2#/$defs/assignments"
+            }
+          }
+        },
+        "recovery": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "family",
+                "key",
+                "digest"
+              ],
+              "properties": {
+                "family": {
+                  "const": "recoveries"
+                },
+                "key": {
+                  "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+                },
+                "digest": {
+                  "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+                }
+              }
+            }
+          ]
+        },
+        "next": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "assignmentId",
+            "task",
+            "manifest",
+            "profile",
+            "workspaceId",
+            "resources",
+            "intendedExecution",
+            "intentId",
+            "correlationId"
+          ],
+          "properties": {
+            "assignmentId": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+            },
+            "task": {
+              "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+            },
+            "manifest": {
+              "$ref": "urn:writhelm:work:model2#/$defs/workRef"
+            },
+            "profile": {
+              "$ref": "urn:writhelm:work:model2#/$defs/profileKey"
+            },
+            "workspaceId": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+            },
+            "resources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "resource",
+                  "expectedGeneration"
+                ],
+                "properties": {
+                  "resource": {
+                    "$ref": "urn:writhelm:work:model2#/$defs/resourceKey"
+                  },
+                  "expectedGeneration": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+                      }
+                    ]
+                  }
+                }
+              },
+              "minItems": 1,
+              "maxItems": 256
+            },
+            "intendedExecution": {
+              "$ref": "urn:writhelm:work:model2#/$defs/executionIntent"
+            },
+            "intentId": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+            },
+            "correlationId": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+            }
+          }
+        },
+        "continuation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "checkpoint",
+            "gaps",
+            "pending"
+          ],
+          "properties": {
+            "checkpoint": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "family",
+                    "key",
+                    "digest"
+                  ],
+                  "properties": {
+                    "family": {
+                      "const": "checkpoints"
+                    },
+                    "key": {
+                      "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+                    },
+                    "digest": {
+                      "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+                    }
+                  }
+                }
+              ]
+            },
+            "gaps": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 65536
+              },
+              "minItems": 0,
+              "maxItems": 256
+            },
+            "pending": {
+              "type": "array",
+              "items": {
+                "$ref": "urn:writhelm:work:model2#/$defs/pending"
+              },
+              "minItems": 0,
+              "maxItems": 256
+            }
+          }
+        },
+        "proof": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "retainedLocatorId",
+            "digest"
+          ],
+          "properties": {
+            "retainedLocatorId": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        "basisH": {
+          "$ref": "urn:writhelm:auth-service:v1#/$defs/gitOid"
+        },
+        "isolatedResources": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/resourceKey"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "retainedClaims": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/resourceKey"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        }
+      }
+    },
+    "conditionAssessor": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "controllerId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "controller"
+            },
+            "controllerId": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "assignment",
+            "binding"
+          ],
+          "properties": {
+            "kind": {
+              "const": "reviewer"
+            },
+            "assignment": {
+              "$ref": "urn:writhelm:work:model2#/$defs/assignmentSubject"
+            },
+            "binding": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "family",
+                "key",
+                "digest"
+              ],
+              "properties": {
+                "family": {
+                  "const": "assignment-bindings"
+                },
+                "key": {
+                  "$ref": "urn:writhelm:work:model2#/$defs/assignmentBindingKey"
+                },
+                "digest": {
+                  "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "conditionAssessorProvenance": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "controllerId",
+            "principalId",
+            "credentialId",
+            "executionId",
+            "nativeHostId",
+            "nativeSessionId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "controller"
+            },
+            "controllerId": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+            },
+            "principalId": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+            },
+            "credentialId": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+            },
+            "executionId": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+            },
+            "nativeHostId": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+            },
+            "nativeSessionId": {
+              "type": "string",
+              "pattern": "^ses",
+              "minLength": 3,
+              "maxLength": 256
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "assignment",
+            "binding",
+            "execution"
+          ],
+          "properties": {
+            "kind": {
+              "const": "reviewer"
+            },
+            "assignment": {
+              "$ref": "urn:writhelm:work:model2#/$defs/assignmentSubject"
+            },
+            "binding": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "family",
+                "key",
+                "digest"
+              ],
+              "properties": {
+                "family": {
+                  "const": "assignment-bindings"
+                },
+                "key": {
+                  "$ref": "urn:writhelm:work:model2#/$defs/assignmentBindingKey"
+                },
+                "digest": {
+                  "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+                }
+              }
+            },
+            "execution": {
+              "$ref": "urn:writhelm:work:model2#/$defs/execution"
+            }
+          }
+        }
+      ]
+    },
+    "conditionPair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "condition",
+        "confirmation"
+      ],
+      "properties": {
+        "condition": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "conditions"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        "confirmation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "condition-confirmations"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        }
+      }
+    },
+    "conditionCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "basisH",
+        "conditionsDigest",
+        "conditionCount"
+      ],
+      "properties": {
+        "basisH": {
+          "$ref": "urn:writhelm:auth-service:v1#/$defs/gitOid"
+        },
+        "conditionsDigest": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+        },
+        "conditionCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        }
+      }
+    },
+    "continuationRebind": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "oldBinding",
+        "newBinding",
+        "task",
+        "manifest",
+        "decisionSources",
+        "observation"
+      ],
+      "properties": {
+        "oldBinding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "assignment-bindings"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/assignmentBindingKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        "newBinding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "assignment-bindings"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/assignmentBindingKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        "task": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        },
+        "manifest": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "input-manifests"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        "decisionSources": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 1,
+          "maxItems": 32
+        },
+        "observation": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 1,
+          "maxItems": 32
+        }
+      }
+    },
+    "continuationEffect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attemptId",
+        "requestKey",
+        "requestDigest",
+        "state",
+        "previousAttempt",
+        "basis"
+      ],
+      "properties": {
+        "attemptId": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "requestKey": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "requestDigest": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+        },
+        "state": {
+          "enum": [
+            "not-issued",
+            "armed",
+            "outcome-unknown",
+            "not-performed",
+            "confirmed"
+          ]
+        },
+        "previousAttempt": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+            }
+          ]
+        },
+        "basis": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 0,
+          "maxItems": 32
+        }
+      }
+    },
+    "conditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "consumerTask",
+        "consumer",
+        "responsibleTask",
+        "condition",
+        "assessor",
+        "requiredGateIds",
+        "agreement",
+        "recordedBy",
+        "consumerNotice",
+        "governingPlan",
+        "supersedes",
+        "decisionSources"
+      ],
+      "properties": {
+        "consumerTask": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        },
+        "consumer": {
+          "$ref": "urn:writhelm:work:model2#/$defs/assignmentSubject"
+        },
+        "responsibleTask": {
+          "$ref": "urn:writhelm:work:model2#/$defs/taskRevisionKey"
+        },
+        "condition": {
+          "$ref": "urn:writhelm:work:model2#/$defs/bodyRef"
+        },
+        "assessor": {
+          "$ref": "urn:writhelm:work:model2#/$defs/conditionAssessor"
+        },
+        "requiredGateIds": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+          },
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true
+        },
+        "agreement": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 1,
+          "maxItems": 32
+        },
+        "recordedBy": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/uuid"
+        },
+        "consumerNotice": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "digest",
+            "byteLength"
+          ],
+          "properties": {
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            },
+            "byteLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4096
+            }
+          }
+        },
+        "governingPlan": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "verification-plans"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/revisionKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        "supersedes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "family",
+              "key",
+              "digest"
+            ],
+            "properties": {
+              "family": {
+                "const": "conditions"
+              },
+              "key": {
+                "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+              },
+              "digest": {
+                "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+              }
+            }
+          },
+          "minItems": 0,
+          "maxItems": 32
+        },
+        "decisionSources": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 0,
+          "maxItems": 32
+        }
+      }
+    },
+    "condition-confirmations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "condition",
+        "result",
+        "evidence",
+        "assessment",
+        "decision",
+        "assessedBy",
+        "supersedes",
+        "correctionBasis",
+        "applicability"
+      ],
+      "properties": {
+        "condition": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "conditions"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "results"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "family",
+              "key",
+              "digest"
+            ],
+            "properties": {
+              "family": {
+                "const": "evidence"
+              },
+              "key": {
+                "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+              },
+              "digest": {
+                "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+              }
+            }
+          },
+          "minItems": 0,
+          "maxItems": 32
+        },
+        "assessment": {
+          "$ref": "urn:writhelm:work:model2#/$defs/bodyRef"
+        },
+        "decision": {
+          "enum": [
+            "resolved",
+            "not-resolved"
+          ]
+        },
+        "assessedBy": {
+          "$ref": "urn:writhelm:work:model2#/$defs/conditionAssessorProvenance"
+        },
+        "supersedes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "family",
+              "key",
+              "digest"
+            ],
+            "properties": {
+              "family": {
+                "const": "condition-confirmations"
+              },
+              "key": {
+                "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+              },
+              "digest": {
+                "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+              }
+            }
+          },
+          "minItems": 0,
+          "maxItems": 32
+        },
+        "correctionBasis": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 0,
+          "maxItems": 32
+        },
+        "applicability": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "family",
+                "key",
+                "digest"
+              ],
+              "properties": {
+                "family": {
+                  "const": "evidence-applicability"
+                },
+                "key": {
+                  "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+                },
+                "digest": {
+                  "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "continuations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "origin",
+        "assignment",
+        "binding",
+        "checkpoint",
+        "sourceCheckpoint",
+        "conditions",
+        "coverage",
+        "expectedAssignmentGeneration",
+        "before",
+        "after",
+        "mode",
+        "rebind",
+        "preparationBasis",
+        "nativeMessageId",
+        "notification",
+        "supersedes",
+        "generation",
+        "phase",
+        "stage",
+        "observations",
+        "evidence",
+        "delivery",
+        "nativeIntent",
+        "reason",
+        "effect"
+      ],
+      "properties": {
+        "origin": {
+          "$ref": "urn:writhelm:work:model2#/$defs/assignmentSubject"
+        },
+        "assignment": {
+          "$ref": "urn:writhelm:work:model2#/$defs/assignmentSubject"
+        },
+        "binding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "assignment-bindings"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/assignmentBindingKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        "checkpoint": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "family",
+                "key",
+                "digest"
+              ],
+              "properties": {
+                "family": {
+                  "const": "checkpoints"
+                },
+                "key": {
+                  "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+                },
+                "digest": {
+                  "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+                }
+              }
+            }
+          ]
+        },
+        "sourceCheckpoint": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "key",
+            "digest"
+          ],
+          "properties": {
+            "family": {
+              "const": "checkpoints"
+            },
+            "key": {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            },
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            }
+          }
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/conditionPair"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "coverage": {
+          "$ref": "urn:writhelm:work:model2#/$defs/conditionCoverage"
+        },
+        "expectedAssignmentGeneration": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+        },
+        "before": {
+          "$ref": "urn:writhelm:work:model2#/$defs/snapshot"
+        },
+        "after": {
+          "$ref": "urn:writhelm:work:model2#/$defs/snapshot"
+        },
+        "mode": {
+          "enum": [
+            "unchanged-base",
+            "authorized-rebind"
+          ]
+        },
+        "rebind": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/continuationRebind"
+            }
+          ]
+        },
+        "preparationBasis": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 1,
+          "maxItems": 32
+        },
+        "nativeMessageId": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 256,
+          "pattern": "^msg"
+        },
+        "notification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "digest",
+            "byteLength"
+          ],
+          "properties": {
+            "digest": {
+              "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+            },
+            "byteLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4096
+            }
+          }
+        },
+        "supersedes": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "generation"
+              ],
+              "properties": {
+                "key": {
+                  "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+                },
+                "generation": {
+                  "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+                }
+              }
+            }
+          ]
+        },
+        "generation": {
+          "$ref": "urn:writhelm:core-codec:v1#/$defs/generation"
+        },
+        "phase": {
+          "enum": [
+            "prepared",
+            "in-flight",
+            "environment-confirmed",
+            "delivery-confirmed",
+            "resume-confirmed",
+            "held",
+            "unknown"
+          ]
+        },
+        "stage": {
+          "enum": [
+            "environment",
+            "delivery",
+            "resume"
+          ]
+        },
+        "observations": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:writhelm:work:model2#/$defs/source"
+          },
+          "minItems": 0,
+          "maxItems": 32
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "family",
+              "key",
+              "digest"
+            ],
+            "properties": {
+              "family": {
+                "const": "evidence"
+              },
+              "key": {
+                "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+              },
+              "digest": {
+                "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+              }
+            }
+          },
+          "minItems": 0,
+          "maxItems": 32
+        },
+        "delivery": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            }
+          ]
+        },
+        "nativeIntent": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+            }
+          ]
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "urn:writhelm:work:model2#/$defs/bodyRef"
+            }
+          ]
+        },
+        "effect": {
+          "$ref": "urn:writhelm:work:model2#/$defs/continuationEffect"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "unchanged-base"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "checkpoint": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "family",
+                  "key",
+                  "digest"
+                ],
+                "properties": {
+                  "family": {
+                    "const": "checkpoints"
+                  },
+                  "key": {
+                    "$ref": "urn:writhelm:work:model2#/$defs/idKey"
+                  },
+                  "digest": {
+                    "$ref": "urn:writhelm:core-codec:v1#/$defs/digest"
+                  }
+                }
+              },
+              "rebind": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "authorized-rebind"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "rebind": {
+                "$ref": "urn:writhelm:work:model2#/$defs/continuationRebind"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "phase": {
+                "const": "prepared"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "stage": {
+                "const": "environment"
+              },
+              "effect": {
+                "properties": {
+                  "state": {
+                    "const": "not-issued"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "phase": {
+                "const": "environment-confirmed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "stage": {
+                "const": "environment"
+              },
+              "effect": {
+                "properties": {
+                  "state": {
+                    "const": "confirmed"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "phase": {
+                "const": "delivery-confirmed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "stage": {
+                "const": "delivery"
+              },
+              "effect": {
+                "properties": {
+                  "state": {
+                    "const": "confirmed"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "phase": {
+                "const": "resume-confirmed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "stage": {
+                "const": "resume"
+              },
+              "effect": {
+                "properties": {
+                  "state": {
+                    "const": "confirmed"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "phase": {
+                "const": "unknown"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "effect": {
+                "properties": {
+                  "state": {
+                    "const": "outcome-unknown"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
