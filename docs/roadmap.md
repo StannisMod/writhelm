@@ -38,7 +38,7 @@ The owner subsequently approved the H1 boundary and service-control/native-execu
 2026-11-05; current scope: [K-HARNESS revision 3](contracts/agent-workflow.md). This unblocks
 component contract design, beginning with K-TASK, not blanket behavioral implementation or live calls.
 
-### Current H1 boundary and proposed completion order
+### Current H1 boundary and approved completion order
 
 The approved connected-work amendment assigns blocker resolution, consistent environment preparation,
 minimal sufficient notification and eligible continuation to the engine. Exact identities remain
@@ -46,7 +46,8 @@ technical evidence, not repeated chat payloads. A bounded portable implementatio
 completed independent review and scoped parent acceptance in isolated development worktrees; it is
 not yet integrated into this source tree or qualified as an operational OpenCode service.
 
-Proposed next work, subject to owner plan approval:
+The owner approved autonomous execution of this completion plan. Existing separate permissions for
+live inference, working-profile installation, the user pilot and public push remain unchanged.
 
 1. Integrate the exact accepted portable candidate into the target source tree, preserving existing
    work and upstream notices. Review the exact new publication paths/content and reproducible test
@@ -54,15 +55,17 @@ Proposed next work, subject to owner plan approval:
    relabeled as a fresh run. Commit integration separately from this documentation checkpoint.
 2. Complete the actual service/native composition: protected scoped credentials and trusted session/
    host binding, retained request/observation custody, qualified source/work-area capture and a real
-   bridge between the service engine and pinned OpenCode APIs. No permissive production defaults or
-   owner-key forwarding. Unsupported OS/profile adapters refuse explicitly.
-3. Qualify Linux/OpenCode Desktop 2.2.5 through one bounded combined model-free integration checkpoint:
+   bridge between the service engine and pinned OpenCode APIs, including task-shaped checkpoint,
+   compaction and restoration. No permissive production defaults or owner-key forwarding. Unsupported
+   OS/profile adapters refuse explicitly.
+3. Complete in-harness task/progress/blocker/review/acceptance/integration presentation against the
+   actual service. Prepare it before the combined checkpoint rather than launching a broad campaign
+   per small edit.
+4. Qualify Linux/OpenCode Desktop 2.2.5 through one bounded combined model-free integration checkpoint:
    shared-mechanism repair and confirmation, unchanged-base and authorized-rebind continuation,
    minimal notification, current-rights changes, loss/retry/restart, pause/next-work barriers and
    in-harness review/result recovery. Distinguish actual host evidence from portable mocks; keep
    unproved physical writer/source custody and abnormal recovery gates visible.
-4. Complete in-harness task/progress/blocker/review/acceptance/integration presentation against the
-   actual service. Plan grouped qualification rather than separate broad campaigns per small edit.
    Keep K-RUN recovery, the historical unexplained timeout, licensing/release and per-platform gates
    explicit. Windows/macOS remain service targets with separately qualified adapters.
 5. Run the first complete H1 owner pilot only after its prerequisites and a separately authorized
