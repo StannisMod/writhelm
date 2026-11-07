@@ -28,7 +28,8 @@ internal data class HttpDeliveryEvent(val control: Boolean,val status: Int)
 /** Install only into an explicitly bounded loopback engine. No external credentials/config/loggers. */
 internal class HttpAdapter(private val service: WrithelmService,val profile: HttpProfile,
     private val beforeDelivery: suspend (HttpDeliveryEvent)->Unit={},
-    private val admission: HttpAdmission=HttpAdmission()) {
+    private val admission: HttpAdmission=HttpAdmission(),
+    private val nativeEndpoint: NativeRuntimeEndpoint?=null) {
     val mcp=McpAdapter(service)
     private fun boundary(call: ApplicationCall,protected: Boolean): String? {
         val headers=call.request.headers
@@ -91,6 +92,12 @@ internal class HttpAdapter(private val service: WrithelmService,val profile: Htt
         var mayPublish=false;var sdkStarted=false;var sdkFinalized=false
         try {
             val t=checkNotNull(boundary(call,true))
+            if(path=="/internal/native/v1") {
+                val endpoint=nativeEndpoint ?: stop("NOT_FOUND",404)
+                if(method!=HttpMethod.Post)stop("INVALID_INPUT",405)
+                val proof=call.request.headers.getAll("X-Writhelm-Native-Proof")
+                if(proof==null || proof.size!=1 || !endpoint.accepts(proof.single()))stop("FORBIDDEN",403)
+            }
             currentCoroutineContext().ensureActive()
             val session=if(path=="/mcp")call.request.headers.getAll("MCP-Session-Id") else null
             val version=if(path=="/mcp")call.request.headers.getAll("MCP-Protocol-Version") else null
@@ -104,6 +111,7 @@ internal class HttpAdapter(private val service: WrithelmService,val profile: Htt
             val bytes=when {
                 path=="/api/v1/commands" && method==HttpMethod.Post -> body(call,8*1024*1024,lease)
                 path=="/api/v1/reads" && method==HttpMethod.Post -> body(call,16384,lease)
+                path=="/internal/native/v1" && method==HttpMethod.Post -> body(call,16384,lease)
                 path=="/mcp" && method==HttpMethod.Post -> body(call,8*1024*1024+65536,lease)
                 else -> byteArrayOf()
             }
@@ -114,6 +122,7 @@ internal class HttpAdapter(private val service: WrithelmService,val profile: Htt
                 val reply=when(path) {
                     "/api/v1/commands" -> { if(method!=HttpMethod.Post)stop("INVALID_INPUT",405);mayPublish=true;wire(service.command(t,bytes)) }
                     "/api/v1/reads" -> { if(method!=HttpMethod.Post)stop("INVALID_INPUT",405);wire(service.read(t,bytes)) }
+                    "/internal/native/v1" -> wire(checkNotNull(nativeEndpoint).read(t,bytes))
                     "/mcp" -> {
                         when(method) {
                             HttpMethod.Delete -> { sdkStarted=true;mcp.delete(t,session?.single(),version?.single()).also { sdkFinalized=true } }

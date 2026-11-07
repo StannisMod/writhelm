@@ -17,18 +17,22 @@ function fixture() {
   let payload: unknown, wakes = 0, claims = 0, state: "qualified-quiescent" | "active" | "held" = "qualified-quiescent"
   let loseReply = false, admitWithoutWake = false, badBody = false, interrupts = 0
   let failBeforeAdmit = false, qualifiedAbsent = false
+  let retainedReads = 0
+  let instructions = [...envelope.instructions], puts = 0
+  let forbidAuthorityReads = false
   const pauses = new Set<string>()
   let nextCurrent: { enter: () => void; wait: Promise<void> } | undefined
   let observed!: () => void
   const boundary = new Promise<void>(resolve => { observed = resolve })
   const observations: string[] = []
   const bridge: ConnectedNativeBridge = {
-    retained: async () => envelope, managed: sessionID => sessionID === envelope.sessionID,
+    retained: async () => { retainedReads++; return envelope }, managed: sessionID => sessionID === envelope.sessionID,
     current: async () => {
+      assert.equal(forbidAuthorityReads, false, "immutable reconciliation must not recapture service authority")
       const captured = state, pending = nextCurrent; nextCurrent = undefined
       if (pending) { pending.enter(); await pending.wait }
       return captured
-    }, binding: async () => envelope.bindingJSON,
+    }, binding: async () => { assert.equal(forbidAuthorityReads, false, "immutable reconciliation must not recapture service binding"); return envelope.bindingJSON },
     retainObservation: async (_key, raw) => { observations.push(raw); if (raw.includes("held-boundary")) observed() },
     observations: async () => observations,
     claimDispatch: async () => { if (claims) return false; claims++; return true },
@@ -44,7 +48,9 @@ function fixture() {
     session: {
       get: async () => ({ id: envelope.sessionID }),
       interrupt: async () => { interrupts++; throw new Error("MOCK lost interrupt acknowledgement") },
-      instructions: { entry: { list: async () => [...envelope.instructions] } },
+      instructions: { entry: { list: async () => instructions, put: async (entry: { key: string; value: string }) => {
+        puts++; instructions = [...instructions.filter(i => i.key !== entry.key), { key: entry.key, value: entry.value }]
+      } } },
       hook: async (name: string, callback: (event: { sessionID: string }) => Promise<void>) => { hooks.set(name, callback); return { dispose: async () => {} } },
       synthetic: async (input: Record<string, unknown>) => {
         if (failBeforeAdmit) throw new Error("MOCK original dispatch ended before admission")
@@ -61,7 +67,12 @@ function fixture() {
   const adapter = new ConnectedNativeAdapter(ctx, client, bridge, "host")
   return { adapter, envelope, hooks, boundary, observations, get wakes() { return wakes },
     freshAdapter() { return new ConnectedNativeAdapter(ctx, client, bridge, "host") },
+    get pauseClaims() { return pauses.size },
+    get retainedReads() { return retainedReads },
     get interrupts() { return interrupts },
+    get puts() { return puts },
+    emptyPacket() { instructions = [] }, changedPacket() { instructions = [{ key: "writhelm-task", value: "unexpected old source" }] },
+    forbidAuthorityReads() { forbidAuthorityReads = true },
     suspendCurrent() {
       let enter!: () => void, resume!: () => void
       const entered = new Promise<void>(resolve => { enter = resolve }), wait = new Promise<void>(resolve => { resume = resolve })
@@ -73,6 +84,33 @@ function fixture() {
     active() { state = "active" }, revoke() { state = "held" },
     lose() { loseReply = true }, noWake() { admitWithoutWake = true }, forge() { badBody = true } }
 }
+
+test("MOCK exact service packet installs only behind qualified hold; changed source is not overwritten", async () => {
+  const f = fixture(); await f.adapter.register(); f.emptyPacket()
+  assert.equal(await f.adapter.prepare("k"), true); assert.equal(f.puts, 1)
+  assert.equal(await f.adapter.prepare("k"), true); assert.equal(f.puts, 1)
+  await f.adapter.deliver("k"); f.active(); await f.adapter.release("k"); f.changedPacket()
+  await assert.rejects(f.hooks.get("tool")!({ sessionID: "ses_mock" }), /managed tool admission held/)
+  await f.adapter.close()
+  const bad = fixture(); await bad.adapter.register(); bad.changedPacket()
+  await assert.rejects(bad.adapter.prepare("k"), /unknown or changed mandatory/)
+  assert.equal(bad.puts, 0); assert.equal(bad.wakes, 0)
+  await bad.adapter.close()
+  const held = fixture(); await held.adapter.register(); held.emptyPacket(); held.revoke()
+  assert.equal(await held.adapter.prepare("k"), false); assert.equal(held.puts, 0)
+  await held.adapter.close()
+})
+
+test("MOCK original-effect reconciliation does not reenter service current-authority monitor", async () => {
+  const f = fixture(); await f.adapter.register(); await f.adapter.hold("k")
+  assert.equal(await f.adapter.deliver("k"), "matched-wake")
+  f.forbidAuthorityReads()
+  assert.equal(await f.adapter.reconcile("k"), "matched-wake")
+  // Immutable observation grants no new effect: delivery still attempts current authorization.
+  await assert.rejects(f.adapter.deliver("k"), /must not recapture service binding/)
+  assert.equal(f.wakes, 1)
+  await f.adapter.close()
+})
 
 test("MOCK pinned synthetic path: original admission+wake, atomic no-repeat claim, active release", async () => {
   const f = fixture(); await f.adapter.register(); assert.equal(await f.adapter.hold("k"), true)
@@ -99,6 +137,30 @@ test("MOCK released ACTIVE rehold precedes exact pause; lost interrupt reply can
   assert.ok(f.observations.some(v => v.includes("pause-outcome-unknown")))
   await assert.rejects(f.adapter.release("k"), /canonical active/)
   await f.adapter.close()
+})
+test("MOCK first ACTIVE blocker reholds and pauses an actual binding with no retained continuation", async () => {
+  const f = fixture(); await f.adapter.register(); f.active()
+  const rawJSON = '{"kind":"binding","generation":9007199254740993}'
+  const target = { key: "binding-target", rawJSON, digest: createHash("sha256").update(rawJSON).digest("hex"),
+    bindingJSON: f.envelope.bindingJSON, hostID: "host", sessionID: "ses_mock" }
+  await assert.rejects(f.adapter.reholdBinding({ ...target, hostID: "wrong" }))
+  await assert.rejects(f.adapter.reholdBinding({ ...target, bindingJSON: "stale-generation" }))
+  await assert.rejects(f.adapter.pauseBinding(target, "exact-pause-intent"))
+  await f.adapter.reholdBinding(target)
+  for (const hook of ["tool", "context"]) await assert.rejects(f.hooks.get(hook)!({ sessionID: "ses_mock" }), /held without continuation/)
+  f.revoke()
+  await f.adapter.pauseBinding(target, "exact-pause-intent")
+  await f.adapter.pauseBinding(target, "exact-pause-intent")
+  assert.equal(f.pauseClaims, 1); assert.equal(f.interrupts, 1); assert.equal(f.wakes, 0)
+  assert.equal(f.retainedReads, 0, "no historical envelope lookup")
+  assert.ok(f.observations.every(raw => !raw.includes("messageID") && !raw.includes("continuationId")))
+  assert.ok(f.observations.some(raw => raw.includes("binding-pause-outcome-unknown")))
+  assert.equal(await f.adapter.hold("k"), false, "interrupt acknowledgement is not qualified quiescence")
+  await f.adapter.close()
+  const fresh = f.freshAdapter(); await fresh.register(); await fresh.reholdBinding(target)
+  await fresh.pauseBinding(target, "exact-pause-intent")
+  assert.equal(f.interrupts, 1); assert.equal(f.wakes, 0)
+  await fresh.close()
 })
 test("MOCK lost reply needs actual held-boundary evidence, not inbox equality", async () => {
   const f = fixture(); f.lose(); await f.adapter.register(); await f.adapter.hold("k")

@@ -31,6 +31,9 @@ internal class WrithelmService private constructor(val app: MechanismApp?,val li
     private val listings=linkedMapOf<UUID,Listing>()
     private val cursors=linkedMapOf<UUID,Cursor>()
     fun access(token: String)=h1?.inspectAccess(token) ?: checkNotNull(app).inspectAccess(token)
+    /** Controller-owned startup composition only; never selected by renderer/model arguments. */
+    internal fun nativeEndpoint(project: UUID,controller: UUID,host: UUID,proof: ByteArray)=
+        NativeRuntimeEndpoint(checkNotNull(h1) { "native work requires explicit H1 service" },project,controller,host,proof)
     fun <T> guarded(block: ()->T,onError: (ServiceReply)->T): T = try { block() }
         catch(e: ServiceFault) { onError(error(e.code,e.status)) }
         catch(e: AppAccessFault) { onError(error(e.problem.name,if(e.problem==AppAccessProblem.UNAUTHENTICATED)401 else 403)) }

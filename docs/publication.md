@@ -468,3 +468,22 @@ GUI build is not silently represented as recovered or tested; a new build requir
 Source identity recovery is not a passing behavioral test. Target checks and exact integration state
 are recorded separately. Real native custody/fencing, other platforms and the full H1 pilot remain
 unqualified. This local tracking/integration decision does not authorize a public push or live profile.
+
+## Native bridge candidate scope P19 — local commit authorized
+
+The owner requested committing the checked native bridge candidate and continuing implementation.
+Admit only the 24 individually enumerated exceptions in `.gitignore`'s P19 section, alongside the
+candidate's changes to ten already admitted source/test/build paths and this publication/ignore
+record. This is authorization for a local source checkpoint, not independent review, acceptance,
+target integration, a public push or installation into the working harness.
+
+Provenance: newly authored Writhelm AGPL-3.0-only service/native adapter code and synthetic tests.
+The scope includes private-transport implementations, protected operational custody and scoped
+credential resolution, exact assignment-packet rendering, explicit fresh H1 setup and composition.
+Tests include actual local HTTP/Git/application boundaries with explicitly mocked external native
+effects. Preserve upstream notices; no dependency binaries or upstream implementation are added.
+
+Private candidates, task handoffs, manifests, review drafts, logs/XML, runtime stores, generated
+credentials/proofs, compiled output, toolchains and session history remain excluded. The checked
+source is not a qualified installed service: full task-shaped context/compaction, physical effects,
+abnormal recovery, other-platform qualification and the remaining pilot/release gates stay open.

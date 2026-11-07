@@ -49,16 +49,24 @@ internal interface ConnectedNativeControl {
 internal class LinuxConnectedCustody(private val directory: Path) {
     init {
         require(System.getProperty("os.name")=="Linux") { "unqualified custody platform" }
-        require(directory.isAbsolute && !Files.isSymbolicLink(directory));Files.createDirectories(directory)
+        require(directory.isAbsolute && !Files.isSymbolicLink(directory));Files.createDirectories(directory,
+            java.nio.file.attribute.PosixFilePermissions.asFileAttribute(java.nio.file.attribute.PosixFilePermissions.fromString("rwx------")))
+        require(Files.isDirectory(directory,LinkOption.NOFOLLOW_LINKS) && directory.toRealPath()==directory.normalize())
+        require((Files.getAttribute(directory,"unix:mode",LinkOption.NOFOLLOW_LINKS) as Int) and 0x3f==0)
+        require(Files.getAttribute(directory,"unix:uid",LinkOption.NOFOLLOW_LINKS)==Files.getAttribute(Path.of("/proc/self"),"unix:uid"))
     }
     @Synchronized fun retain(id: UUID,suffix: String,bytes: ByteArray): Boolean {
         require(suffix in setOf("command","envelope","dispatch"));require(bytes.size<=2*1024*1024)
         val path=directory.resolve("$id.$suffix")
         if(Files.exists(path,LinkOption.NOFOLLOW_LINKS)) {
-            require(!Files.isSymbolicLink(path) && Files.size(path)<=2*1024*1024 && Files.readAllBytes(path).contentEquals(bytes)) { "retained operation conflict" }
+            require(Files.isRegularFile(path,LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(path) && Files.size(path)<=2*1024*1024 &&
+                (Files.getAttribute(path,"unix:mode",LinkOption.NOFOLLOW_LINKS) as Int) and 0x3f==0 &&
+                Files.getAttribute(path,"unix:uid",LinkOption.NOFOLLOW_LINKS)==Files.getAttribute(directory,"unix:uid") &&
+                Files.getAttribute(path,"unix:nlink",LinkOption.NOFOLLOW_LINKS)==1 && Files.readAllBytes(path).contentEquals(bytes)) { "retained operation conflict" }
             return false
         }
-        FileChannel.open(path,StandardOpenOption.WRITE,StandardOpenOption.CREATE_NEW).use { channel ->
+        FileChannel.open(path,setOf(StandardOpenOption.WRITE,StandardOpenOption.CREATE_NEW),
+            java.nio.file.attribute.PosixFilePermissions.asFileAttribute(java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"))).use { channel ->
             val buffer=java.nio.ByteBuffer.wrap(bytes);while(buffer.hasRemaining())channel.write(buffer);channel.force(true)
         }
         FileChannel.open(directory,StandardOpenOption.READ).use { it.force(true) }
@@ -122,6 +130,21 @@ internal class ConnectedRuntimeFacts(private val delegate: H1RuntimeFacts,privat
             controllers=mapOf(controller.controllerId to controller),observedEvidence=observedChecks(work),stages=stages,notPerformedAttempts=notPerformed)),original.qualifiedProfiles)
     }
     companion object {
+        /** Exact provisional delivery identity, derived from the complete current canonical
+         * frontier. This projects a future operation; it does not create a continuation or wake. */
+        fun provisionalEnvelope(work: WorkState,basis: dev.writhelm.core.store.GitOid,subject: WAssignmentSubject): ConnectedEnvelope {
+            val inspector=Model2Inspector(work);val pairs=inspector.resolvedPairs(subject)
+            workRequire(pairs.isNotEmpty(),WorkProblem.NOT_READY)
+            val coverage=inspector.coverage(subject,WorkGitOid(basis.algorithm,basis.hex))
+            val key=WorkKey.Id(work.projectId,UUID.nameUUIDFromBytes("connected:$subject:${coverage.conditionsDigest.hex}".toByteArray(Charsets.UTF_8)))
+            val notices=pairs.map { (work.resolve(it.condition).payload as WConditionsPayload).value.notice() }.distinct()
+            val text=notices.joinToString("\n") { ref -> work.bodies[ref.digest]?.also {
+                workRequire(it.sizeBytes==ref.byteLength,WorkProblem.DIGEST_MISMATCH)
+            }?.text() ?: throw WorkFault(WorkProblem.MISSING_BODY) }
+            workRequire(text.toByteArray(Charsets.UTF_8).size in 1..4096,WorkProblem.INCOMPLETE_HANDOFF)
+            val a=work.assignment(subject.assignmentId);val e=work.binding(subject).execution
+            return ConnectedEnvelope(key,subject,requireNotNull(a.binding),e.nativeHostId,e.nativeSessionId,"msg_${key.id}",text)
+        }
         fun bindingTarget(work: WorkState,subject: WAssignmentSubject): ConnectedBindingTarget {
             val a=work.assignment(subject.assignmentId)
             workRequire(a.executionGeneration==subject.generation,WorkProblem.STALE_GENERATION)
@@ -143,8 +166,14 @@ internal class ConnectedWorkEngine(private val app: H1Application,private val pr
     private val preparation: ConnectedPreparation,private val native: ConnectedNativeControl,private val custody: LinuxConnectedCustody,
     private val authorizedRebind: AuthorizedRebindDriver?=null): AutoCloseable {
     private val codec=WorkCodec();private var running=false
-    private val subscription=app.onPublished { tick() }
-    val holds=linkedMapOf<WAssignmentSubject,String>()
+    private val hints=ConnectedHints { tick() }
+    private val subscription=app.onPublished { hints.hint() }
+    private val nativeSubscription=app.onNativeObservation { hints.hint() }
+    private val held=linkedMapOf<WAssignmentSubject,String>()
+    val holds: Map<WAssignmentSubject,String> get()=synchronized(this) { held.toMap() }
+    val scanUnavailable: Boolean get()=hints.lastFailure!=null
+    init { hints.hint() } // restart always scans canonical state, never replays a hint queue
+    internal fun awaitIdle()=hints.awaitIdle()
     private fun stable(base: String)=UUID.nameUUIDFromBytes(base.toByteArray(Charsets.UTF_8))
     private fun capture()=app.coordinationCapture(credential(),project)
     private fun publish(op: dev.writhelm.core.work.WorkOperation,identity: String): CommandResult.Settled {
@@ -167,9 +196,9 @@ internal class ConnectedWorkEngine(private val app: H1Application,private val pr
             subjects.forEach { record ->
                 val a=(record.payload as WAssignmentsPayload).value
                 val subject=WAssignmentSubject((record.identity.key as WorkKey.Id).id,a.executionGeneration)
-                try { advance(subject);holds.remove(subject) } catch(e: Exception) {
-                    holds[subject]=e.message ?: "affected continuation held"
-                    try { holdActive(subject) } catch(pause: Exception) { holds[subject]="${holds[subject]}; pause pending: ${pause.message}" }
+                try { advance(subject);held.remove(subject) } catch(e: Exception) {
+                    held[subject]=e.message ?: "affected continuation held"
+                    try { holdActive(subject) } catch(pause: Exception) { held[subject]="${held[subject]}; pause pending: ${pause.message}" }
                 }
             }
         } finally { running=false }
@@ -234,12 +263,8 @@ internal class ConnectedWorkEngine(private val app: H1Application,private val pr
             if(tip==null) {
                 workRequire(assignment.state in setOf("paused","bound"),WorkProblem.INVALID_TRANSITION)
                 val coverage=inspector.coverage(subject,WorkGitOid(captured.basis.algorithm,captured.basis.hex))
-                val key=WorkKey.Id(project,stable("connected:$subject:${coverage.conditionsDigest.hex}"))
-                val notices=pairs.map { (work.resolve(it.condition).payload as WConditionsPayload).value.notice() }.distinct()
-                val text=notices.joinToString("\n") { ref ->work.bodies[ref.digest]?.also { body ->workRequire(body.sizeBytes==ref.byteLength,WorkProblem.DIGEST_MISMATCH) }?.text() ?: throw WorkFault(WorkProblem.MISSING_BODY) }
-                val body=Utf8Content.fromText(text);workRequire(body.sizeBytes in 1..4096,WorkProblem.INCOMPLETE_HANDOFF)
-                val envelope=ConnectedEnvelope(key,subject,requireNotNull(assignment.binding),requireNotNull(assignment.execution).nativeHostId,
-                    assignment.execution.nativeSessionId,"msg_${key.id}",text)
+                val envelope=ConnectedRuntimeFacts.provisionalEnvelope(work,captured.basis,subject)
+                val key=envelope.continuation;val text=envelope.text;val body=Utf8Content.fromText(text)
                 custody.retain(key.id,"envelope",envelope.bytes())
                 if(!native.hold(envelope))throw WorkFault(WorkProblem.NATIVE_UNKNOWN)
                 val op=CPrepareContinuationOperation(CPrepareContinuation(key,CPrepareContinuationData(plan.origin,subject,requireNotNull(assignment.binding),
@@ -326,5 +351,5 @@ internal class ConnectedWorkEngine(private val app: H1Application,private val pr
         }
         throw WorkFault(WorkProblem.NOT_READY)
     }
-    override fun close()=subscription.close()
+    override fun close() { subscription.close();nativeSubscription.close();hints.close() }
 }

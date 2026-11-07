@@ -28,6 +28,7 @@ tasks.test {
     // Native Node/DOM components have explicit prerequisites and a separate task, not a hidden
     // dependency on a developer's temporary build directory in the portable test selection.
     exclude("**/NativeControllerJourneyTest.class")
+    exclude("**/NativeBridgeJourneyTest.class")
 }
 
 tasks.withType<Test>().configureEach {
@@ -58,6 +59,7 @@ tasks.register<Test>("nativeComponentTest") {
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
     include("**/NativeControllerJourneyTest.class")
+    include("**/NativeBridgeJourneyTest.class")
     useJUnitPlatform()
     maxParallelForks = 1
     maxHeapSize = "128m"

@@ -14,8 +14,15 @@ import dev.writhelm.core.auth2.WorkOperation as AuthorityOperation
 
 /** Trusted same-H adapter input only. No default provider, actor override or permissive runtime. */
 internal fun interface H1RuntimeFacts { fun capture(state: H1BoundState,command: WorkCommand): H1ObservedFacts }
+/** Trusted platform observer, never a wire assertion. No installed physical-access profile has
+ * been qualified: production's explicit unavailable adapter holds; component profiles use MOCK. */
+internal fun interface NativeRuntimeSafety { fun safeAccess(state: H1BoundState,subject: WAssignmentSubject): Boolean }
+internal object UnavailableNativeRuntimeSafety: NativeRuntimeSafety {
+    override fun safeAccess(state: H1BoundState,subject: WAssignmentSubject)=false
+}
 internal class H1Options(val runtime: H1RuntimeFacts,val app: AppOptions=AppOptions(admission=AdmissionPolicy(formatVersion=2)),
-    val commandReplyBytes: Int=65536,val navigationClock: ()->Long={System.nanoTime()/1000000}) {
+    val commandReplyBytes: Int=65536,val navigationClock: ()->Long={System.nanoTime()/1000000},
+    val nativeSafety: NativeRuntimeSafety=UnavailableNativeRuntimeSafety) {
     init { require(app.admission.formatVersion==2 && commandReplyBytes in 1024..65536) }
 }
 internal class H1Genesis(val core: ApprovalWorkflow,val auth: Collection<Auth2Record>,val work: Map<UUID,WorkState>)
@@ -38,7 +45,22 @@ internal class H1Application private constructor(private val storeId: UUID,priva
     }
     private var active: Request?=null
     private val publishedObservers=linkedSetOf<()->Unit>()
-    /** Operational wake hints only. Canonical frontier remains the restart source of truth. */
+    private val nativeObservers=linkedSetOf<()->Unit>()
+    @Synchronized internal fun onNativeObservation(observer: ()->Unit): AutoCloseable {
+        nativeObservers.add(observer)
+        return AutoCloseable { synchronized(this) { nativeObservers.remove(observer) } }
+    }
+    @Synchronized internal fun nativeObserved(token: String,project: UUID,controller: UUID,host: UUID,
+        subject: WAssignmentSubject,binding: WorkReference): JsonValue=capture(token) { state,key ->
+        val status=NativeRuntimeAccess(controller,host).status(state,key,project,subject,binding,null) as JObject
+        if(status.entries.getValue("bindingJSON")===JNull)throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        // A bounded wake hint only; it never advances canonical state or supplies native facts.
+        nativeObservers.toList().forEach { it() }
+        obj("formatVersion" to num(1),"kind" to str("native-hint"))
+    }
+    /** Operational wake hints only. Called under execution ownership: observers must only signal
+     * their lifecycle worker, never perform native I/O or wait for a callback into this service.
+     * Canonical frontier remains the restart source of truth. */
     @Synchronized internal fun onPublished(observer: ()->Unit): AutoCloseable {
         publishedObservers.add(observer)
         return AutoCloseable { synchronized(this) { publishedObservers.remove(observer) } }
@@ -245,6 +267,17 @@ internal class H1Application private constructor(private val storeId: UUID,priva
         Model2Inspector(work).requireActivation(subject,true)
     }
     @Synchronized override fun close()=store.close()
+    /** Only installed on the separately authenticated private native transport, never a work tool
+     * or generic raw-state read. Capture and actor policy are shared with ordinary service requests. */
+    @Synchronized internal fun nativeRuntimeRead(token: String,project: UUID,controller: UUID,host: UUID,
+        subject: WAssignmentSubject?,binding: WorkReference?,continuation: UUID?,packet: Boolean=false): JsonValue=capture(token) { state,key ->
+        val access=NativeRuntimeAccess(controller,host)
+        if(subject==null) {
+            require(binding==null && continuation==null)
+            access.identity(state,key,project)
+        } else if(packet)access.packet(state,key,project,subject,requireNotNull(binding),requireNotNull(continuation))
+        else access.status(state,key,project,subject,requireNotNull(binding),continuation,options.nativeSafety)
+    }
     companion object {
         fun initialize(directory: Path,storeId: UUID,genesis: H1Genesis,options: H1Options): H1Application {
             // This composition currently selects the existing Linux NativeGit/RuntimeOwner adapter.

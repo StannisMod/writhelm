@@ -15,8 +15,8 @@ import kotlin.test.*
 
 /** Real canonical Git/service/CORE/AUTH/history and owned filesystem. Native is explicitly a MOCK;
  * synthetic fixture profile/OIDs are not installed-native, physical fencing or source-Git evidence. */
-private class ConnectedFixture(private val reviewerGap: Boolean=false,private val informationalNote: Boolean=false,
-    private val initialCondition: Boolean=true): AutoCloseable {
+internal class ConnectedFixture(private val reviewerGap: Boolean=false,private val informationalNote: Boolean=false,
+    private val initialCondition: Boolean=true,nativeSafety: NativeRuntimeSafety=UnavailableNativeRuntimeSafety): AutoCloseable {
     val f=ReviewAppFixture();val root=directory();val consumerRoot=Files.createDirectory(root.resolve("consumer"))
     val repairRoot=Files.createDirectory(root.resolve("repair"));val store=directory()
     val consumerId=id(2004);val consumerKey=id(2007);val consumerSubject=WAssignmentSubject(consumerId,0)
@@ -26,6 +26,8 @@ private class ConnectedFixture(private val reviewerGap: Boolean=false,private va
     val consumerIntended=f.intended.copy(executionId=id(2011),nativeSessionId="ses_connected_consumer")
     val codec=WorkCodec();var sequence=3000
     val native=MockNative();val checkCustody=OwnedCheckCustody(root.resolve("reports"),mapOf(id(2800) to repairRoot))
+    var nativeControl: ConnectedNativeControl=native
+        private set
     val observed=linkedSetOf<WorkReference>()
     lateinit var app: H1Application;lateinit var checkpoint: WorkReference;lateinit var condition: WorkReference
     lateinit var before: WSnapshot;lateinit var preparation: LinuxOwnedDirectoryPreparation
@@ -55,7 +57,7 @@ private class ConnectedFixture(private val reviewerGap: Boolean=false,private va
         val manifest=(original.resolve(f.manifest).payload as WInputManifestsPayload).value.copy(task=consumerTask)
         val m=add(consumerManifestKey,WInputManifestsPayload(manifest));consumerManifest=WorkReference(m.identity,codec.digest(m))
         val work=WorkState.restore(project,records,emptyList())
-        options=H1Options(H1RuntimeFacts { state,command ->connected?.capture(state,command) ?: delegate.capture(state,command) })
+        options=H1Options(H1RuntimeFacts { state,command ->connected?.capture(state,command) ?: delegate.capture(state,command) },nativeSafety=nativeSafety)
         app=H1Application.initialize(store,storeId,H1Genesis(f.base.core,f.base.authority.records(),mapOf(project to work)),options)
         activate(f.assignment,f.task,f.manifest,f.workspace,f.resource,f.intent,f.correlation,f.intended,f.worker,f.workerKey,f.delegation)
         activate(consumerId,consumerTask,consumerManifest,consumerWorkspace,consumerResource,consumerIntent,id(2010),consumerIntended,id(2006),consumerKey,id(2005))
@@ -76,6 +78,7 @@ private class ConnectedFixture(private val reviewerGap: Boolean=false,private va
     fun publish(op: dev.writhelm.core.work.WorkOperation,who: String=plannerToken): CommandResult.Settled {
         val result=assertIs<CommandResult.Settled>(app.execute(who,codec.encodeCommand(WorkCommand(id(sequence++),project,op))))
         assertIs<LogicalOutcome.Success>(result.receipt.outcome,"${op.name}: ${result.receipt.outcome}")
+        engine?.let { if(!Thread.holdsLock(it))it.awaitIdle() }
         return result
     }
     fun ref(result: CommandResult.Settled): WorkReference {
@@ -134,8 +137,14 @@ private class ConnectedFixture(private val reviewerGap: Boolean=false,private va
         return ref(publish(CRecordCheckpointOperation(CRecordCheckpoint(WorkKey.Id(project,id(sequence++)),data,state().assignment(consumerId).generation,emptyList())),token(consumerKey)))
     }
     fun startEngine() {
-        engine=ConnectedWorkEngine(app,project,{plannerToken},preparation,native,LinuxConnectedCustody(root.resolve("custody")),driver)
+        engine=ConnectedWorkEngine(app,project,{plannerToken},preparation,nativeControl,LinuxConnectedCustody(root.resolve("custody")),driver)
         engine!!.tick()
+        engine!!.awaitIdle()
+    }
+    fun installNative(control: ConnectedNativeControl) {
+        check(engine==null)
+        nativeControl=control
+        connected=ConnectedRuntimeFacts(delegate,preparation,control,Model2ControllerExecution(f.controller,id(2900),f.intended.nativeHostId,"ses_connected_controller"),checkCustody::observed)
     }
     fun reopen() {
         engine?.close();app.close()
@@ -227,6 +236,7 @@ private class ConnectedFixture(private val reviewerGap: Boolean=false,private va
     class MockNative: ConnectedNativeControl {
         var sends=0;var wakes=0;var releases=0;var dropAfterWake=false;var unknown=false
         var qualifiedNotPerformedOnce=false
+        var reconciliationAvailable=true
         var afterWake: (()->Unit)?=null
         var allowHold: ()->Boolean={true};var failRelease=false
         private var accepted: ConnectedEnvelope?=null;var closed=true
@@ -251,6 +261,7 @@ private class ConnectedFixture(private val reviewerGap: Boolean=false,private va
             return if(dropAfterWake)NativeConnectedOutcome.Unknown else NativeConnectedOutcome.MatchedWake
         }
         override fun reconcile(envelope: ConnectedEnvelope): NativeConnectedOutcome = when {
+            !reconciliationAvailable -> NativeConnectedOutcome.Unknown
             qualifiedNotPerformedOnce && sends==1 && accepted==null -> NativeConnectedOutcome.NotPerformed
             unknown -> NativeConnectedOutcome.Unknown
             accepted==envelope -> NativeConnectedOutcome.MatchedWake
@@ -262,6 +273,72 @@ private class ConnectedFixture(private val reviewerGap: Boolean=false,private va
 }
 
 class ConnectedWorkTest {
+    @Test fun provisionalNativeEnvelopeAndExactPacketAreCurrentReadProjectionsNotSyntheticCanonicalWork() {
+        ConnectedFixture().use { f ->
+            val (r,e)=f.repairAndEvidence();f.confirm(r,e)
+            val capture=f.app.coordinationCapture(plannerToken,project)
+            val original=ConnectedRuntimeFacts.provisionalEnvelope(capture.work,capture.basis,f.consumerSubject)
+            val records=capture.work.records.size
+            val status=f.app.nativeRuntimeRead(plannerToken,project,f.f.controller,f.f.intended.nativeHostId,
+                f.consumerSubject,original.binding,original.continuation.id) as JObject
+            assertEquals(digest(Digest.of(original.bytes())),status.entries.getValue("envelopeDigest"))
+            assertSame(JNull,status.entries.getValue("attemptId"))
+            assertEquals(JBoolean(false),status.entries.getValue("quiescent")) // no physical qualification from paused alone
+            val packet=f.app.nativeRuntimeRead(plannerToken,project,f.f.controller,f.f.intended.nativeHostId,
+                f.consumerSubject,original.binding,original.continuation.id,true)
+            assertFalse(StrictJson.encode(packet,4*1024*1024).decodeToString().contains("PRIVATE_CONDITION_SENTINEL"))
+            assertEquals(records,f.state().records.size)
+            assertTrue(f.state().records.values.none { it.payload is WContinuationsPayload })
+            assertFails { f.app.nativeRuntimeRead(plannerToken,project,f.f.controller,f.f.intended.nativeHostId,
+                f.consumerSubject,original.binding,id(39999)) }
+            f.startEngine()
+            val c=f.state().records.values.single { it.payload is WContinuationsPayload }
+            assertEquals(original.continuation,c.identity.key)
+            val after=f.app.nativeRuntimeRead(plannerToken,project,f.f.controller,f.f.intended.nativeHostId,
+                f.consumerSubject,original.binding,original.continuation.id,true) as JObject
+            val before=packet as JObject
+            assertEquals(JBoolean(true),before.entries.getValue("freshEnvelope"))
+            assertEquals(JBoolean(false),after.entries.getValue("freshEnvelope"))
+            // Current permission to initialize custody changes, never the immutable base/source bytes.
+            assertContentEquals(StrictJson.encode(JObject(before.entries-"freshEnvelope"),4*1024*1024),
+                StrictJson.encode(JObject(after.entries-"freshEnvelope"),4*1024*1024))
+        }
+    }
+    @Test fun publicationHintDoesNotHoldServiceMonitorAcrossNativeCallbackIO() {
+        ConnectedFixture().use { f ->
+            val (result,evidence)=f.repairAndEvidence()
+            java.net.ServerSocket(0,1,java.net.InetAddress.getLoopbackAddress()).use { server ->
+                server.soTimeout=10000
+                val callback=java.util.concurrent.Executors.newSingleThreadExecutor()
+                try {
+                    val recaptured=callback.submit<Boolean> {
+                        server.accept().use { socket ->
+                            socket.soTimeout=10000
+                            assertEquals(17,socket.getInputStream().read())
+                            // Separate I/O callback thread recaptures the SAME application's monitor.
+                            // Old synchronous publication->tick->native->callback deadlocked here.
+                            val work=f.state()
+                            socket.getOutputStream().write(23)
+                            work.assignment(f.consumerId).currentIntent!=null
+                        }
+                    }
+                    f.native.afterWake={
+                        java.net.Socket(java.net.InetAddress.getLoopbackAddress(),server.localPort).use { socket ->
+                            socket.soTimeout=10000
+                            socket.getOutputStream().write(17)
+                            assertEquals(23,socket.getInputStream().read())
+                        }
+                    }
+                    f.startEngine()
+                    f.confirm(result,evidence)
+                    assertTrue(recaptured.get(10,java.util.concurrent.TimeUnit.SECONDS))
+                    assertEquals("active",f.state().assignment(f.consumerId).state)
+                    assertEquals(1,f.native.sends)
+                    assertEquals(1,f.native.wakes)
+                } finally { callback.shutdownNow() }
+            }
+        }
+    }
     @Test fun declarationForkNeedsCompleteExplicitCorrectionEvenWhenBothBranchesWereAssessedResolved() {
         ConnectedFixture().use { f ->
             val left=f.declareCondition("fork-left",listOf(f.condition))
@@ -868,9 +945,11 @@ class ConnectedWorkTest {
     }
     @Test fun lostWakeAcknowledgementReconcilesWithoutSecondSynthetic() {
         ConnectedFixture().use { f ->
-            f.native.dropAfterWake=true;f.startEngine();val (result,evidence)=f.repairAndEvidence();f.confirm(result,evidence)
+            f.native.dropAfterWake=true;f.native.reconciliationAvailable=false
+            f.startEngine();val (result,evidence)=f.repairAndEvidence();f.confirm(result,evidence)
             assertEquals(1,f.native.sends);assertEquals(1,f.native.wakes)
             assertEquals("paused",f.state().assignment(f.consumerId).state)
+            f.native.reconciliationAvailable=true // receiver evidence becomes available for restart reconciliation
             f.reopen() // fresh service/engine, same canonical frontier and exact retained operation custody
             assertEquals("active",f.state().assignment(f.consumerId).state,"${f.engine!!.holds}")
             assertEquals(1,f.native.sends);assertEquals(1,f.native.wakes)
