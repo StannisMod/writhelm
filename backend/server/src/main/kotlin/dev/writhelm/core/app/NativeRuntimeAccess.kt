@@ -49,6 +49,11 @@ internal class NativeRuntimeAccess(private val controller: UUID,private val host
             "assignmentId" to (subject?.let { uuid(it.assignmentId) } ?: JNull),
             "executionGeneration" to (subject?.let { str(it.generation.toString()) } ?: JNull))
     }
+    fun sourceIdentity(state: H1BoundState,key: dev.writhelm.core.auth.PresentedCredential,project: UUID): JsonValue {
+        val c=actor(state,key,project)
+        if(!state.authority.allows(c,project,Capability.READ))throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        return identity(state,key,project)
+    }
     fun status(state: H1BoundState,key: dev.writhelm.core.auth.PresentedCredential,project: UUID,
         subject: WAssignmentSubject,binding: WorkReference,continuation: UUID?,safety: NativeRuntimeSafety=UnavailableNativeRuntimeSafety): JsonValue {
         val c=actor(state,key,project)

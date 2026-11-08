@@ -10,6 +10,7 @@ import { ProtectedNativeBridge } from "./native-bridge.js"
 import { ConnectedNativeAdapter } from "./connected-native.js"
 import { listenNativeTransport } from "./native-transport.js"
 import { prepareNativePeerProofs } from "./native-bootstrap-secrets.js"
+import { NativeContextSources } from "./native-context-source.js"
 
 export type NativeRuntimeConfiguration = Readonly<{
   root: string; nativeOrigin: string; serviceOrigin: string; transportOrigin: string
@@ -45,14 +46,15 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
   const controller = await registry.inspect(config.controllerSessionID)
   if (!controller || controller.scope !== "controller") nativeUnavailable()
   const bridge = new ProtectedNativeBridge(registry, custody, config.controllerSessionID, config.hostId)
+  const sources = new NativeContextSources(registry, custody)
   await Promise.all([...new Set([...restored, ...config.assignmentSessionIDs])].map(sessionID => bridge.manage(sessionID)))
   const adapter = new ConnectedNativeAdapter(ctx, native.session, bridge, config.hostId)
   await adapter.register()
   let transport: Awaited<ReturnType<typeof listenNativeTransport>> | undefined
   try {
-    transport = await listenNativeTransport(config.transportOrigin, config.transportProof, bridge, adapter)
+    transport = await listenNativeTransport(config.transportOrigin, config.transportProof, bridge, adapter, sources)
     const tools = await registerConnectedWorkTools(ctx, registry)
-    return Object.freeze({ registry, bridge, async close() {
+    return Object.freeze({ registry, bridge, sources, async close() {
       await transport!.close()
       await tools.dispose()
       await adapter.close() // managed sessions keep fail-closed admission hooks

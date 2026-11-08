@@ -20,9 +20,14 @@ internal fun interface NativeRuntimeSafety { fun safeAccess(state: H1BoundState,
 internal object UnavailableNativeRuntimeSafety: NativeRuntimeSafety {
     override fun safeAccess(state: H1BoundState,subject: WAssignmentSubject)=false
 }
+internal fun interface NativeControllerRuntimeSafety { fun safeAccess(state: H1BoundState,controller: UUID): Boolean }
+internal object UnavailableNativeControllerSafety: NativeControllerRuntimeSafety {
+    override fun safeAccess(state: H1BoundState,controller: UUID)=false
+}
 internal class H1Options(val runtime: H1RuntimeFacts,val app: AppOptions=AppOptions(admission=AdmissionPolicy(formatVersion=2)),
     val commandReplyBytes: Int=65536,val navigationClock: ()->Long={System.nanoTime()/1000000},
-    val nativeSafety: NativeRuntimeSafety=UnavailableNativeRuntimeSafety) {
+    val nativeSafety: NativeRuntimeSafety=UnavailableNativeRuntimeSafety,
+    val controllerSafety: NativeControllerRuntimeSafety=UnavailableNativeControllerSafety) {
     init { require(app.admission.formatVersion==2 && commandReplyBytes in 1024..65536) }
 }
 internal class H1Genesis(val core: ApprovalWorkflow,val auth: Collection<Auth2Record>,val work: Map<UUID,WorkState>)
@@ -270,14 +275,18 @@ internal class H1Application private constructor(private val storeId: UUID,priva
     /** Only installed on the separately authenticated private native transport, never a work tool
      * or generic raw-state read. Capture and actor policy are shared with ordinary service requests. */
     @Synchronized internal fun nativeRuntimeRead(token: String,project: UUID,controller: UUID,host: UUID,
-        subject: WAssignmentSubject?,binding: WorkReference?,continuation: UUID?,packet: Boolean=false): JsonValue=capture(token) { state,key ->
+        subject: WAssignmentSubject?,binding: WorkReference?,continuation: UUID?,packet: Boolean=false,sourceIdentity: Boolean=false): JsonValue=capture(token) { state,key ->
         val access=NativeRuntimeAccess(controller,host)
         if(subject==null) {
             require(binding==null && continuation==null)
-            access.identity(state,key,project)
+            if(sourceIdentity)access.sourceIdentity(state,key,project)else access.identity(state,key,project)
         } else if(packet)access.packet(state,key,project,subject,requireNotNull(binding),requireNotNull(continuation))
         else access.status(state,key,project,subject,requireNotNull(binding),continuation,options.nativeSafety)
     }
+    @Synchronized internal fun nativeWorkerContext(token: String,project: UUID,controller: UUID,host: UUID): JsonValue=
+        capture(token) { state,key -> NativeWorkerContext.read(state,key,project,controller,host,options.nativeSafety) }
+    @Synchronized internal fun nativeControllerContext(token: String,project: UUID,controller: UUID,profile: WorkKey.Profile): JsonValue=
+        capture(token) { state,key -> NativeControllerContext.read(state,key,project,controller,profile,options.controllerSafety) }
     companion object {
         fun initialize(directory: Path,storeId: UUID,genesis: H1Genesis,options: H1Options): H1Application {
             // This composition currently selects the existing Linux NativeGit/RuntimeOwner adapter.

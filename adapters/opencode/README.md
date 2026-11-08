@@ -18,6 +18,31 @@ than use a standalone or external-browser approval fallback.
 - `src/generated`: deterministic Ajv standalone validators from pinned own schemas. No runtime eval
   is needed in the renderer. Their small declarations describe OWN generated validators, not SDK stubs.
 
+### Governed work presentation (uninstalled implementation)
+
+The native **Writhelm tasks and governed workflow** command opens a separate read-only panel.
+It lists bounded selector pages only for the closed read2 listing families (task heads, assignments,
+results/review reports, blockers/confirmations, continuations, replacements, acceptance and integration).
+Related checkpoints, reports and evidence are opened through exact references in returned records,
+not unsupported listing requests or invented latest selectors. It does not combine pages or
+families into an allegedly atomic all-work view. Each page, record and explicitly requested body
+shows its own service basis. Expired/partial/denied/unavailable views require explicit refresh;
+there is no latest-record or cached-body fallback. The service's retained-snapshot limits still apply.
+
+Mutable selectors preserve exact Int64 generations; immutable records are checked against their
+selected digest. Body reads carry the exact parent selector, recheck service access and verify UTF-8
+length/digest in the main process. Report text is rendered as text, not HTML or privileged instructions.
+Only the first 64 body-navigation candidates are linked; a visible partial notice and full original
+record retain the remaining identities. New selections/session changes discard delayed responses;
+concurrent page clicks cannot duplicate selectors.
+
+`workList`, `workOpen` and `workBody` are closed READ-only main-process IPC methods. The renderer
+cannot choose a token, origin, project, actor or command operation. The selected protected human
+profile supplies credentials inside main memory only. This adds no generic owner-command forwarding,
+automatic work acceptance/integration or new mutation controls. Existing exact knowledge approval
+remains separate. Passed component/DOM/build checks do not qualify installed native rendering,
+physical completion, cross-platform adapters or an operational H1 pilot.
+
 New setup also writes a separate protected `agent.json` containing ONLY the independent agent key;
 never hand the owner `profile.json` to an agent client. No live MCP configuration is installed by this
 task. A compliant non-model agent client can load its own file without reading the owner profile.
@@ -95,6 +120,41 @@ next managed tool/context admission; it neither fences existing writers nor conf
 before `session.interrupt`; lost replies reconcile without a second interrupt or synthetic wake.
 Only separately qualified retained native writer observations can confirm the canonical pause.
 No default bridge or installed/native/platform qualification is supplied by these interfaces/tests.
+
+### Task-shaped context composition (uninstalled implementation)
+
+`native-context-runtime.ts` supplies an explicit Effect-native server entrypoint builder. Trusted
+bootstrap provides the authenticated pinned native client, protected store/host/session binding and
+explicit model/route/effort/reserve profiles; model arguments and `ctx.options` cannot choose them.
+It neither discovers/starts a server nor installs a working profile. Production's service safety
+observers remain explicitly unavailable until the separate native qualification gate passes.
+
+- `native-context-source.ts` retains adapter-owned source-format1 privately: exact serialized native
+  observations, prepared extraction instructions/draft and required-packet rendering. CD03 outer
+  framing preserves domain Int64 bytes; native numeric metadata is not claimed as domain precision.
+  Public source reads recheck current scoped READ; immutable proof callbacks never reenter service.
+- `native-context-extraction.ts` composes direct `yield* ctx.session.generate` through the actual
+  Effect hooks. It requires the exact scoped draft/model/route, removes inherited tools/history and
+  refuses unknown concurrent generation. Cancellation does not create a nested runtime or orphan
+  fork. Retained reports/proposals are not promoted to norms; actual usage remains native-owned.
+- Worker checkpoint and controller-continuation publishers retain original commands before posting
+  and confirm exact records under current policy. The controller keeps the complete own canonical
+  assignment/task frontier, not a fabricated executor assignment or the most recent chat topic.
+- Foreground compaction sets its native result only after canonical confirmation and source/packet
+  recapture. A late unrecorded input retains old native context rather than falling back to a generic
+  summary. Persisted/uninstalled is not silently reported as installed/acknowledged.
+- Restoration reads exact canonical selectors and verifies private source availability/hashes. Exact
+  mandatory instructions restore separately from attributed residual facts. Reading/restoring a
+  checkpoint never wakes execution or grants review/acceptance/integration rights.
+- A finished executor can retire after a complete durable own handoff without another extraction or
+  waiting for downstream acceptance. New model/tool admission is held; physical completion and resource
+  release still need their independent protocol. Proposals and uncertainties retain their status.
+
+Component tests use real checked Git/HTTP/service boundaries and explicit MOCK native/provider
+effects. They do not qualify installed compaction ordering, provider cancellation/accounting, all
+native append paths, profile reload/incarnation adoption, physical writer custody, abnormal recovery
+or Windows/macOS operation. An inherited old-generation checkpoint is not recursively disclosed to
+a successor worker; unqualified rebind restoration holds for controller-mediated reconciliation.
 
 The package's nonsecret `javaRuntime` option takes a qualified absolute Java executable and absolute
 classpath entries for the compiled Writhelm helper and dependencies. No hard-coded Unix production

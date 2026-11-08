@@ -34,13 +34,18 @@ internal class NativeRuntimeEndpoint(private val app: H1Application,private val 
             ?: throw ServiceFault("INVALID_INPUT",400)
         val operation=decoded.entries["operation"]?.string() ?: throw ServiceFault("INVALID_INPUT",400)
         val fields=when(operation) {
-            "identity" -> decoded.fields("formatVersion","operation","projectId")
+            "identity","source-identity","worker-context" -> decoded.fields("formatVersion","operation","projectId")
+            "controller-context" -> decoded.fields("formatVersion","operation","projectId","profileJSON")
             "status","packet","hint" -> decoded.fields("formatVersion","operation","projectId","assignmentId","executionGeneration","bindingJSON","continuationId")
             else -> throw ServiceFault("INVALID_INPUT",400)
         }
         if(fields.getValue("formatVersion").long()!=1L)throw ServiceFault("INVALID_INPUT",400)
         if(uuid(fields.getValue("projectId"))!=project)throw AppAccessFault(AppAccessProblem.FORBIDDEN)
-        val data=if(operation=="identity")app.nativeRuntimeRead(token,project,controller,host,null,null,null)
+        val data=if(operation=="controller-context") {
+            val profile=WorkIdentityCodec().decodeKey(WorkFamily.PROFILES,fields.getValue("profileJSON").string().toByteArray(Charsets.UTF_8)) as WorkKey.Profile
+            app.nativeControllerContext(token,project,controller,profile)
+        } else if(operation=="worker-context")app.nativeWorkerContext(token,project,controller,host)
+        else if(operation in setOf("identity","source-identity"))app.nativeRuntimeRead(token,project,controller,host,null,null,null,sourceIdentity=operation=="source-identity")
         else {
             val decimal=fields.getValue("executionGeneration").string()
             if(!decimal.matches(Regex("0|[1-9][0-9]{0,18}")))throw ServiceFault("INVALID_INPUT",400)
@@ -52,7 +57,7 @@ internal class NativeRuntimeEndpoint(private val app: H1Application,private val 
             if(operation=="hint") { require(continuation==null);app.nativeObserved(token,project,controller,host,subject,binding) }
             else app.nativeRuntimeRead(token,project,controller,host,subject,binding,continuation,operation=="packet")
         }
-        return ServiceReply(200,data).also { it.bytes(if(operation=="packet")4*1024*1024 else 16384) }
+        return ServiceReply(200,data).also { it.bytes(if(operation in setOf("packet","worker-context","controller-context"))4*1024*1024 else 16384) }
     }
     override fun close() { closed=true;proof.fill(0) }
 }

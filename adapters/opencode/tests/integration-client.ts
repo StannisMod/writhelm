@@ -78,6 +78,8 @@ if (config.stage === "prepare") {
     pending: i => controller.dispatch("pending", i, caller), open: i => controller.dispatch("open", i, caller),
     answer: i => controller.dispatch("answer", i, caller), reconcile: i => controller.dispatch("reconcile", i, caller),
     rotate: i => controller.dispatch("rotate", i, caller), setup: async () => reply(), dismiss: i => controller.dispatch("dismiss", i, caller),
+    workList: i => controller.dispatch("workList",i,caller),workOpen: i => controller.dispatch("workOpen",i,caller),
+    workBody: i => controller.dispatch("workBody",i,caller),
   }
   let dispose!: () => void, panel!: HTMLElement
   createRoot(d => { dispose = d; panel = nativePanel(() => session, bridge, () => binding); document.body.append(panel) })

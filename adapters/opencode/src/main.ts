@@ -70,6 +70,9 @@ export const main: Plugin.MainSetup = async ctx => {
     pending: (i, c) => controller.dispatch("pending", i, c), open: (i, c) => controller.dispatch("open", i, c),
     answer: (i, c) => controller.dispatch("answer", i, c), reconcile: (i, c) => controller.retry(i, c, runner),
     rotate: (i, c) => controller.dispatch("rotate", i, c), dismiss: (i, c) => controller.dispatch("dismiss", i, c),
+    workList: (i,c) => safe(async () => { await verify(i.session,c.window);await ensure(i.session);return controller.dispatch("workList",i,c) }),
+    workOpen: (i,c) => safe(async () => { await verify(i.session,c.window);await ensure(i.session);return controller.dispatch("workOpen",i,c) }),
+    workBody: (i,c) => safe(async () => { await verify(i.session,c.window);await ensure(i.session);return controller.dispatch("workBody",i,c) }),
   })
   ctx.windows.on("close", window => controller.closeWindow(window.id))
   return () => controller.close()

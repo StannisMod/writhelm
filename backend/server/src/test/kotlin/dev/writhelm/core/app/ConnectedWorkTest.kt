@@ -16,7 +16,8 @@ import kotlin.test.*
 /** Real canonical Git/service/CORE/AUTH/history and owned filesystem. Native is explicitly a MOCK;
  * synthetic fixture profile/OIDs are not installed-native, physical fencing or source-Git evidence. */
 internal class ConnectedFixture(private val reviewerGap: Boolean=false,private val informationalNote: Boolean=false,
-    private val initialCondition: Boolean=true,nativeSafety: NativeRuntimeSafety=UnavailableNativeRuntimeSafety): AutoCloseable {
+    private val initialCondition: Boolean=true,nativeSafety: NativeRuntimeSafety=UnavailableNativeRuntimeSafety,
+    controllerSafety: NativeControllerRuntimeSafety=UnavailableNativeControllerSafety): AutoCloseable {
     val f=ReviewAppFixture();val root=directory();val consumerRoot=Files.createDirectory(root.resolve("consumer"))
     val repairRoot=Files.createDirectory(root.resolve("repair"));val store=directory()
     val consumerId=id(2004);val consumerKey=id(2007);val consumerSubject=WAssignmentSubject(consumerId,0)
@@ -57,7 +58,7 @@ internal class ConnectedFixture(private val reviewerGap: Boolean=false,private v
         val manifest=(original.resolve(f.manifest).payload as WInputManifestsPayload).value.copy(task=consumerTask)
         val m=add(consumerManifestKey,WInputManifestsPayload(manifest));consumerManifest=WorkReference(m.identity,codec.digest(m))
         val work=WorkState.restore(project,records,emptyList())
-        options=H1Options(H1RuntimeFacts { state,command ->connected?.capture(state,command) ?: delegate.capture(state,command) },nativeSafety=nativeSafety)
+        options=H1Options(H1RuntimeFacts { state,command ->connected?.capture(state,command) ?: delegate.capture(state,command) },nativeSafety=nativeSafety,controllerSafety=controllerSafety)
         app=H1Application.initialize(store,storeId,H1Genesis(f.base.core,f.base.authority.records(),mapOf(project to work)),options)
         activate(f.assignment,f.task,f.manifest,f.workspace,f.resource,f.intent,f.correlation,f.intended,f.worker,f.workerKey,f.delegation)
         activate(consumerId,consumerTask,consumerManifest,consumerWorkspace,consumerResource,consumerIntent,id(2010),consumerIntended,id(2006),consumerKey,id(2005))
@@ -141,10 +142,39 @@ internal class ConnectedFixture(private val reviewerGap: Boolean=false,private v
         engine!!.tick()
         engine!!.awaitIdle()
     }
-    fun installNative(control: ConnectedNativeControl) {
+    fun installNative(control: ConnectedNativeControl,sourceEpoch: String?=null) {
         check(engine==null)
         nativeControl=control
-        connected=ConnectedRuntimeFacts(delegate,preparation,control,Model2ControllerExecution(f.controller,id(2900),f.intended.nativeHostId,"ses_connected_controller"),checkCustody::observed)
+        val provenance=Model2ControllerExecution(f.controller,id(2900),f.intended.nativeHostId,"ses_connected_controller")
+        val observed=if(sourceEpoch!=null)NativeContextFacts(delegate,control as NativeSourceProofControl,sourceEpoch,provenance)else delegate
+        connected=ConnectedRuntimeFacts(observed,preparation,control,provenance,checkCustody::observed)
+    }
+    /** Canonical completed logical handoff, explicitly MOCK implementation observations. No native
+     * completion/fencing, result acceptance/integration or resource release is supplied. */
+    fun finishConsumerHandoff() {
+        val who=token(consumerKey);val subject=consumerSubject
+        val a=state().assignment(consumerId);val cp=(state().resolve(a.checkpoint!!).payload as WCheckpointsPayload).value
+        val text=Utf8Content.fromText("Complete consumer handoff fixture; no physical completion or independent verification asserted")
+        val report=WorkBodyReference(text.digest,text.sizeBytes)
+        val retro0=ref(publish(CRecordRetrospectiveOperation(CRecordRetrospective(WorkKey.Id(project,id(sequence++)),
+            CRecordRetrospectiveData(consumerTask,subject,null,"no-significant-new-findings",emptyList()),emptyList())),who))
+        f.runtimeFacts=f.runtimeFacts.copy(retainedSnapshots=f.runtimeFacts.retainedSnapshots+before,
+            submittedDiffs=f.runtimeFacts.submittedDiffs+WorkSubmittedDiff(consumerTask,listOf(before),report))
+        val result=ref(publish(CSubmitResultOperation(CSubmitResult(WorkKey.Id(project,id(sequence++)),
+            CSubmitResultData(consumerTask,subject,consumerManifest,listOf(before),report,state().task(consumerTask).criteria.map { it.id },emptyList(),retro0,emptyList()),
+            listOf(CSubmitResultBodiesItem(text.digest,text.text())))),who))
+        val retro=ref(publish(CRecordRetrospectiveOperation(CRecordRetrospective(WorkKey.Id(project,id(sequence++)),
+            CRecordRetrospectiveData(consumerTask,subject,result,"no-significant-new-findings",emptyList()),emptyList())),who))
+        val plan=(state().record(WorkFamily.PLANS,cp.plan).payload as WPlansPayload).value
+        publish(CUpdatePlanOperation(CUpdatePlan(cp.plan,consumerTask,plan.generation,plan.steps.map { it.copy(state="complete") },
+            "logical handoff finished; acceptance remains separate",a.checkpoint,emptyList(),subject)),who)
+        val finalPlan=(state().record(WorkFamily.PLANS,cp.plan).payload as WPlansPayload).value
+        val notification=WorkKey.Id(project,id(sequence++))
+        publish(CRecordDeliveryOperation(CRecordDelivery(notification,subject,cp.sourceCutId,consumerTask,report,null,
+            "durable-delivered",listOf(f.source),emptyList())))
+        publish(CRecordCheckpointOperation(CRecordCheckpoint(WorkKey.Id(project,id(sequence++)),
+            CRecordCheckpointData(consumerTask,subject,consumerManifest,cp.loadedView,cp.sourceCutId,cp.plan,finalPlan.generation,cp.memory,
+                finalPlan.steps,cp.artifacts,emptyList(),report,"finished",retro,result,notification),state().assignment(consumerId).generation,emptyList())),who)
     }
     fun reopen() {
         engine?.close();app.close()

@@ -33,6 +33,8 @@ function mount(bundleRaw = raw, width = 800, height = 699) {
     answer: async input => { calls.push({ method: "answer", input }); return reply() },
     dismiss: async input => { calls.push({ method: "dismiss", input }); return reply() },
     connect: async () => reply(), setup: async () => reply(), reconcile: async () => reply(), rotate: async () => reply(),
+    workList: async () => reply("UNCONFIGURED"),workOpen: async () => reply("UNCONFIGURED"),
+    workBody: async () => reply("UNCONFIGURED"),
   }
   createRoot(d => {
     dispose = d

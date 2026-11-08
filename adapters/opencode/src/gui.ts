@@ -3,6 +3,7 @@ import { Command, LinkHandler, Panel, Plugin, type PanelTab } from "@opencode/pl
 import { createSignal } from "solid-js"
 import { Review, type Session } from "./contracts.js"
 import { nativePanel } from "./panel.js"
+import { workPanel } from "./work-panel.js"
 import { exactLink, ownsReviewReference, type ExactLink } from "./link.js"
 import { main } from "./main.js"
 
@@ -12,6 +13,12 @@ export default Plugin.define({ main, setup(ctx) {
   const tab: PanelTab = { id: "review", title: "Writhelm exact review", closable: "compact", fallback: true }
   ctx.add(Panel, { id: "review", region: "side", wide: true, list: input => input.open.includes("review") ? [tab] : [], render: props => nativePanel((): Session => ({ key: props.session.key, id: props.session.id, server: props.session.server.id, directory: props.session.directory, projectRoot: props.session.project?.worktree ?? props.session.directory }), ctx.main(Review), () => links()[props.session.key]) })
   ctx.add(Command, () => ({ id: "review", title: "Writhelm pending decisions", enabled: !!ctx.sessions.current(), run: () => { const s = ctx.sessions.current(); if (s) ctx.layout.open(`${ctx.id}:review`, s) } }))
+  const workTab: PanelTab = { id:"work",title:"Writhelm governed work",closable:"compact",fallback:true }
+  ctx.add(Panel,{ id:"work",region:"side",wide:true,list:input=>input.open.includes("work")?[workTab]:[],render:props=>workPanel(():Session=>({
+    key:props.session.key,id:props.session.id,server:props.session.server.id,directory:props.session.directory,
+    projectRoot:props.session.project?.worktree??props.session.directory }),ctx.main(Review)) })
+  ctx.add(Command,()=>({ id:"work",title:"Writhelm tasks and governed workflow",enabled:!!ctx.sessions.current(),
+    run:()=>{const s=ctx.sessions.current();if(s)ctx.layout.open(`${ctx.id}:work`,s)} }))
   ctx.add(LinkHandler, { priority: 50, match: link => ownsReviewReference(link.href), exists: link => !!exactLink(link.href) && !!link.session && link.session.key === ctx.sessions.current()?.key, open: link => {
     const target = exactLink(link.href), session = link.session
     if (!target || !session || session.key !== ctx.sessions.current()?.key) {

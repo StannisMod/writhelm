@@ -16,6 +16,9 @@ type SessionRecord = Readonly<{ formatVersion: 1; kind: "native-session-v1"; ses
   workRoot: string; principalId: string; credentialId: string; scope: "controller" | "assignment"
   delegationId: string | null; assignmentId: string | null; executionGeneration: string | null; bindingJSON: string | null }>
 export type PublicNativeCredential = Readonly<{ storeId: string; projectId: string; principalId: string; credentialId: string; verifierDigest: string }>
+export type NativeCredentialContext = Pick<Plugin.Context, "app"> & Readonly<{
+  session: Pick<Plugin.Context["session"], "get">
+}>
 const parse = (raw: string) => exactJSON(raw, nativeUnavailable)
 const version = (v: any) => isLosslessNumber(v) && v.value === "1"
 const session = (id: string) => /^ses_[A-Za-z0-9_-]{1,128}$/.test(id)
@@ -28,14 +31,14 @@ function verifier(store: string, project: string, principal: string, credential:
 /** Client-owned scoped secrets and native mapping. This is never installed as a model tool/RPC.
  * Service identity/current policy is rechecked; metadata role labels and cache entries grant nothing. */
 export class NativeCredentialRegistry implements NativeWorkCredentialResolver {
-  readonly #ctx: Plugin.Context
+  readonly #ctx: NativeCredentialContext
   readonly #custody: LinuxNativeCustody
   readonly #service: NativeRuntimeClient
   readonly #serviceOrigin: string
   readonly #requests: LinuxWorkRequestCustody
   readonly #epoch: string
   readonly #known = new Map<string, SessionRecord>()
-  constructor(ctx: Plugin.Context, custody: LinuxNativeCustody, service: NativeRuntimeClient,
+  constructor(ctx: NativeCredentialContext, custody: LinuxNativeCustody, service: NativeRuntimeClient,
     serviceOrigin: string, requests: LinuxWorkRequestCustody, epoch: string) {
     if (ctx.app.version !== "2.2.5" || process.platform !== "linux" || !/^[0-9a-f]{64}$/.test(epoch)) nativeUnavailable()
     this.#ctx = ctx; this.#custody = custody; this.#service = service; this.#serviceOrigin = serviceOrigin
@@ -135,6 +138,8 @@ export class NativeCredentialRegistry implements NativeWorkCredentialResolver {
     return true
   }
   managed(sessionID: string): boolean { return this.#known.get(sessionID)?.scope === "assignment" }
+  bound(sessionID: string): boolean { return this.#known.has(sessionID) } // classification only, never authority
+  scopeKind(sessionID: string): "assignment" | "controller" | undefined { return this.#known.get(sessionID)?.scope }
   async restoreAll(): Promise<readonly string[]> {
     const assignments: string[] = []
     for (const entry of await this.#custody.scan("session")) {
@@ -188,6 +193,32 @@ export class NativeCredentialRegistry implements NativeWorkCredentialResolver {
   }
   async identity(sessionID: string) {
     return this.#service.identity((await this.verifiedCredential(sessionID)).token)
+  }
+  async sourceIdentity(sessionID: string, signal?: AbortSignal) {
+    return this.#service.identity((await this.verifiedCredential(sessionID)).token, signal, true)
+  }
+  async workerContext(sessionID: string, signal?: AbortSignal) {
+    const binding = await this.inspect(sessionID)
+    if (!binding || binding.scope !== "assignment") nativeUnavailable()
+    const frame = await this.#service.workerContext((await this.verifiedCredential(sessionID)).token, signal)
+    if (frame.assignmentId !== binding.assignmentId || frame.executionGeneration !== binding.executionGeneration || frame.bindingJSON !== binding.bindingJSON) nativeUnavailable()
+    return frame
+  }
+  async controllerContext(sessionID: string, profileJSON: string, signal?: AbortSignal) {
+    const binding = await this.inspect(sessionID)
+    if (!binding || binding.scope !== "controller") nativeUnavailable()
+    return this.#service.controllerContext((await this.verifiedCredential(sessionID)).token, profileJSON, signal)
+  }
+  /** Private hook-owned channel: native session selection is actual runtime state, not fabricated
+   * ToolContext/message IDs or model fields. Service still authenticates each canonical request. */
+  async contextChannel(sessionID: string, signal?: AbortSignal): Promise<BoundWorkChannel> {
+    const binding = await this.inspect(sessionID)
+    if (!binding) nativeUnavailable()
+    const key = await this.verifiedCredential(sessionID)
+    await this.#service.identity(key.token, signal, true)
+    return boundedWorkChannel(this.#service.projectId, binding.scope, this.#serviceOrigin, key.token, 4 * 1024 * 1024,
+      this.#requests, JSON.stringify([this.#service.storeId, this.#service.projectId, binding.hostId, binding.epoch,
+        binding.sessionID, binding.assignmentId, binding.executionGeneration, binding.bindingJSON]))
   }
   async hint(sessionID: string, subject: NativeSubject, signal: AbortSignal) {
     return this.#service.hint((await this.verifiedCredential(sessionID)).token, subject, signal)

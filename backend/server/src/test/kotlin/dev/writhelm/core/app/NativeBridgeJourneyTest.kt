@@ -70,6 +70,34 @@ class NativeBridgeJourneyTest {
             writer.write("{\"operation\":\"probe\"}\n");writer.flush()
             return StrictJson.decode(requireNotNull(reader.readLine()).toByteArray()).fields("wakes","interrupts","admitted","instructions")
         }
+        fun source(): Map<String,JsonValue> {
+            writer.write("{\"operation\":\"capture-source\"}\n");writer.flush()
+            return StrictJson.decode(requireNotNull(reader.readLine()).toByteArray(),JsonLimits(bytes=16384,stringBytes=8192)).fields("locatorId","digest","proof")
+        }
+        fun checkpoint(): Map<String,JsonValue> {
+            writer.write("{\"operation\":\"checkpoint-source\"}\n");writer.flush()
+            return StrictJson.decode(requireNotNull(reader.readLine()).toByteArray(),JsonLimits(bytes=16384,stringBytes=8192)).fields("checkpoint","attempt","nativeResultStillUnset")
+        }
+        fun compact(late: Boolean): Map<String,JsonValue> {
+            writer.write("{\"operation\":\"${if(late)"compact-late" else "compact-source"}\"}\n");writer.flush()
+            return StrictJson.decode(requireNotNull(reader.readLine()).toByteArray(),JsonLimits(bytes=16384,stringBytes=8192))
+                .fields("checkpoint","nativeResultSet","failed","lateInputs","modelCalls","retiredAdmissionHeld","retiredToolHeld")
+        }
+        fun restore(): Map<String,JsonValue> {
+            writer.write("{\"operation\":\"restore-source\"}\n");writer.flush()
+            return StrictJson.decode(requireNotNull(reader.readLine()).toByteArray(),JsonLimits(bytes=16384,stringBytes=8192))
+                .fields("checkpoint","residualKind","wakes","lateInputs")
+        }
+        fun controllerCompact(): Map<String,JsonValue> {
+            writer.write("{\"operation\":\"controller-compact\"}\n");writer.flush()
+            return StrictJson.decode(requireNotNull(reader.readLine()).toByteArray(),JsonLimits(bytes=16384,stringBytes=8192,collection=256))
+                .fields("continuation","nativeResultSet","failed","frontier")
+        }
+        fun controllerRestore(): Map<String,JsonValue> {
+            writer.write("{\"operation\":\"controller-restore\"}\n");writer.flush()
+            return StrictJson.decode(requireNotNull(reader.readLine()).toByteArray(),JsonLimits(bytes=16384,stringBytes=8192))
+                .fields("continuation","kind","wakes")
+        }
         override fun close() {
             if(process.isAlive) { writer.write("{\"operation\":\"finish\"}\n");writer.flush() }
             assertTrue(process.waitFor(30,TimeUnit.SECONDS),"Owned component peer failed to stop")
@@ -82,6 +110,8 @@ class NativeBridgeJourneyTest {
         return obj("root" to str(root.toString()),"workRoot" to str(f.consumerRoot.toString()),"serviceOrigin" to str(serviceOrigin),
             "transportOrigin" to str(transportOrigin),"storeId" to uuid(storeId),"projectId" to uuid(project),
             "controllerId" to uuid(f.f.controller),"hostId" to uuid(f.f.intended.nativeHostId),
+            "profileJSON" to str(identityCodec.encodeKey(f.f.profile).decodeToString()),
+            "governingTaskJSON" to str(identityCodec.encodeKey(f.f.task).decodeToString()),
             "controllerPrincipal" to uuid(planner),"controllerKey" to uuid(plannerKey),"controllerToken" to str(plannerToken),
             "workerPrincipal" to uuid(id(2006)),"workerKey" to uuid(f.consumerKey),"workerToken" to str(token(f.consumerKey)),
             "controllerSessionID" to str("ses_connected_controller"),"sessionID" to str(f.consumerIntended.nativeSessionId),
@@ -91,13 +121,15 @@ class NativeBridgeJourneyTest {
     }
     @Test @Timeout(240) fun realLocalConnectedCycleLostReplyAndAdapterRestartNeedNoPlannerRelayOrRepeatedWake()=cycle(false)
     @Test @Timeout(240) fun lostOriginalAndGuardAfterPossibleWakeRemainUnknownAcrossAdapterRestart()=cycle(true)
-    private fun cycle(loseCustody: Boolean) {
+    @Test @Timeout(240) fun completeHandoffRetiresWithoutAcceptanceOrAnotherModelAndKeepsClaims()=cycle(false,true)
+    private fun cycle(loseCustody: Boolean,finishHandoff: Boolean=false) {
         val base=Path.of(requireNotNull(System.getenv("WRITHELM_NATIVE_TEST_ROOT")))
         val root=Files.createTempDirectory(base,"jvm-node-bridge-")
         val serviceProof=ByteArray(32).also { SecureRandom().nextBytes(it) }
         val transportProof=ByteArray(32).also { SecureRandom().nextBytes(it) }
         // MOCK only: this does not qualify any real worker/process or original effect surface.
-        ConnectedFixture(nativeSafety=NativeRuntimeSafety { _,subject -> subject==WAssignmentSubject(id(2004),0) }).use { f ->
+        ConnectedFixture(nativeSafety=NativeRuntimeSafety { _,subject -> subject==WAssignmentSubject(id(2004),0) },
+            controllerSafety=NativeControllerRuntimeSafety { _,controller -> controller==id(60) }).use { f ->
             val serviceOrigin="http://127.0.0.1:${port()}";val transportOrigin="http://127.0.0.1:${port()}"
             val nativeEndpoint=WrithelmService(f.app).nativeEndpoint(project,f.f.controller,f.f.intended.nativeHostId,serviceProof)
             val http=HttpAdapter(WrithelmService(f.app),HttpProfile(serviceOrigin),nativeEndpoint=nativeEndpoint)
@@ -111,11 +143,11 @@ class NativeBridgeJourneyTest {
                         val attempt=java.util.UUID.nameUUIDFromBytes("$key:delivery".toByteArray(Charsets.UTF_8))
                         Files.delete(f.root.resolve("custody/$attempt.dispatch"))
                     }
-                }.use { fault -> HttpConnectedNativeControl(fault.origin,transportProof).use { control ->
-                    f.installNative(control)
+                }.use { fault -> HttpConnectedNativeControl(fault.origin,transportProof).use controlUse@ { control ->
+                    f.installNative(control,"a".repeat(64))
                     val deliveredHint=CountDownLatch(1)
                     val hintSubscription=f.app.onNativeObservation { deliveredHint.countDown() }
-                    Peer(config,root).use { peer ->
+                    Peer(config,root).use peerInitial@ { peer ->
                         val before=peer.probe();assertEquals(JBoolean(false),before.getValue("admitted"))
                         val (r,e)=f.repairAndEvidence();f.confirm(r,e)
                         f.startEngine() // only setup; thereafter engine owns the complete connected protocol
@@ -134,9 +166,62 @@ class NativeBridgeJourneyTest {
                             assertEquals(JBoolean(true),observed.getValue("admitted"))
                         }
                         assertTrue(observed.getValue("instructions").long()>0)
+                        if(!loseCustody) {
+                            val source=peer.source();val p=source.getValue("proof").fields("locatorId","scope","profileJSON","modelJSON","renderedRequestDigest","packetDigest","nativeMessages")
+                            val messages=p.getValue("nativeMessages").list().map { item -> val m=item.fields("messageId","digest");WSourceCutsNativeMessagesItem(m.getValue("messageId").string(),digest(m.getValue("digest"))) }
+                            val cut=CRecordSourceCut(WorkKey.Id(project,id(49700)),WSourceCuts(f.consumerTask,f.consumerSubject,f.f.intended.nativeHostId,
+                                f.consumerIntended.nativeSessionId,f.f.profile,1,digest(p.getValue("renderedRequestDigest")),digest(p.getValue("packetDigest")),
+                                uuid(source.getValue("locatorId")),messages,emptyList(),emptyList()),emptyList())
+                            f.publish(CRecordSourceCutOperation(cut),token(f.consumerKey))
+                            val stored=f.state().record(WorkFamily.SOURCE_CUTS,cut.key)
+                            assertEquals(cut.data,(stored.payload as WSourceCutsPayload).value)
+                            assertFalse(WorkCodec().encodeRecord(stored,true).decodeToString().contains("MOCK complete remaining task tracker"))
+                            val checkpoint=peer.checkpoint()
+                            val reference=identityCodec.decodeReference(StrictJson.encode(checkpoint.getValue("checkpoint")))
+                            assertEquals(reference,f.state().assignment(f.consumerId).checkpoint)
+                            assertEquals(JBoolean(true),checkpoint.getValue("nativeResultStillUnset")) // canonical persistence alone does not install native context
+                            val compacted=peer.compact(false)
+                            assertEquals(JBoolean(false),compacted.getValue("failed"))
+                            assertEquals(JBoolean(true),compacted.getValue("nativeResultSet"))
+                            assertEquals(identityCodec.decodeReference(StrictJson.encode(compacted.getValue("checkpoint"))),f.state().assignment(f.consumerId).checkpoint)
+                            if(finishHandoff) {
+                                f.finishConsumerHandoff()
+                                val retired=peer.compact(false)
+                                assertEquals(JBoolean(false),retired.getValue("failed"))
+                                assertEquals(JBoolean(true),retired.getValue("nativeResultSet"))
+                                assertEquals(0L,retired.getValue("modelCalls").long())
+                                assertEquals(JBoolean(true),retired.getValue("retiredAdmissionHeld"))
+                                assertEquals(JBoolean(true),retired.getValue("retiredToolHeld"))
+                                assertTrue(f.state().records.values.none { (it.payload as? WAcceptancesPayload)?.value?.task==f.consumerTask })
+                                assertTrue(f.state().assignment(f.consumerId).requiredResources.all { (f.state().record(WorkFamily.CLAIMS,it).payload as WClaimsPayload).value.state=="held" })
+                                f.engine!!.close();f.engine=null
+                                return@peerInitial
+                            }
+                            val late=peer.compact(true)
+                            assertEquals(JBoolean(true),late.getValue("failed"))
+                            assertEquals(JBoolean(false),late.getValue("nativeResultSet"))
+                            assertEquals(1L,late.getValue("lateInputs").long()) // native input persisted, not silently included in the cut
+                            val restored=peer.restore()
+                            assertEquals("restored-residual-not-norms",restored.getValue("residualKind").string())
+                            assertEquals(identityCodec.decodeReference(StrictJson.encode(restored.getValue("checkpoint"))),f.state().assignment(f.consumerId).checkpoint)
+                            assertEquals(1L,restored.getValue("wakes").long());assertEquals(1L,restored.getValue("lateInputs").long())
+                            val controller=peer.controllerCompact()
+                            assertEquals(JBoolean(false),controller.getValue("failed"))
+                            assertEquals(JBoolean(true),controller.getValue("nativeResultSet"))
+                            val cref=identityCodec.decodeReference(StrictJson.encode(controller.getValue("continuation")))
+                            val continuation=(f.state().resolve(cref).payload as WControllerContinuationsPayload).value
+                            assertTrue(continuation.frontier.flatMap { it.assignments }.map { it.assignmentId }.containsAll(listOf(f.consumerId,f.f.assignment)))
+                            assertTrue(continuation.entries.all { it.entry.status=="proposed" })
+                            assertTrue(continuation.pending.isNotEmpty())
+                            val controllerRestored=peer.controllerRestore()
+                            assertEquals(cref,identityCodec.decodeReference(StrictJson.encode(controllerRestored.getValue("continuation"))))
+                            assertEquals("restored-controller-residual-not-norms",controllerRestored.getValue("kind").string())
+                            assertEquals(1L,controllerRestored.getValue("wakes").long())
+                        }
                         f.engine!!.close();f.engine=null
                     }
                     hintSubscription.close()
+                    if(finishHandoff)return@controlUse
                     // Controller adapter restart, with the MOCK native effects retained separately.
                     Peer(config,root).use peerRestart@ { peer ->
                         assertEquals(JBoolean(false),peer.probe().getValue("admitted"))

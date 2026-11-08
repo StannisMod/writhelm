@@ -16,7 +16,15 @@ function closed<S extends Schema.ConstraintCodec<unknown, unknown>>(s: S) {
 const text = (n: number) => Schema.String.check(Schema.isMaxLength(n))
 const uuid = text(36).check(Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/))
 const digest = text(64).check(Schema.isPattern(/^[0-9a-f]{64}$/))
+export const WorkFamilies = ["task-heads", "task-revisions", "assignments", "assignment-replacements", "plans", "profiles", "conditions", "condition-confirmations", "continuations", "memory", "controller-continuations", "results", "verification-plans", "verification-reports", "evidence", "dispositions", "acceptances", "integration-intents", "integrations", "checkpoints", "retrospectives", "deliveries", "claims", "recoveries"] as const
+// Closed read2 listing registry, deliberately narrower than the exact-record registry.
+export const WorkListFamilies = ["task-heads", "assignments", "results", "verification-reports", "acceptances", "integrations", "controller-continuations", "assignment-replacements", "conditions", "condition-confirmations", "continuations"] as const
+export type WorkFamily = typeof WorkFamilies[number]
+const workFamily = Schema.Literals(WorkFamilies)
 export const Session = Schema.Struct({ key: text(256), id: text(256), server: text(256), directory: text(4096), projectRoot: text(4096) })
+const workSelector = { session: Session, family: workFamily, keyJSON: text(4096),
+  digest: text(64).check(Schema.isPattern(/^(|[0-9a-f]{64})$/)),
+  generation: text(19).check(Schema.isPattern(/^(|0|[1-9][0-9]{0,18})$/)) }
 export type Session = typeof Session.Type
 export const Codes = ["OK", "UNCONFIGURED", "INVALID_INPUT", "FORBIDDEN", "UNAUTHENTICATED", "STALE_VIEW", "EXPIRED_VIEW", "BUSY", "UNAVAILABLE", "INCOMPLETE", "UNSUPPORTED_PLATFORM", "PROTECTION_FAILED", "HELPER_UNAVAILABLE", "SETUP_UNKNOWN", "ROTATION_UNKNOWN", "PUBLICATION_UNKNOWN", "IDENTITY_CONFLICT", "INTEGRITY", "DOMAIN_REJECTED"] as const
 export type Code = typeof Codes[number]
@@ -31,6 +39,9 @@ export const Inputs = {
   reconcile: closed(Schema.Struct({ session: Session })), rotate: closed(Schema.Struct({ session: Session })),
   setup: closed(Schema.Struct({ session: Session, origin: text(4096) })),
   dismiss: closed(Schema.Struct({ session: Session, handle: text(36) })),
+  workList: closed(Schema.Struct({ session: Session, family: Schema.Literals(WorkListFamilies), cursor: text(36) })),
+  workOpen: closed(Schema.Struct(workSelector)),
+  workBody: closed(Schema.Struct({ ...workSelector, bodyDigest: digest })),
 }
 export const Review = Ipc.define({ id: "writhelm-opencode.review", methods: {
   status: { input: Inputs.status, output: Reply }, connect: { input: Inputs.connect, output: Reply },
@@ -38,6 +49,8 @@ export const Review = Ipc.define({ id: "writhelm-opencode.review", methods: {
   answer: { input: Inputs.answer, output: Reply }, reconcile: { input: Inputs.reconcile, output: Reply },
   rotate: { input: Inputs.rotate, output: Reply }, setup: { input: Inputs.setup, output: Reply },
   dismiss: { input: Inputs.dismiss, output: Reply },
+  workList: { input: Inputs.workList, output: Reply }, workOpen: { input: Inputs.workOpen, output: Reply },
+  workBody: { input: Inputs.workBody, output: Reply },
 } })
 export type Input<K extends keyof typeof Inputs> = (typeof Inputs)[K]["Type"]
 export const reply = (code: Code = "OK", fields: Partial<Reply> = {}): Reply => ({ ok: code === "OK", code, handle: "", bundleJSON: "", pageJSON: "", resultJSON: "", pending: false, ...fields })

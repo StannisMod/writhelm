@@ -29,6 +29,7 @@ tasks.test {
     // dependency on a developer's temporary build directory in the portable test selection.
     exclude("**/NativeControllerJourneyTest.class")
     exclude("**/NativeBridgeJourneyTest.class")
+    exclude("**/NativeWorkPresentationTest.class")
 }
 
 tasks.withType<Test>().configureEach {
@@ -60,6 +61,7 @@ tasks.register<Test>("nativeComponentTest") {
     classpath = sourceSets["test"].runtimeClasspath
     include("**/NativeControllerJourneyTest.class")
     include("**/NativeBridgeJourneyTest.class")
+    include("**/NativeWorkPresentationTest.class")
     useJUnitPlatform()
     maxParallelForks = 1
     maxHeapSize = "128m"

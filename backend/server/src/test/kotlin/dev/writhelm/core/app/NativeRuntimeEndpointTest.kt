@@ -89,6 +89,7 @@ class NativeRuntimeEndpointTest {
             // Authentication/protocol identity is distinct from protected READ and still supports
             // the ordinary current-policy exact-receipt route; this endpoint grants no execution.
             assertEquals(200,b.call(b.identity()).statusCode())
+            assertEquals(403,b.call(JObject(b.identity().entries+("operation" to str("source-identity")))).statusCode())
         } }
     }
     @Test fun authenticatedPeerProofCannotSubstituteAnotherNativeHostOrController() {

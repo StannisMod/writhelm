@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { randomUUID } from "node:crypto"
+import { randomUUID, createHash } from "node:crypto"
+import { isLosslessNumber } from "lossless-json"
 import { Schema } from "effect"
 import type { Caller } from "@opencode/plugin/gui"
 import { Inputs, reply, Fault, requireThat, type Session, type Reply, type Input, type Code } from "./contracts.js"
 import { completeBundle, http, loopback, referenceKey, type Json } from "./wire.js"
 import type { ProtectedFiles } from "./protected.js"
 import { credential, validateRetained, type PublicSetupRunner } from "./helper.js"
+import { mutableWorkFamilies, workRead } from "./work-read.js"
+import { exactJSON } from "./strict-json.js"
+import { contextJSON } from "./native-context-codec.js"
 
 type View = { window: number; session: Session; id: string; requestDigest: string; packetDigest: string; raw: string; bundle: Json; born: number }
 type Reservation = { epoch: symbol; done: Promise<void>; release: () => void }
@@ -93,6 +97,52 @@ export class Controller {
         const cursor = (input as Input<"pending">).cursor
         const r = await this.read("list_requests", { cursor: cursor || null, pageSize: 32, pendingOnly: true })
         return reply("OK", { pageJSON: r.raw, pending: !!p.pending })
+      }
+      if (name === "workList" || name === "workOpen" || name === "workBody") {
+        let operation: string, subject: unknown
+        if (name === "workList") {
+          const i = input as Input<"workList">
+          requireThat(i.cursor === "" || /^[0-9a-f-]{36}$/.test(i.cursor))
+          operation = "list_work_records"; subject = { family: i.family,taskId: null,pageSize: 32,cursor: i.cursor || null }
+        } else {
+          const i = input as Input<"workOpen"> | Input<"workBody">
+          const key = exactJSON(i.keyJSON,() => { throw new Fault("INVALID_INPUT") })
+          requireThat(key.projectId === p.projectId,"FORBIDDEN")
+          operation = "read_" + i.family.replaceAll("-","_")
+          if (mutableWorkFamilies.has(i.family)) {
+            requireThat(i.digest === "" && /^(0|[1-9][0-9]{0,18})$/.test(i.generation) && BigInt(i.generation) <= 9223372036854775807n)
+            subject = { key,generation: BigInt(i.generation) }
+          } else { requireThat(i.generation === "" && /^[0-9a-f]{64}$/.test(i.digest)); subject = { key,digest: i.digest } }
+          if(name === "workBody") {
+            operation="read_work_body"
+            subject={digest:(i as Input<"workBody">).bodyDigest,record:{family:i.family,...subject as object}}
+          }
+        }
+        const r = await workRead(p.origin,p.active.token,p.projectId,operation,subject,this.fetcher,caller.signal)
+        this.live(epoch)
+        if (name === "workList") {
+          requireThat(Array.isArray(r.value.data?.items) && r.value.data.items.length <= 32 && typeof r.value.data.complete === "boolean"
+            && r.value.data.complete === (r.value.data.nextCursor === null)
+            && typeof r.value.data.snapshotId === "string" && /^[0-9a-f-]{36}$/.test(r.value.data.snapshotId)
+            && (r.value.data.nextCursor === null || typeof r.value.data.nextCursor === "string" && /^[0-9a-f-]{36}$/.test(r.value.data.nextCursor)),"INCOMPLETE")
+          const i=input as Input<"workList">
+          for(const row of r.value.data.items) requireThat(row.family===i.family && row.key?.projectId===p.projectId
+            && (mutableWorkFamilies.has(i.family)?isLosslessNumber(row.generation):typeof row.digest==="string"&&/^[0-9a-f]{64}$/.test(row.digest)),"INTEGRITY")
+          return reply("OK",{ pageJSON: r.raw })
+        }
+        const i = input as Input<"workOpen">
+        if(name === "workBody") {
+          const body=r.value.data
+          requireThat(body?.digest===(input as Input<"workBody">).bodyDigest && typeof body.body==="string"
+            && isLosslessNumber(body.byteLength) && BigInt(body.byteLength.value)===BigInt(Buffer.byteLength(body.body))
+            && createHash("sha256").update(body.body).digest("hex")===body.digest,"INTEGRITY")
+          return reply("OK",{bundleJSON:r.raw})
+        }
+        requireThat(r.value.data?.family === i.family && contextJSON(r.value.data.key) === contextJSON((subject as any).key),"INTEGRITY")
+        requireThat(mutableWorkFamilies.has(i.family)
+          ? isLosslessNumber(r.value.data.payload?.generation) && r.value.data.payload.generation.value===i.generation
+          : createHash("sha256").update(contextJSON(r.value.data)).digest("hex")===i.digest,"INTEGRITY")
+        return reply("OK",{ bundleJSON: r.raw })
       }
       if (name === "open") {
         requireThat(this.epochs.has(caller.window) || this.epochs.size < 8, "BUSY")

@@ -487,3 +487,22 @@ Private candidates, task handoffs, manifests, review drafts, logs/XML, runtime s
 credentials/proofs, compiled output, toolchains and session history remain excluded. The checked
 source is not a qualified installed service: full task-shaped context/compaction, physical effects,
 abnormal recovery, other-platform qualification and the remaining pilot/release gates stay open.
+
+## Task-context and workflow presentation scope P20 — local commit authorized
+
+The owner explicitly requested committing the completed context and workflow presentation work.
+Admit only the 23 individually enumerated exceptions in `.gitignore`'s P20 section, corresponding
+changes to already admitted adapter/service/tests/build paths, and this publication/ignore record.
+This is a local source checkpoint, not independent acceptance, target integration, public push or
+permission to install a working profile or run live models.
+
+Provenance: newly authored Writhelm AGPL-3.0-only task-shaped source/checkpoint/compaction/restoration
+and read-only native workflow presentation code, with deterministic synthetic test inputs. Existing
+upstream notices remain unchanged. Tests distinguish actual checked service/Git/HTTP boundaries
+from mocked native/provider effects and DOM fixtures. No dependency implementation is imported.
+
+Source/content review excludes private candidates, tasks/checkpoints/manifests, session histories,
+logs/XML, instance stores, credentials, machine paths, toolchains, dependencies and compiled GUI
+bundles. Author checks do not establish installed native ordering, provider accounting/cancellation,
+physical writer/source safety, abnormal recovery, Windows/macOS support or an operational H1 pilot.
+Independent review/acceptance, combined native qualification and release/license gates remain open.

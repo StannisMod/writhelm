@@ -7,7 +7,7 @@ import { exactLoopback } from "./strict-json.js"
 import { nativeUnavailable, uuidPattern } from "./native-runtime-client.js"
 import { LinuxNativeCustody } from "./native-runtime-custody.js"
 import { NativeRuntimeClient } from "./native-runtime-client.js"
-import { NativeCredentialRegistry } from "./native-credentials.js"
+import { NativeCredentialRegistry, type NativeCredentialContext } from "./native-credentials.js"
 import { LinuxWorkRequestCustody } from "./connected-tools.js"
 
 const OC225_LINUX = "8d060e1d2fbb9bb44cf09ae6ed1f3f6a7cff070b5227e2f90970132b23a92050"
@@ -49,7 +49,7 @@ export async function linuxHostEpoch(info: Awaited<ReturnType<OpenCodeClient["se
 
 /** Explicit in-process pinned-host bootstrap. No discovery fallback, owner-profile loading,
  * working-profile installation or model dispatch. A different executable/version refuses. */
-export async function createNativeCredentialRegistry(ctx: Plugin.Context, native: OpenCodeClient, nativeOrigin: string,
+export async function createNativeCredentialRegistry(ctx: NativeCredentialContext, native: OpenCodeClient, nativeOrigin: string,
   custody: LinuxNativeCustody, service: NativeRuntimeClient, serviceOrigin: string, requests: LinuxWorkRequestCustody) {
   if (ctx.app.version !== "2.2.5") nativeUnavailable()
   const epoch = await linuxHostEpoch(await native.server.info(), nativeOrigin, OC225_LINUX)

@@ -3,7 +3,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import { promises as fs } from "node:fs"
 import path from "node:path"
-import { randomUUID } from "node:crypto"
+import { randomUUID, createHash } from "node:crypto"
 import { Schema } from "effect"
 import { createRoot } from "solid-js"
 import { parseHTML } from "linkedom"
@@ -48,6 +48,37 @@ test("actual SDK codecs reject excess authority fields, wrong choices and malfor
   assert.throws(() => Schema.decodeUnknownSync(Inputs.open)({ ...open, session: { ...session, token: "not-a-token" } }))
   assert.throws(() => Schema.decodeUnknownSync(Inputs.answer)({ session, handle: randomUUID(), choice: "other", comments: [] }))
   assert.doesNotThrow(() => Schema.decodeUnknownSync(Inputs.open)(open))
+})
+test("work IPC is READ-only, current-session bound and preserves exact Int64 generation without owner-token disclosure",async()=>{
+  const f=await files();const requests:string[]=[];let wrong=false
+  const key={projectId:uid(2),id:uid(900)}
+  const bodyText="attributed progress — proposal, not acceptance",bodyDigest=createHash("sha256").update(bodyText).digest("hex")
+  const fetcher:typeof fetch=async(url,init)=>{
+    assert.equal(String(url),f.profile.origin+"/api/v1/reads")
+    assert.equal(new Headers(init!.headers).get("Authorization"),"Bearer "+f.profile.active.token)
+    const body=String(init!.body);requests.push(body);const input=exact(body)
+    const data=input.operation==="read_work_body"?JSON.stringify({digest:bodyDigest,byteLength:Buffer.byteLength(bodyText),body:wrong?"wrong body":bodyText}):input.operation==="list_work_records"
+      ? `{"snapshotId":"${uid(901)}","complete":true,"nextCursor":null,"items":[{"family":"assignments","key":${JSON.stringify(key)},"generation":9007199254740993}]}`
+      : `{"formatVersion":1,"family":"assignments","key":${JSON.stringify(key)},"payload":{"generation":${wrong?"0":"9007199254740993"},"state":"pausing","executionGeneration":9223372036854775807}}`
+    return new Response(`{"formatVersion":2,"kind":"read","basis":{"algorithm":"sha1","hex":"${"a".repeat(40)}"},"operation":"${input.operation}","data":${data}}`)
+  }
+  const c=new Controller(host,fetcher);await c.attach(f.files)
+  try{
+    const list=await c.dispatch("workList",{session,family:"assignments",cursor:""},caller);assert.equal(list.ok,true)
+    const input={session,family:"assignments" as const,keyJSON:JSON.stringify(key),digest:"",generation:"9007199254740993"}
+    const record=await c.dispatch("workOpen",input,caller);assert.equal(record.ok,true)
+    assert.match(requests[1]!,/"generation":9007199254740993/);assert.ok(record.bundleJSON.includes("9223372036854775807"))
+    assert.equal(JSON.stringify([list,record]).includes(f.profile.active.token),false)
+    const bodyInput={...input,bodyDigest}
+    const body=await c.dispatch("workBody",bodyInput,caller);assert.equal(body.ok,true)
+    assert.ok(body.bundleJSON.includes(bodyText));assert.equal(exact(requests[2]!).subject.record.generation.value,"9007199254740993")
+    wrong=true;assert.equal((await c.dispatch("workOpen",input,caller)).code,"INTEGRITY")
+    assert.equal((await c.dispatch("workBody",bodyInput,caller)).code,"INTEGRITY")
+    assert.equal((await c.dispatch("workList",{session:{...session,key:"different"},family:"assignments",cursor:""},caller)).code,"STALE_VIEW")
+    const before=requests.length
+    assert.equal((await c.dispatch("workList",{session,family:"assignments",cursor:"",actor:uid(3)} as any,caller)).code,"UNAVAILABLE")
+    assert.equal(requests.length,before)
+  }finally{await c.close()}
 })
 test("real protected files enforce modes, links, project exclusion and atomic reread", async () => {
   const f = await files()
@@ -152,6 +183,8 @@ test("native DOM component renders full material, no default assent, anchored ch
     open: async () => reply("OK", { handle: uid(800), bundleJSON: raw }),
     answer: async i => { answered.push(i); return reply() }, reconcile: async () => reply(), rotate: async () => reply(), setup: async () => reply(),
     dismiss: async () => { dismissed++; return reply() },
+    workList: async () => reply("UNCONFIGURED"),workOpen: async () => reply("UNCONFIGURED"),
+    workBody: async () => reply("UNCONFIGURED"),
   }
   let dispose!: () => void, root!: HTMLElement
   createRoot(d => { dispose = d; root = nativePanel(() => session, bridge, () => ({ project: uid(2), ...open })); document.body.append(root) })

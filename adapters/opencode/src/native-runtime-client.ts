@@ -66,8 +66,8 @@ export class NativeRuntimeClient {
     if (!isLosslessNumber(valueJSON.formatVersion) || valueJSON.formatVersion.value !== "1") nativeUnavailable()
     return valueJSON
   }
-  async identity(token: string, signal?: AbortSignal): Promise<NativeIdentity> {
-    const value = closedObject(await this.request(token, { operation: "identity" }, signal),
+  async identity(token: string, signal?: AbortSignal, sourceRead = false): Promise<NativeIdentity> {
+    const value = closedObject(await this.request(token, { operation: sourceRead ? "source-identity" : "identity" }, signal),
       ["formatVersion", "storeId", "projectId", "controllerId", "nativeHostId", "principalId", "credentialId", "scope", "delegationId", "assignmentId", "executionGeneration"])
     if (value.storeId !== this.storeId || value.projectId !== this.projectId || value.controllerId !== this.controllerId
       || value.nativeHostId !== this.hostId || !uuidPattern.test(value.principalId) || !uuidPattern.test(value.credentialId)
@@ -126,5 +126,18 @@ export class NativeRuntimeClient {
   async hint(token: string, subject: NativeSubject, signal: AbortSignal) {
     const value = closedObject(await this.request(token, { operation: "hint", ...subject, continuationId: null }, signal), ["formatVersion", "kind"])
     if (value.kind !== "native-hint") nativeUnavailable()
+  }
+  async workerContext(token: string, signal?: AbortSignal) {
+    return closedObject(await this.request(token, { operation: "worker-context" }, signal, 4 * 1024 * 1024),
+      ["formatVersion", "basis", "nativeReady", "finishedHandoff", "assignmentId", "executionGeneration", "recordGeneration", "bindingJSON", "taskJSON", "manifestJSON",
+        "profileJSON", "profileRecordJSON", "planJSON", "loadedViewJSON", "memoryJSON", "checkpointJSON", "checkpointReferenceJSON",
+        "checkpointMemoryJSON", "checkpointSourceJSON", "safeContextAccess", "reusableBodies", "obligationIds", "packet"])
+  }
+  async controllerContext(token: string, profileJSON: string, signal?: AbortSignal) {
+    const frame = closedObject(await this.request(token, { operation: "controller-context", profileJSON }, signal, 4 * 1024 * 1024),
+      ["formatVersion", "basis", "controllerId", "nativeReady", "profileJSON", "profileRecordJSON", "frontierJSON", "plansJSON",
+        "previousJSON", "previousReferenceJSON", "reusableBodies", "obligationIds", "packet"])
+    if (frame.controllerId !== this.controllerId || frame.profileJSON !== profileJSON || typeof frame.nativeReady !== "boolean") nativeUnavailable()
+    return frame
   }
 }

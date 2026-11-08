@@ -6,13 +6,14 @@ import { exactJSON, exactLoopback } from "./strict-json.js"
 import { closedObject, nativeUnavailable } from "./native-runtime-client.js"
 import { ProtectedNativeBridge } from "./native-bridge.js"
 import { ConnectedNativeAdapter } from "./connected-native.js"
+import type { NativeContextSources } from "./native-context-source.js"
 
 /** Private service -> in-process native host transport, deliberately separate from service HTTP
  * admission. Immutable reconciliation authenticates the retained peer proof without calling current
  * service authority; effect methods perform their own current scoped checks through the bridge.
  * This transport installs no plugin/profile and starts no model or native host. */
 export async function listenNativeTransport(origin: string, proof: Uint8Array, bridge: ProtectedNativeBridge,
-  adapter: ConnectedNativeAdapter): Promise<Readonly<{ close(): Promise<void> }>> {
+  adapter: ConnectedNativeAdapter, sources?: NativeContextSources): Promise<Readonly<{ close(): Promise<void> }>> {
   exactLoopback(origin, nativeUnavailable)
   if (process.platform !== "linux" || proof.length !== 32) nativeUnavailable()
   const secret = Buffer.from(proof), url = new URL(origin)
@@ -47,7 +48,11 @@ export async function listenNativeTransport(origin: string, proof: Uint8Array, b
       const input = exactJSON(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)), nativeUnavailable)
       if (!isLosslessNumber(input.formatVersion) || input.formatVersion.value !== "1") nativeUnavailable()
       let result: unknown = null
-      if (input.operation === "identity") {
+      if (input.operation === "source-proof") {
+        closedObject(input, ["formatVersion", "operation", "locatorId"])
+        if (!sources || typeof input.locatorId !== "string") nativeUnavailable()
+        result = await sources.proof(input.locatorId) // immutable facts only; never reenter service authority
+      } else if (input.operation === "identity") {
         closedObject(input, ["formatVersion", "operation"])
         result = await bridge.identity()
       } else if (input.operation === "prepare") {
