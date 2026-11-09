@@ -456,3 +456,7 @@
 # P23: read-only native foreground-policy guard — local source checkpoint only
 !/adapters/opencode/src/native-context-policy.ts
 !/adapters/opencode/tests/native-context-policy.test.ts
+
+# P24: pure exact-text correction kernel — no operational patch tool
+!/adapters/opencode/src/exact-text-correction.ts
+!/adapters/opencode/tests/exact-text-correction.test.ts

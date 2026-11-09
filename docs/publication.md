@@ -551,3 +551,15 @@ Private static distribution observations, tasks/reports, session material, actua
 credentials, artifacts/logs and compiled output remain excluded. This checker only adds refusal:
 it does not create nativeReady, profile qualification, source/writer safety, request-budget proof,
 historical N-case acceptance or installed-host evidence. No live/model call, stand restart or push.
+
+## Exact-text correction kernel scope P24 — local source checkpoint
+
+Following the owner's approved deterministic non-LLM correction direction, admit only the two exact
+P24 exceptions in `.gitignore`, corresponding changes to admitted primary instructions/tests/README
+and this publication/ignore record. Newly authored AGPL-3.0-only pure text preparation and synthetic tests; no upstream source
+or dependencies are imported. The kernel has no filesystem, process, session, model or service effect.
+
+Private design/task/evidence/session material, actual project patches, source inventories, artifacts
+and generated output remain excluded. This is not an operational apply tool, contributor/authority
+schema, filesystem containment, independent verification or full correction-workflow qualification.
+No public push, live inference, stand launch or user-wide configuration change follows.

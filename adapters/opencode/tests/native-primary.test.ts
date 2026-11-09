@@ -59,6 +59,8 @@ test("ordinary broad primary prompt binds once, preserves owner input and cannot
     assert.deepEqual(Object.keys(request.tools),["read","question","writhelm_work_command"])
     assert.ok(request.system.some((part:{text:string})=>part.text.startsWith(primaryInstructions)))
     assert.ok(primaryInstructions.includes("Clarify consequential missing requirements"))
+    assert.ok(primaryInstructions.includes("deterministic non-LLM operation"))
+    assert.ok(primaryInstructions.includes("you cannot supply their independent review"))
     assert.deepEqual(f.sessions.get("ses_primary").permissions,primaryPermissionRules)
     for(const tool of ["shell","patch","subagent","newly_registered_mutator"])
       await assert.rejects(f.invoke("tool:execute.before",{sessionID:"ses_primary",tool}))

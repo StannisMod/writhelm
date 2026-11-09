@@ -155,6 +155,23 @@ conservative layer rule may refuse an otherwise valid overriding configuration; 
 how to repair it or modifies user-wide settings. Historical source-pin/N-case and installed-profile
 gates remain held; static observation of current distribution bytes is not their recovered evidence.
 
+### Deterministic correction kernel (not an operational tool)
+
+The approved TASK-08 / EX-08 / EV-09 route allows an attributed exact correction to be applied without
+a second LLM reasoning pass. `src/exact-text-correction.ts` currently implements only pure bounded
+preparation for one existing regular text file. It checks the supplied preimage SHA256, exact unified
+diff positions/context/counts and unchanged file mode; preserves UTF8/BOM/CRLF/final-newline bytes;
+and returns immutable prepared text/digests. No fuzzy matching, conflict repair, commands, filesystem
+write, native session, provider call or model fallback. A conservative ASCII relative path subset
+and text/line/hunk/output limits refuse unsupported input rather than silently retarget it.
+
+This is NOT a registered primary patch tool or canonical result producer. The input hash does not
+prove actual worktree contents, and path syntax does not prove filesystem identity/containment.
+Canonical task/base/claims/authority, mechanical execution identity, complete applicable authorship,
+qualified file/write/recovery adapter, permitted checks, new exact result and independent assessment
+must be composed before operational application. Current single-producer/model-profile formats are
+not silently repurposed to hide patch authors or invent a mechanical LLM session.
+
 - `src/gui.ts`: native session panel, command and exact nonsecret link handler.
 - `src/main.ts`: native main-process Ipc provider and file choosers; no model tool or server RPC.
 - `src/controller.ts`: exact view/answer/current-session binding and retained original retries.
