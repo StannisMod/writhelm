@@ -43,7 +43,8 @@ export class NativeContextExtraction {
   readonly #jobs = new Map<string, Lease>()
   readonly #profile: ContextExtractionProfile
   #registered = false
-  constructor(private readonly ctx: Plugin.Context, private readonly sources: NativeContextSources, profile: ContextExtractionProfile) {
+  constructor(private readonly ctx: Plugin.Context, private readonly sources: NativeContextSources, profile: ContextExtractionProfile,
+    private readonly includes: (sessionID: string) => boolean = () => true) {
     if (ctx.app.version !== "2.2.5" || process.platform !== "linux") nativeUnavailable()
     exactJSON(profile.profileJSON, nativeUnavailable)
     if (!profile.model.providerID || !profile.model.id || !profile.routeID || !profile.effortOptionKey
@@ -81,7 +82,7 @@ export class NativeContextExtraction {
       yield* self.ctx.session.hook("generate", event => self.onGenerate(event).pipe(Effect.orDie))
       yield* self.ctx.session.hook("model.request", event => self.onRequest(event).pipe(Effect.orDie))
       yield* self.ctx.session.hook("title", event => Effect.sync(() => {
-        if (self.sources.scopeKind(event.sessionID) === self.#profile.scopeKind) event.result = "Writhelm managed work"
+        if (self.includes(event.sessionID) && self.sources.scopeKind(event.sessionID) === self.#profile.scopeKind) event.result = "Writhelm managed work"
       }))
       self.#registered = true
       yield* Effect.addFinalizer(() => Effect.sync(() => { self.#registered = false }))
@@ -90,7 +91,7 @@ export class NativeContextExtraction {
   private onGenerate(event: SessionGenerate): Effect.Effect<void, unknown> {
     const self = this
     return Effect.gen(function* () {
-      if (self.sources.scopeKind(event.sessionID) !== self.#profile.scopeKind) return
+      if (!self.includes(event.sessionID) || self.sources.scopeKind(event.sessionID) !== self.#profile.scopeKind) return
       const lease = self.#jobs.get(event.sessionID)
       if (!self.#registered || !lease?.source || lease.phase !== "prepared" || !equal(model(event.model), self.#profile.model))
         return yield* Effect.fail(new Error("uncorrelated managed generation"))
@@ -111,7 +112,7 @@ export class NativeContextExtraction {
   private onRequest(event: SessionModelRequest): Effect.Effect<void, unknown> {
     const self = this
     return Effect.gen(function* () {
-      if (event.kind !== "generate" || self.sources.scopeKind(event.sessionID) !== self.#profile.scopeKind) return
+      if (!self.includes(event.sessionID) || event.kind !== "generate" || self.sources.scopeKind(event.sessionID) !== self.#profile.scopeKind) return
       const lease = self.#jobs.get(event.sessionID)
       if (!self.#registered || lease?.phase !== "generating" || !equal(model(event.model), self.#profile.model)
         || (event.baseURL ?? null) !== self.#profile.baseURL) return yield* Effect.fail(new Error("extraction model/route mismatch"))
@@ -122,7 +123,7 @@ export class NativeContextExtraction {
   extract(event: SessionCompaction, basis: string, packet: string, obligationIds: readonly string[]): Effect.Effect<ContextExtraction, unknown> {
     const self = this
     return Effect.acquireUseRelease(Effect.sync(() => {
-      if (!self.#registered || self.sources.scopeKind(event.sessionID) !== self.#profile.scopeKind || self.#jobs.has(event.sessionID) || self.#jobs.size >= 256 || event.result !== undefined
+      if (!self.#registered || !self.includes(event.sessionID) || self.sources.scopeKind(event.sessionID) !== self.#profile.scopeKind || self.#jobs.has(event.sessionID) || self.#jobs.size >= 256 || event.result !== undefined
         || !equal(model(event.model), self.#profile.model) || obligationIds.length > 256 || new Set(obligationIds).size !== obligationIds.length
         || obligationIds.some(id => !uuidPattern.test(id))) nativeUnavailable()
       const lease: Lease = { phase: "capturing" }; self.#jobs.set(event.sessionID, lease); return lease

@@ -48,8 +48,9 @@ function digest(text: string) { return createHash("sha256").update(text, "utf8")
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined
 }
-function matched(value: unknown, e: RetainedConnectedEnvelope): boolean {
-  const root = record(value); if (!root || root.id !== e.messageID || root.sessionID !== e.sessionID || root.type !== "synthetic") return false
+function matched(value: unknown, e: RetainedConnectedEnvelope, scopedMessage=false): boolean {
+  const root = record(value); if (!root || root.id !== e.messageID || root.type !== "synthetic"
+    || root.sessionID !== e.sessionID && (!scopedMessage || root.sessionID !== undefined)) return false
   const body = record(root.payload) ?? root, metadata = record(body.metadata)
   return body.text === e.text && !!metadata && Object.keys(metadata).sort().join(",") === "assignmentId,continuationId,executionGeneration"
     && metadata.continuationId === e.metadata.continuationId && metadata.assignmentId === e.metadata.assignmentId
@@ -62,6 +63,7 @@ export class ConnectedNativeAdapter {
   private gates = new Map<string, Gate>(); private closed = false
   private bindingHolds = new Map<string, ConnectedBindingTarget>()
   private disposals: Array<() => Promise<void>> = []
+  owns(sessionID:string){return this.gates.has(sessionID)||this.bindingHolds.has(sessionID)}
   constructor(private readonly ctx: Plugin.Context, private readonly client: Pick<SessionApi, "inbox" | "message" | "context">,
     private readonly bridge: ConnectedNativeBridge, private readonly hostID: string) {}
   private async packet(e: RetainedConnectedEnvelope): Promise<boolean> {
@@ -77,43 +79,55 @@ export class ConnectedNativeAdapter {
     return managed.length === e.instructions.length && new Set(e.instructions.map(entry => entry.key)).size === managed.length
       && e.instructions.every(expected => managed.some(entry => entry.key === expected.key && entry.value === expected.value))
   }
-  async register() {
+  async register(include:(sessionID:string)=>boolean=()=>true) {
     check(process.platform === "linux" && this.ctx.app.version === "2.2.5", "unqualified native platform/version")
     const context = await this.ctx.session.hook("context", async event => {
-      if (!this.bridge.managed(event.sessionID)) return
-      check(!this.bindingHolds.has(event.sessionID), "managed binding held without continuation")
-      const gate = this.gates.get(event.sessionID)
+      if (!include(event.sessionID)||!this.bridge.managed(event.sessionID)) return
+      await this.admitContext(event.sessionID)
+    })
+    const tool = await this.ctx.tool.hook("execute.before", async event => {
+      if (!include(event.sessionID)||!this.bridge.managed(event.sessionID)) return
+      await this.admitTool(event.sessionID)
+    })
+    this.disposals.push(context.dispose, tool.dispose)
+  }
+  /** Reuse the same controller-owned gate from a worker-location plugin instance. A runtime
+   * reference/metadata label is never admission; full current binding/packet/policy is rechecked. */
+  async admitContext(sessionID:string):Promise<void>{
+      check(this.bridge.managed(sessionID),"unmanaged native receiver")
+      check(!this.bindingHolds.has(sessionID), "managed binding held without continuation")
+      const gate = this.gates.get(sessionID)
       check(gate && !this.closed, "managed native binding not reconciled")
-      check(await this.bridge.binding(event.sessionID) === gate.envelope.bindingJSON, "stale native generation")
+      check(await this.bridge.binding(sessionID) === gate.envelope.bindingJSON, "stale native generation")
       check(await this.packet(gate.envelope), "mandatory native packet changed or incomplete")
       if (!gate.closed) {
         const current = await this.bridge.current(gate.envelope)
-        check(this.gates.get(event.sessionID) === gate && !gate.closed && !this.closed && !this.bindingHolds.has(event.sessionID) && current === "active", "current authority required")
+        check(this.gates.get(sessionID) === gate && !gate.closed && !this.closed && !this.bindingHolds.has(sessionID) && current === "active", "current authority required")
         return
       }
       // Actual native boundary plus exact promoted input, not inferred merely from inbox presence.
-      const messages = await this.client.context({ sessionID: event.sessionID })
-      if (messages.some(message => matched(message, gate.envelope))) {
+      const messages = await this.client.context({ sessionID })
+      // Pinned SessionMessage.Info has no sessionID; the context API was queried for this exact
+      // verified receiver. Inbox entries still require their explicit matching sessionID.
+      if (messages.some(message => matched(message, gate.envelope,true))) {
         gate.arrived = true
         await this.bridge.retainObservation(gate.envelope.key, JSON.stringify({ kind: "held-boundary", digest: gate.envelope.digest,
-          sessionID: event.sessionID, messageID: gate.envelope.messageID }))
+          sessionID, messageID: gate.envelope.messageID }))
       }
       await gate.wait // native runtime owns scheduling; no second model loop/trigger
       const current = await this.bridge.current(gate.envelope)
-      check(this.gates.get(event.sessionID) === gate && !gate.closed && !this.closed
-        && !this.bindingHolds.has(event.sessionID) && current === "active", "authority changed while native boundary held")
-    })
-    const tool = await this.ctx.tool.hook("execute.before", async event => {
-      if (!this.bridge.managed(event.sessionID)) return
-      check(!this.bindingHolds.has(event.sessionID), "managed binding held without continuation")
-      const gate = this.gates.get(event.sessionID)
+      check(this.gates.get(sessionID) === gate && !gate.closed && !this.closed
+        && !this.bindingHolds.has(sessionID) && current === "active", "authority changed while native boundary held")
+  }
+  async admitTool(sessionID:string):Promise<void>{
+      check(this.bridge.managed(sessionID),"unmanaged native receiver")
+      check(!this.bindingHolds.has(sessionID), "managed binding held without continuation")
+      const gate = this.gates.get(sessionID)
       check(gate, "managed tool admission held")
-      const binding = await this.bridge.binding(event.sessionID), complete = await this.packet(gate.envelope)
+      const binding = await this.bridge.binding(sessionID), complete = await this.packet(gate.envelope)
       const current = await this.bridge.current(gate.envelope)
-      check(this.gates.get(event.sessionID) === gate && !gate.closed && !this.closed && binding === gate.envelope.bindingJSON
-        && complete && !this.bindingHolds.has(event.sessionID) && current === "active", "managed tool admission held")
-    })
-    this.disposals.push(context.dispose, tool.dispose)
+      check(this.gates.get(sessionID) === gate && !gate.closed && !this.closed && binding === gate.envelope.bindingJSON
+        && complete && !this.bindingHolds.has(sessionID) && current === "active", "managed tool admission held")
   }
   private async envelope(key: string, checkCurrentBinding = true) {
     check(!this.closed, "adapter closed")
@@ -261,7 +275,7 @@ export class ConnectedNativeAdapter {
     let promoted: unknown
     try { promoted = await this.client.message.get({ sessionID: e.sessionID, messageID: e.messageID }) } catch { /* absence is not quiescence */ }
     const actual = pending ?? promoted
-    if (actual !== undefined && !matched(actual, e)) return "conflict"
+    if (actual !== undefined && !matched(actual, e,pending===undefined)) return "conflict"
     if (actual === undefined) return await this.bridge.absentAndQuiescent(e) ? "not-performed" : "unknown"
     const observations = (await this.bridge.observations(key)).map(text => record(JSON.parse(text)))
     return observations.some(v => v?.digest === e.digest && v?.sessionID === e.sessionID && v?.messageID === e.messageID

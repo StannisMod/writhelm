@@ -13,6 +13,8 @@ const hash = (s: string) => createHash("sha256").update(s, "utf8").digest("hex")
 export class LinuxNativeCustody {
   private identity: string | undefined
   private initialized = false
+  private writes:Promise<void>=Promise.resolve()
+  private queuedWrites=0
   private readonly forbiddenAreas: readonly string[]
   constructor(readonly root: string, forbiddenAreas: readonly string[], private readonly capacity = 1024) {
     if (!Number.isInteger(capacity) || capacity < 1 || capacity > 1024) unavailable()
@@ -113,11 +115,21 @@ export class LinuxNativeCustody {
   /** Complete bytes are synced before exclusive publication. Existing identity never dispatches
    * again. A crash or conflicting/partial leftover stays held, never becomes absence by cleanup. */
   async retain(kind: string, key: string, raw: string): Promise<boolean> {
-    return this.write(kind, key, raw)
+    return this.serialize(()=>this.write(kind,key,raw))
   }
   async replace(kind: string, key: string, expectedDigest: string, raw: string): Promise<boolean> {
     if (!/^[0-9a-f]{64}$/.test(expectedDigest)) unavailable()
-    return this.write(kind, key, raw, expectedDigest)
+    return this.serialize(()=>this.write(kind,key,raw,expectedDigest))
+  }
+  /** Bounded lifecycle-local serialization only. The existing exclusive filesystem lock and every
+   * identity/owner/link/sync check remain authoritative across instances/processes. Native inbox
+   * acknowledgement and its concurrent held-boundary witness must not conflict in one instance. */
+  private serialize(operation:()=>Promise<boolean>):Promise<boolean>{
+    if(this.queuedWrites>=32)unavailable()
+    this.queuedWrites++
+    const current=this.writes.then(operation)
+    this.writes=current.then(()=>undefined,()=>undefined)
+    return current.then(value=>{this.queuedWrites--;return value},error=>{this.queuedWrites--;throw error})
   }
   private async write(kind: string, key: string, raw: string, expectedDigest?: string): Promise<boolean> {
     if (!this.initialized) unavailable()

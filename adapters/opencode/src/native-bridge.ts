@@ -25,9 +25,16 @@ export class ProtectedNativeBridge implements ConnectedNativeBridge {
   }
   managed(sessionID: string): boolean { return this.#sessions.has(sessionID) || this.registry.managed(sessionID) }
   async identity() {
+    const current=await this.registry.identity(this.controllerSessionID)
+    if(current.scope!=="controller")nativeUnavailable()
+    return this.startupIdentity()
+  }
+  /** Protected immutable host/session observer; MUST NOT reenter service HTTP admission during
+   * its connect callback. Current controller rights are independently checked by the service. */
+  async startupIdentity() {
     const session = await this.registry.inspect(this.controllerSessionID)
-    const identity = await this.registry.identity(this.controllerSessionID)
-    if (!session || identity.scope !== "controller" || session.scope !== "controller") nativeUnavailable()
+    const identity = await this.registry.immutableControllerIdentity(this.controllerSessionID)
+    if (!session || session.scope !== "controller") nativeUnavailable()
     const workRoots = new Set([session.workRoot])
     for (const id of this.#sessions) {
       const managed = await this.registry.inspect(id)

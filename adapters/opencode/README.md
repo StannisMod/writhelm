@@ -7,6 +7,95 @@ than use a standalone or external-browser approval fallback.
 
 ## Boundaries
 
+### Governed primary entrypoint (uninstalled source implementation)
+
+The package now exports an actual server entrypoint, `build/src/primary-server.js`, alongside the
+GUI. A GUI panel is not a governed primary session. Trusted local provisioning must supply
+`WRITHELM_PRIMARY_ROOT` pointing to qualified protected custody, already enrolled controller
+credentials, fixed service/native origins and registration file, peer proofs and exact operation
+schemas. No `ctx.options` actor/token, owner-profile import or default service discovery is used.
+`preparePrimaryBootstrap` rechecks actual controller scope before retaining the key; it does not
+issue grants or register a new owner. Native client discovery reads only the explicitly selected
+registration file and never starts a service. Production startup pins the real2.2.5 executable/PID.
+
+Trusted provisioning installs a fresh `opencode.json` native policy in the primary project before
+enabling the server part: deny ordinary tool actions except native reads/questions and the separately service-
+authorized Writhelm tools. Existing project config is never overwritten or permissively merged.
+Integrating an existing configuration requires explicit review. The policy is a native fallback
+against plugin failure; model/tool/permission hooks independently enforce current bindings while
+loaded. It is NOT OS containment or a claim that arbitrary third-party plugins are sandboxed.
+
+The first ordinary prompt in a fresh root session elects one immutable controller/session binding
+in protected custody; concurrent candidates, children, moved/reverted sessions and unmanaged old
+history refuse. Original user input is not rewritten. Primary context explains requirements/design
+clarification, structured exact owner approval, draft versus executable tasks, separate workers,
+independent review, acceptance and integration. Shell/edit/Code Mode/unbound subagents are
+removed from its outgoing tools AND refused at live execution/permission boundaries. Native deny
+rules persist on that primary session; selecting another agent does not make it an executor.
+
+Primary project inspection reuses native `read`, preserving its configured secret/owner permission
+decisions instead of implementing a filesystem reader that bypasses them. External-directory access
+is denied; protected profiles/canonical Git must remain outside the coding work area. Knowledge tools use only the same current
+controller's v1 propose/request/assessment/pin and exact read operations; owner approval and grant
+administration cannot pass them. Work tools retain existing command3/read2 authorization. Missing
+bootstrap, missing native fallback policy, service/current READ loss or an unenrolled stand location
+cannot silently become ordinary unrestricted coding. Unknown location instances hold and ask the
+operator to open the explicitly governed project; they do not select another controller.
+
+After primary binding the server composes the existing protected native transport and scoped work
+tools, then requests the service's existing runtime connection. The private startup identity witness
+does NOT reenter service HTTP while its connect request owns admission. Current controller identity/
+rights remain independently checked by the service; duplicate connection cannot create two engines.
+
+This implements initial primary admission/contract tooling, not an operational full-H1 claim.
+Semantic clarification/approval sufficiency still belongs to planner and independent verification,
+not a field or finite fixture. Generic primary compaction holds until a qualified task-shaped
+controller continuation coordinator is configured; it never silently discards obligations. Native
+worker/work-area qualification, profiles, physical/source safety, incarnation adoption, end-to-end
+compaction/restore and installed pilot gates still require their respective composition/qualification.
+Unqualified execution stays held. No actual model request or working-profile install follows from
+building this package. A live stand must not be restarted implicitly to test the new entrypoint.
+
+### Reserved worker preparation and distinct initial start
+
+`writhelm_prepare_worker` is controller-only orchestration over the existing canonical reserve,
+bounded delegation registration and bind commands. Native IDs, credential/intent/request IDs are
+retained privately before posting or creating anything. Every passive native effect rechecks the
+actual service preparation projection: own controller/host/generation, READ/TASK_DISPATCH, current
+required inputs/claims and trusted native safety. Canonical profile `qualified` text is not enough.
+Unavailable native safety remains a production refusal, not a permissive file/RPC flag.
+
+The optional protected `passive-profile/current` record selects repository/native-project mapping,
+worktree parent, pinned Git executable digest and native executor/reviewer agent IDs. The first
+Linux adapter accepts one exact clean Git base; dirty/multiple repositories, unqualified strategy,
+startup commands, collisions and changed source/receiver attributes refuse rather than omit inputs.
+Actual commit/tree/blob bytes and ownership are checked. Original create markers mean reconcile
+only, never another create based on missing inbox/path. Scoped credentials are enrolled/bound only
+through current canonical policy. Passive preparation/binding does not wake a model or fence writers.
+
+`writhelm_start_worker` then uses a DISTINCT retained normal user prompt for the canonical start
+intent. It never fabricates a continuation, synthetic notification or result. Mandatory instruction
+packet and explicit protected `execution-profile/<exact profile-key JSON>` deployment are required.
+Deployment pins model/provider/variant, route/baseURL, effort key/options and output reserve; no
+inherited planner defaults. Native permission translation currently supports the known native
+actions and explicit workspace/wildcard scopes only; other scopes remain unqualified and refuse.
+Reviewer mutation/shell/Code Mode and unmanaged subagents remain denied.
+
+The matching promoted context is held before model dispatch. Its private immutable witness can be
+consumed by the service without HTTP reentry; only then can the existing observe-start command
+confirm canonical ACTIVE and release native admission. Lost acknowledgements retain original IDs;
+replay/active restoration cannot send a second wake. ACTIVE is admission, not model completion or
+writer fencing. Connected-work synthetic continuation retains its separate protocol and takes over
+the same worker's admission when its actual continuation gate exists.
+
+Worker-location instances use an in-process runtime reference only to find the real controller-owned
+gate; reference/metadata presence grants nothing. Missing/reloaded/other-host references hold, and
+every admission rechecks current binding, packet and service policy. Pinned context/message DTOs lack
+sessionID and are checked under the exact queried receiver; inbox DTOs still require their explicit
+sessionID. Actual host module sharing, lifecycle ordering, request options/accounting and physical
+source/writer safety remain installed-qualification gates. Generic compaction is still refused until
+the separately required Effect-native task-shaped coordinator is composed.
+
 - `src/gui.ts`: native session panel, command and exact nonsecret link handler.
 - `src/main.ts`: native main-process Ipc provider and file choosers; no model tool or server RPC.
 - `src/controller.ts`: exact view/answer/current-session binding and retained original retries.

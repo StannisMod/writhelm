@@ -30,6 +30,8 @@ tasks.test {
     exclude("**/NativeControllerJourneyTest.class")
     exclude("**/NativeBridgeJourneyTest.class")
     exclude("**/NativeWorkPresentationTest.class")
+    exclude("**/NativePrimaryJourneyTest.class")
+    exclude("**/NativeWorkerPreparationJourneyTest.class")
 }
 
 tasks.withType<Test>().configureEach {
@@ -62,6 +64,8 @@ tasks.register<Test>("nativeComponentTest") {
     include("**/NativeControllerJourneyTest.class")
     include("**/NativeBridgeJourneyTest.class")
     include("**/NativeWorkPresentationTest.class")
+    include("**/NativePrimaryJourneyTest.class")
+    include("**/NativeWorkerPreparationJourneyTest.class")
     useJUnitPlatform()
     maxParallelForks = 1
     maxHeapSize = "128m"

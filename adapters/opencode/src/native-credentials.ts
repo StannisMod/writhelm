@@ -7,7 +7,7 @@ import type { ToolContext } from "@opencode/plugin/promise/tool"
 import { isLosslessNumber } from "lossless-json"
 import { LinuxNativeCustody } from "./native-runtime-custody.js"
 import { NativeRuntimeClient, closedObject, nativeUnavailable, uuidPattern, type NativeSubject } from "./native-runtime-client.js"
-import { boundedWorkChannel, LinuxWorkRequestCustody, type BoundWorkChannel, type NativeWorkCredentialResolver } from "./connected-tools.js"
+import { boundedWorkChannel, boundedPlanningKnowledgeChannel, boundedDelegationEnrollmentChannel, LinuxWorkRequestCustody, type BoundWorkChannel, type NativeWorkCredentialResolver } from "./connected-tools.js"
 import { exactJSON } from "./strict-json.js"
 
 type SecretRecord = Readonly<{ formatVersion: 1; kind: "native-scoped-key-v1"; storeId: string; projectId: string
@@ -194,6 +194,13 @@ export class NativeCredentialRegistry implements NativeWorkCredentialResolver {
   async identity(sessionID: string) {
     return this.#service.identity((await this.verifiedCredential(sessionID)).token)
   }
+  /** Immutable private startup witness, not authorization or a public disclosure operation. The
+   * service independently checks its current controller credential before consuming this witness. */
+  async immutableControllerIdentity(sessionID:string) {
+    const record=await this.inspect(sessionID)
+    if(record?.scope!=="controller")nativeUnavailable()
+    return {controllerId:this.#service.controllerId,principalId:record.principalId,credentialId:record.credentialId}
+  }
   async sourceIdentity(sessionID: string, signal?: AbortSignal) {
     return this.#service.identity((await this.verifiedCredential(sessionID)).token, signal, true)
   }
@@ -219,6 +226,37 @@ export class NativeCredentialRegistry implements NativeWorkCredentialResolver {
     return boundedWorkChannel(this.#service.projectId, binding.scope, this.#serviceOrigin, key.token, 4 * 1024 * 1024,
       this.#requests, JSON.stringify([this.#service.storeId, this.#service.projectId, binding.hostId, binding.epoch,
         binding.sessionID, binding.assignmentId, binding.executionGeneration, binding.bindingJSON]))
+  }
+  async planningKnowledgeChannel(actual: Pick<ToolContext,"sessionID"|"messageID"|"id"|"signal">): Promise<BoundWorkChannel> {
+    const bound=await this.resolve(actual)
+    if(!bound || bound.scope!=="controller")nativeUnavailable()
+    const key=await this.verifiedCredential(actual.sessionID)
+    await this.sourceIdentity(actual.sessionID,actual.signal)
+    return boundedPlanningKnowledgeChannel(bound.projectID,this.#serviceOrigin,key.token,this.#requests,
+      JSON.stringify([this.#service.storeId,this.#service.projectId,this.#epoch,actual.sessionID,"primary-knowledge-v1"]))
+  }
+  async connectRuntime(sessionID:string) {
+    const binding=await this.inspect(sessionID)
+    if(binding?.scope!=="controller")nativeUnavailable()
+    return this.#service.connectRuntime((await this.verifiedCredential(sessionID)).token)
+  }
+  async preparationContext(sessionID:string,assignmentId:string,generation:string,signal?:AbortSignal){
+    const binding=await this.inspect(sessionID)
+    if(binding?.scope!=="controller")nativeUnavailable()
+    return this.#service.preparationContext((await this.verifiedCredential(sessionID)).token,assignmentId,generation,signal)
+  }
+  async preparationEnrollmentChannel(sessionID:string):Promise<BoundWorkChannel>{
+    const binding=await this.inspect(sessionID)
+    if(binding?.scope!=="controller")nativeUnavailable()
+    const key=await this.verifiedCredential(sessionID)
+    await this.sourceIdentity(sessionID)
+    return boundedDelegationEnrollmentChannel(this.#service.projectId,this.#serviceOrigin,key.token,this.#requests,
+      JSON.stringify([this.#service.storeId,this.#service.projectId,this.#epoch,sessionID,"prepared-delegation-v1"]))
+  }
+  async initialContext(sessionID:string,subject:NativeSubject,intentId:string,signal?:AbortSignal){
+    const binding=await this.inspect(sessionID)
+    if(binding?.scope!=="controller")nativeUnavailable()
+    return this.#service.initialContext((await this.verifiedCredential(sessionID)).token,subject,intentId,signal)
   }
   async hint(sessionID: string, subject: NativeSubject, signal: AbortSignal) {
     return this.#service.hint((await this.verifiedCredential(sessionID)).token, subject, signal)

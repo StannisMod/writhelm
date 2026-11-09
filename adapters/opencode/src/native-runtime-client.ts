@@ -140,4 +140,22 @@ export class NativeRuntimeClient {
     if (frame.controllerId !== this.controllerId || frame.profileJSON !== profileJSON || typeof frame.nativeReady !== "boolean") nativeUnavailable()
     return frame
   }
+  async connectRuntime(token: string, signal?: AbortSignal) {
+    const value=closedObject(await this.request(token,{operation:"connect"},signal),["formatVersion","kind"])
+    if(!["runtime-connected","runtime-held"].includes(value.kind))nativeUnavailable()
+    return value.kind==="runtime-connected"
+  }
+  async preparationContext(token:string,assignmentId:string,executionGeneration:string,signal?:AbortSignal){
+    if(!uuidPattern.test(assignmentId)||!/^(0|[1-9][0-9]{0,18})$/.test(executionGeneration)||BigInt(executionGeneration)>9223372036854775807n)nativeUnavailable()
+    return closedObject(await this.request(token,{operation:"preparation-context",assignmentId,executionGeneration},signal,4*1024*1024),
+      ["formatVersion","basis","assignmentJSON","intentJSON","taskJSON","profileJSON","manifestJSON"])
+  }
+  async initialContext(token:string,subject:NativeSubject,intentId:string,signal?:AbortSignal){
+    if(!uuidPattern.test(intentId)||!uuidPattern.test(subject.assignmentId)||!/^(0|[1-9][0-9]{0,18})$/.test(subject.executionGeneration)||
+      BigInt(subject.executionGeneration)>9223372036854775807n)nativeUnavailable()
+    const frame=closedObject(await this.request(token,{operation:"initial-context",...subject,intentId},signal,4*1024*1024),
+      ["formatVersion","basis","envelopeJSON","envelopeDigest","packetJSON","profileJSON","assignmentJSON","intentJSON","dispatch","active"])
+    if(typeof frame.dispatch!=="boolean"||typeof frame.active!=="boolean"||!/^[0-9a-f]{64}$/.test(frame.envelopeDigest))nativeUnavailable()
+    return frame
+  }
 }

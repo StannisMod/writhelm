@@ -23,24 +23,25 @@ export class NativeControllerCompaction {
   readonly #profileJSON: string
   #registered = false
   constructor(private readonly ctx: Plugin.Context, private readonly registry: NativeCredentialRegistry,
-    private readonly sources: NativeContextSources, custody: LinuxNativeCustody, profile: ContextExtractionProfile, governingTaskJSON: string) {
+    private readonly sources: NativeContextSources, custody: LinuxNativeCustody, profile: ContextExtractionProfile, governingTaskJSON: string,
+    private readonly includes: (sessionID: string) => boolean = () => true) {
     this.#profileJSON = profile.profileJSON
-    this.#extraction = new NativeContextExtraction(ctx, sources, { ...profile, scopeKind: "controller" })
+    this.#extraction = new NativeContextExtraction(ctx, sources, { ...profile, scopeKind: "controller" }, includes)
     this.#continuations = new NativeControllerContinuations(registry, sources, custody, profile.profileJSON, governingTaskJSON)
   }
-  register(): Effect.Effect<void, never, Scope.Scope> {
+  register(listen = true): Effect.Effect<void, never, Scope.Scope> {
     const self = this
     return Effect.gen(function* () {
       if (self.#registered) return yield* Effect.die(new Error("controller compaction already registered"))
       yield* self.#extraction.register()
-      yield* self.ctx.session.hook("compaction", event => self.compact(event).pipe(Effect.orDie))
+      if (listen) yield* self.ctx.session.hook("compaction", event => self.compact(event).pipe(Effect.orDie))
       self.#registered = true
       yield* Effect.addFinalizer(() => Effect.sync(() => { self.#registered = false }))
     })
   }
-  private compact(event: SessionCompaction): Effect.Effect<void, unknown> {
+  compact(event: SessionCompaction): Effect.Effect<void, unknown> {
     const self = this
-    if (self.sources.scopeKind(event.sessionID) !== "controller") return Effect.void
+    if (!self.includes(event.sessionID) || self.sources.scopeKind(event.sessionID) !== "controller") return Effect.void
     return Effect.acquireUseRelease(Effect.sync(() => {
       if (!self.#registered || self.#active.has(event.sessionID) || self.#active.size >= 256 || event.result !== undefined) nativeUnavailable()
       self.#active.add(event.sessionID)

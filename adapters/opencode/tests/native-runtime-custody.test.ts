@@ -60,3 +60,17 @@ test("Linux custody requires initialization, retains originals and checks links/
   await assert.rejects(prepareNativePeerProofs(proofs, { serviceProof: conflict, transportProof: original.transportProof }))
   original.serviceProof.fill(0); original.transportProof.fill(0); restored.serviceProof.fill(0); restored.transportProof.fill(0); conflict.fill(0)
 })
+
+test("one custody instance serializes concurrent witnesses without weakening the cross-instance filesystem lock",async()=>{
+  const configured=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(configured)
+  const area=await fs.mkdtemp(path.join(configured,"native-write-")),work=path.join(area,"work"),root=path.join(area,"private")
+  await fs.mkdir(work)
+  const custody=new LinuxNativeCustody(root,[work]);await custody.initialize()
+  assert.deepEqual(await Promise.all([custody.retain("observation","ack","original ack"),custody.retain("observation","held","original held boundary")]),[true,true])
+  assert.equal(await custody.read("observation","ack"),"original ack")
+  assert.equal(await custody.read("observation","held"),"original held boundary")
+  const ownTestLock=path.join(root,".native-write-lock");await fs.mkdir(ownTestLock,{mode:0o700})
+  try{await assert.rejects(custody.retain("observation","other","must not bypass lock"))}
+  finally{await fs.rmdir(ownTestLock)} // only this exact test-owned lock, never recovery of unknown state
+  assert.equal(await custody.read("observation","other"),undefined)
+})

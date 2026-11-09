@@ -28,11 +28,12 @@ internal class LocalH1Runtime private constructor(val app: H1Application,private
     /** Run after the explicitly configured in-process native peer is listening. No worker is
      * launched here; original commands/unknown effects are recovered by a fresh canonical scan. */
     @Synchronized fun connectNative() {
-        check(!closed && engine==null)
+        check(!closed)
+        if(engine!=null)return // duplicate startup handshake never constructs a second engine
         val access=app.inspectAccess(token)
         require(access.scope==CredentialScope.Controller(controller) && access.projectId==project)
         app.coordinationCapture(token,project) // actual current READ + TASK_DISPATCH, not role labels
-        val identity=native.identity()
+        val identity=native.startupIdentity()
         val credential=CredentialVerifier.parse(token)?.use { it.credentialId } ?: error("bounded credential required")
         require(uuid(identity.getValue("hostId"))==host && uuid(identity.getValue("controllerId"))==controller &&
             uuid(identity.getValue("principalId"))==access.principalId && uuid(identity.getValue("credentialId"))==credential)
@@ -43,7 +44,7 @@ internal class LocalH1Runtime private constructor(val app: H1Application,private
         areas.forEach { outside(root,Path.of(it.string()).toRealPath()) }
         val execution=UUID.nameUUIDFromBytes("writhelm-native-controller:$controller:$host:$session:$epoch".toByteArray(Charsets.UTF_8))
         val provenance=Model2ControllerExecution(controller,execution,host,session)
-        installFacts(ConnectedRuntimeFacts(NativeContextFacts(UnavailableH1RuntimeFacts,native,epoch,provenance),preparation,native,
+        installFacts(ConnectedRuntimeFacts(NativeInitialFacts(NativePreparationFacts(NativeContextFacts(UnavailableH1RuntimeFacts,native,epoch,provenance),native,epoch),native,epoch),preparation,native,
             provenance,checks::observed))
         engine=ConnectedWorkEngine(app,project,{token},preparation,native,LinuxConnectedCustody(root.resolve("engine")))
     }
@@ -146,7 +147,10 @@ internal class LocalH1Runtime private constructor(val app: H1Application,private
                 require(access.scope==CredentialScope.Controller(controller) && access.projectId==project &&
                     (expectedPrincipal==null || access.principalId==expectedPrincipal))
                 native=HttpConnectedNativeControl(nativeOrigin,nativeProof)
-                endpoint=WrithelmService(app).nativeEndpoint(project,controller,host,serviceProof)
+                val composition=java.util.concurrent.atomic.AtomicReference<LocalH1Runtime?>()
+                endpoint=WrithelmService(app).nativeEndpoint(project,controller,host,serviceProof) {
+                    (composition.get() ?: throw ServiceFault("UNAVAILABLE",503)).connectNative()
+                }
                 http=HttpAdapter(WrithelmService(app),profile,nativeEndpoint=endpoint)
                 registrations.forEach { outside(root,it.root.toRealPath()) }
                 val preparation=LinuxOwnedDirectoryPreparation(registrations)
@@ -156,6 +160,7 @@ internal class LocalH1Runtime private constructor(val app: H1Application,private
                 val server=embeddedServer(CIO,host=uri.host.removeSurrounding("[","]"),port=uri.port) { installed.install(this) }.start(wait=false)
                 return LocalH1Runtime(app,http,endpoint,server,native,root,project,controller,host,controllerToken,
                     preparation,checks) { facts.set(it) }
+                    .also { composition.set(it) }
             } catch(error: Exception) {
                 http?.let { runBlocking { it.mcp.close() } };endpoint?.close();native?.close();app.close();throw error
             }

@@ -287,6 +287,10 @@ internal class H1Application private constructor(private val storeId: UUID,priva
         capture(token) { state,key -> NativeWorkerContext.read(state,key,project,controller,host,options.nativeSafety) }
     @Synchronized internal fun nativeControllerContext(token: String,project: UUID,controller: UUID,profile: WorkKey.Profile): JsonValue=
         capture(token) { state,key -> NativeControllerContext.read(state,key,project,controller,profile,options.controllerSafety) }
+    @Synchronized internal fun nativePreparationContext(token:String,project:UUID,controller:UUID,host:UUID,subject:WAssignmentSubject):JsonValue=
+        capture(token) { state,key -> NativePreparationContext.read(state,key,project,controller,host,subject,options.nativeSafety) }
+    @Synchronized internal fun nativeInitialContext(token:String,project:UUID,controller:UUID,host:UUID,subject:WAssignmentSubject,binding:WorkReference,intent:UUID):JsonValue=
+        capture(token) { state,key -> NativeInitialContext.read(state,key,project,controller,host,subject,binding,intent,options.nativeSafety) }
     companion object {
         fun initialize(directory: Path,storeId: UUID,genesis: H1Genesis,options: H1Options): H1Application {
             // This composition currently selects the existing Linux NativeGit/RuntimeOwner adapter.

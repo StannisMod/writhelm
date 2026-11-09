@@ -16,12 +16,12 @@ import java.util.Base64
  * only by trusted startup and its separate retained proof, never a command/tool argument. Effects
  * are never retried here. Immutable reconcile deliberately does NOT first retain/re-authorize the
  * envelope: application runtime-facts capture can own the monitor during that call. */
-internal class HttpConnectedNativeControl(origin: String,proof: ByteArray): ConnectedNativeControl,NativeSourceProofControl,AutoCloseable {
+internal class HttpConnectedNativeControl(origin: String,proof: ByteArray): ConnectedNativeControl,NativeSourceProofControl,NativePreparationProofControl,NativeInitialProofControl,AutoCloseable {
     private val origin=HttpProfile(origin).origin
     private val proof=proof.copyOf().also { require(it.size==32) }
     private val client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER).build()
     @Volatile private var closed=false
-    private fun call(operation: String,vararg fields: Pair<String,JsonValue>,maximum: Int=16384): JsonValue {
+    private fun call(operation: String,vararg fields: Pair<String,JsonValue>,maximum: Int=16384,stringMaximum:Int=8192): JsonValue {
         check(!closed) { "native transport closed" }
         val bytes=StrictJson.encode(obj("formatVersion" to num(1),"operation" to str(operation),*fields),4*1024*1024)
         val request=HttpRequest.newBuilder(URI(origin+"/native/v1")).timeout(Duration.ofSeconds(10))
@@ -30,16 +30,23 @@ internal class HttpConnectedNativeControl(origin: String,proof: ByteArray): Conn
         val response=client.send(request,HttpResponse.BodyHandlers.ofInputStream())
         val body=response.body().use { it.readNBytes(maximum+1) }
         workRequire(response.statusCode()==200 && body.size<=maximum,WorkProblem.NATIVE_UNKNOWN)
-        val f=StrictJson.decode(body,JsonLimits(bytes=maximum,stringBytes=8192,collection=4096,tokens=65536,depth=32)).fields("formatVersion","kind","result")
+        val f=StrictJson.decode(body,JsonLimits(bytes=maximum,stringBytes=stringMaximum,collection=4096,tokens=65536,depth=32)).fields("formatVersion","kind","result")
         workRequire(f.getValue("formatVersion").long()==1L && f.getValue("kind").string()=="native-result",WorkProblem.NATIVE_UNKNOWN)
         return f.getValue("result")
     }
     private fun key(e: ConnectedEnvelope)=e.continuation.id.toString()
     fun identity(): Map<String,JsonValue> = call("identity").fields("hostId","controllerId","principalId","credentialId","sessionID","epoch","workRoots")
+    fun startupIdentity(): Map<String,JsonValue> = call("identity-immutable").fields("hostId","controllerId","principalId","credentialId","sessionID","epoch","workRoots")
     /** Narrow immutable source witness, not a raw artifact disclosure. May be called by runtime
      * capture under the service monitor: receiving peer must not query current service policy. */
     override fun sourceProof(locator: java.util.UUID): JsonValue?=try { call("source-proof","locatorId" to uuid(locator),maximum=1024*1024) }
         catch(_: Exception) { null }
+    override fun preparationProof(assignment:java.util.UUID,generation:Long):JsonValue?=try {
+        call("worker-proof","assignmentId" to uuid(assignment),"executionGeneration" to str(generation.toString()),maximum=2*1024*1024,stringMaximum=1024*1024)
+    }catch(_:Exception){null}
+    override fun initialProof(intent:java.util.UUID):JsonValue?=try {
+        call("initial-proof","intentId" to uuid(intent),maximum=1024*1024,stringMaximum=512*1024)
+    }catch(_:Exception){null}
     private fun envelopeCall(operation: String,e: ConnectedEnvelope)=call(operation,"key" to str(key(e)),"digest" to digest(Digest.of(e.bytes())))
     /** Trusted packet provisioner seam for the dependent context stage. Current service digest and
      * binding are verified by the receiving concrete bridge before any original is retained. This

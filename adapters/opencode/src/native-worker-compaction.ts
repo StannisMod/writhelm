@@ -26,11 +26,12 @@ export class NativeWorkerCompaction {
   readonly #checkpoints: NativeWorkerCheckpoints
   #registered = false
   constructor(private readonly ctx: Plugin.Context, private readonly registry: NativeCredentialRegistry,
-    private readonly sources: NativeContextSources, private readonly custody: LinuxNativeCustody, profile: ContextExtractionProfile) {
-    this.#extraction = new NativeContextExtraction(ctx, sources, { ...profile, scopeKind: "assignment" })
+    private readonly sources: NativeContextSources, private readonly custody: LinuxNativeCustody, profile: ContextExtractionProfile,
+    private readonly includes: (sessionID: string) => boolean = () => true) {
+    this.#extraction = new NativeContextExtraction(ctx, sources, { ...profile, scopeKind: "assignment" }, includes)
     this.#checkpoints = new NativeWorkerCheckpoints(registry, sources, custody)
   }
-  register(): Effect.Effect<void, never, Scope.Scope> {
+  register(listen = true): Effect.Effect<void, never, Scope.Scope> {
     const self = this
     return Effect.gen(function* () {
       if (self.#registered) return yield* Effect.die(new Error("worker compaction already registered"))
@@ -41,7 +42,7 @@ export class NativeWorkerCompaction {
       yield* self.ctx.tool.hook("execute.before", event => Effect.gen(function* () {
         if (yield* self.retired(event.sessionID)) return yield* Effect.die(new Error("finished executor tool admission held"))
       }).pipe(Effect.orDie))
-      yield* self.ctx.session.hook("compaction", event => self.compact(event).pipe(Effect.orDie))
+      if (listen) yield* self.ctx.session.hook("compaction", event => self.compact(event).pipe(Effect.orDie))
       self.#registered = true
       yield* Effect.addFinalizer(() => Effect.sync(() => { self.#registered = false }))
     })
@@ -49,7 +50,7 @@ export class NativeWorkerCompaction {
   private retired(sessionID: string): Effect.Effect<boolean, unknown> {
     const self = this
     return Effect.gen(function* () {
-      if (self.registry.scopeKind(sessionID) !== "assignment") return false
+      if (!self.includes(sessionID) || self.registry.scopeKind(sessionID) !== "assignment") return false
       if (self.#retired.has(sessionID)) return true
       const messages = yield* self.ctx.session.context({ sessionID: sessionID as SessionCompaction["sessionID"] })
       const markers = messages.filter(message => message.type === "compaction").map(message => message.metadata?.writhelm)
@@ -60,9 +61,9 @@ export class NativeWorkerCompaction {
         && contextJSON((m as any).checkpoint) === frame.checkpointReferenceJSON)
     })
   }
-  private compact(event: SessionCompaction): Effect.Effect<void, unknown> {
+  compact(event: SessionCompaction): Effect.Effect<void, unknown> {
     const self = this
-    if (self.sources.scopeKind(event.sessionID) !== "assignment") return Effect.void
+    if (!self.includes(event.sessionID) || self.sources.scopeKind(event.sessionID) !== "assignment") return Effect.void
     return Effect.acquireUseRelease(Effect.sync(() => {
       if (!self.#registered || self.#active.has(event.sessionID) || self.#active.size >= 256 || event.result !== undefined) nativeUnavailable()
       self.#active.add(event.sessionID)

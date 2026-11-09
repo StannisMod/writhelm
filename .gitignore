@@ -423,3 +423,27 @@
 !/backend/server/src/test/kotlin/dev/writhelm/core/app/NativeContextFactsTest.kt
 !/backend/server/src/test/kotlin/dev/writhelm/core/app/NativeControllerContextTest.kt
 !/backend/server/src/test/kotlin/dev/writhelm/core/app/NativeWorkPresentationTest.kt
+# P21: governed primary and bounded worker lifecycle — local checkpoint only
+!/adapters/opencode/src/linux-git-witness.ts
+!/adapters/opencode/src/native-initial-start.ts
+!/adapters/opencode/src/native-initial.ts
+!/adapters/opencode/src/native-passive-worker.ts
+!/adapters/opencode/src/native-primary.ts
+!/adapters/opencode/src/native-worker-preparation.ts
+!/adapters/opencode/src/primary-bootstrap.ts
+!/adapters/opencode/src/primary-policy.ts
+!/adapters/opencode/src/primary-server.ts
+!/adapters/opencode/tests/native-context-filter.test.ts
+!/adapters/opencode/tests/native-initial.test.ts
+!/adapters/opencode/tests/native-passive-worker.test.ts
+!/adapters/opencode/tests/native-primary.test.ts
+!/adapters/opencode/tests/primary-governance-client.ts
+!/adapters/opencode/tests/worker-preparation-client.ts
+!/backend/server/src/main/kotlin/dev/writhelm/core/app/NativeInitialContext.kt
+!/backend/server/src/main/kotlin/dev/writhelm/core/app/NativeInitialFacts.kt
+!/backend/server/src/main/kotlin/dev/writhelm/core/app/NativePreparationContext.kt
+!/backend/server/src/main/kotlin/dev/writhelm/core/app/NativePreparationFacts.kt
+!/backend/server/src/test/kotlin/dev/writhelm/core/app/NativePreparationContextTest.kt
+!/backend/server/src/test/kotlin/dev/writhelm/core/app/NativePreparationFactsTest.kt
+!/backend/server/src/test/kotlin/dev/writhelm/core/app/NativePrimaryJourneyTest.kt
+!/backend/server/src/test/kotlin/dev/writhelm/core/app/NativeWorkerPreparationJourneyTest.kt

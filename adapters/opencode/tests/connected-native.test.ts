@@ -63,7 +63,8 @@ function fixture() {
     },
     tool: { hook: async (_name: string, callback: (event: { sessionID: string }) => Promise<void>) => { hooks.set("tool", callback); return { dispose: async () => {} } } },
   } as unknown as Plugin.Context
-  const client = { inbox: { list: async () => payload ? [payload] : [] }, message: { get: async () => { if (!payload) throw new Error("absent"); return payload } }, context: async () => payload ? [payload] : [] } as unknown as Pick<SessionApi, "inbox" | "message" | "context">
+  const promoted=()=>{const p=payload as any;return p?{id:p.id,type:p.type,text:p.payload.text,metadata:p.payload.metadata,time:{created:1}}:undefined}
+  const client = { inbox: { list: async () => payload ? [payload] : [] }, message: { get: async () => { if (!payload) throw new Error("absent"); return promoted() } }, context: async () => payload ? [promoted()] : [] } as unknown as Pick<SessionApi, "inbox" | "message" | "context">
   const adapter = new ConnectedNativeAdapter(ctx, client, bridge, "host")
   return { adapter, envelope, hooks, boundary, observations, get wakes() { return wakes },
     freshAdapter() { return new ConnectedNativeAdapter(ctx, client, bridge, "host") },

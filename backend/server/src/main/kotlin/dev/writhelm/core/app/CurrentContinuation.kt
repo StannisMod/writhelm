@@ -16,6 +16,14 @@ internal fun H1BoundState.requireCurrentContinuation(project: java.util.UUID,sub
         it.scope==CredentialScope.Assignment(delegation.id) && it.credential.status==CredentialStatus.ACTIVE && it.credential.replacedBy==null
     },WorkProblem.NOT_READY)
     workRequire(authority.policy.allows(Actor(delegation.binding.principalId),project,Capability.READ),WorkProblem.BLOCKED_INPUT)
+    requireCurrentAssignmentInputs(project,subject)
+}
+
+/** Shared current required-input/claim checks for passive reservation and bound continuation.
+ * This grants neither a native effect nor a profile/source/writer qualification. */
+internal fun H1BoundState.requireCurrentAssignmentInputs(project: java.util.UUID,subject: WAssignmentSubject) {
+    val work=work.getValue(project);val a=work.assignment(subject.assignmentId)
+    workRequire(a.executionGeneration==subject.generation,WorkProblem.INVALID_BINDING)
     val task=work.task(a.task);val base=task.base ?: throw WorkFault(WorkProblem.NOT_READY)
     val snapshot=core.snapshot(8192)
     workRequire(pinnedKnowledge(snapshot,base).all { core.validationSourceAvailable(it) } && task.approvedDesign.all { core.validationDecisionApproved(it) },WorkProblem.BLOCKED_INPUT)

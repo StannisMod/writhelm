@@ -49,15 +49,40 @@ export interface NativeWorkCredentialResolver {
  * No default origin/key, credential transport field, arbitrary URL or owner forwarding route. */
 export function boundedWorkChannel(projectID: string, scope: "controller" | "assignment", origin: string, token: string,
   maxReplyBytes: number, custody: WorkRequestCustody, bindingIdentity: string, fetcher: typeof fetch = fetch): BoundWorkChannel {
+  return boundedChannel(projectID,scope,origin,token,maxReplyBytes,custody,bindingIdentity,connectedCommands,connectedReads,"3",fetcher)
+}
+
+export const planningKnowledgeCommands = new Set(["propose_revision", "request_approval", "record_assessment", "pin_consumer"])
+export const planningKnowledgeReads = new Set(["list_projects", "list_documents", "list_revisions", "list_requests", "list_manifests",
+  "read_revision", "read_clause", "read_context", "read_approval_trace", "read_request", "read_resolution", "read_manifest", "read_review_bundle"])
+/** Same protected controller identity, existing knowledge v1 operations ONLY. Neither resolve_approval
+ * nor credential/grant administration can pass this channel, even if the model names them. */
+export function boundedPlanningKnowledgeChannel(projectID: string, origin: string, token: string,
+  custody: WorkRequestCustody,bindingIdentity: string,fetcher: typeof fetch=fetch): BoundWorkChannel {
+  return boundedChannel(projectID,"controller",origin,token,4*1024*1024,custody,bindingIdentity,
+    planningKnowledgeCommands,planningKnowledgeReads,"1",fetcher)
+}
+
+/** Trusted preparation orchestration only, never registered as a generic model auth tool. This
+ * one existing bounded enrollment cannot replace grants, approve norms or administer owners. */
+export function boundedDelegationEnrollmentChannel(projectID:string,origin:string,token:string,custody:WorkRequestCustody,
+  bindingIdentity:string,fetcher:typeof fetch=fetch):BoundWorkChannel {
+  return boundedChannel(projectID,"controller",origin,token,4*1024*1024,custody,bindingIdentity,
+    new Set(["register_delegation"]),new Set(),"3",fetcher)
+}
+
+function boundedChannel(projectID: string, scope: "controller" | "assignment", origin: string, token: string,
+  maxReplyBytes: number, custody: WorkRequestCustody, bindingIdentity: string, commands: ReadonlySet<string>,reads: ReadonlySet<string>,
+  commandVersion: string,fetcher: typeof fetch): BoundWorkChannel {
   exactLoopback(origin, invalid)
   if (!["controller", "assignment"].includes(scope) || !token.startsWith("wh1.") || maxReplyBytes < 1024 || maxReplyBytes > 4 * 1024 * 1024)
     throw new Error("unqualified bounded work channel")
   return Object.freeze({ projectID, scope, async send(route: "commands" | "reads", rawJSON: string, signal: AbortSignal) {
     if (signal.aborted) throw new Error("work request cancelled before dispatch")
     const parsed = exact(rawJSON)
-    if (parsed.projectId !== projectID || !(route === "commands" ? connectedCommands : connectedReads).has(parsed.operation)) throw new Error("work channel scope mismatch")
+    if (parsed.projectId !== projectID || !(route === "commands" ? commands : reads).has(parsed.operation)) throw new Error("work channel scope mismatch")
     if (route === "commands") {
-      if (!isLosslessNumber(parsed.formatVersion) || parsed.formatVersion.value !== "3" || typeof parsed.requestKey !== "string") throw new Error("closed command3 required")
+      if (!isLosslessNumber(parsed.formatVersion) || parsed.formatVersion.value !== commandVersion || typeof parsed.requestKey !== "string") throw new Error("closed command version required")
       rawJSON = await custody.retain(bindingIdentity + ":" + parsed.operation, parsed.requestKey, rawJSON)
     }
     const response = await fetcher(origin + "/api/v1/" + route, { method: "POST", redirect: "error", credentials: "omit",

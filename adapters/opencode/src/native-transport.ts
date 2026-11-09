@@ -7,13 +7,15 @@ import { closedObject, nativeUnavailable } from "./native-runtime-client.js"
 import { ProtectedNativeBridge } from "./native-bridge.js"
 import { ConnectedNativeAdapter } from "./connected-native.js"
 import type { NativeContextSources } from "./native-context-source.js"
+import type { NativePassiveWorkers } from "./native-passive-worker.js"
+import type { NativeInitialAdapter } from "./native-initial.js"
 
 /** Private service -> in-process native host transport, deliberately separate from service HTTP
  * admission. Immutable reconciliation authenticates the retained peer proof without calling current
  * service authority; effect methods perform their own current scoped checks through the bridge.
  * This transport installs no plugin/profile and starts no model or native host. */
 export async function listenNativeTransport(origin: string, proof: Uint8Array, bridge: ProtectedNativeBridge,
-  adapter: ConnectedNativeAdapter, sources?: NativeContextSources): Promise<Readonly<{ close(): Promise<void> }>> {
+  adapter: ConnectedNativeAdapter, sources?: NativeContextSources, workers?: NativePassiveWorkers,initial?:NativeInitialAdapter): Promise<Readonly<{ close(): Promise<void> }>> {
   exactLoopback(origin, nativeUnavailable)
   if (process.platform !== "linux" || proof.length !== 32) nativeUnavailable()
   const secret = Buffer.from(proof), url = new URL(origin)
@@ -48,10 +50,21 @@ export async function listenNativeTransport(origin: string, proof: Uint8Array, b
       const input = exactJSON(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)), nativeUnavailable)
       if (!isLosslessNumber(input.formatVersion) || input.formatVersion.value !== "1") nativeUnavailable()
       let result: unknown = null
-      if (input.operation === "source-proof") {
+      if(input.operation==="initial-proof"){
+        closedObject(input,["formatVersion","operation","intentId"])
+        if(!initial||typeof input.intentId!=="string")nativeUnavailable()
+        result=await initial.witness(input.intentId)
+      } else if(input.operation==="worker-proof"){
+        closedObject(input,["formatVersion","operation","assignmentId","executionGeneration"])
+        if(!workers||typeof input.assignmentId!=="string"||typeof input.executionGeneration!=="string")nativeUnavailable()
+        result=await workers.proof(input.assignmentId,input.executionGeneration)
+      } else if (input.operation === "source-proof") {
         closedObject(input, ["formatVersion", "operation", "locatorId"])
         if (!sources || typeof input.locatorId !== "string") nativeUnavailable()
         result = await sources.proof(input.locatorId) // immutable facts only; never reenter service authority
+      } else if (input.operation === "identity-immutable") {
+        closedObject(input,["formatVersion","operation"])
+        result=await bridge.startupIdentity()
       } else if (input.operation === "identity") {
         closedObject(input, ["formatVersion", "operation"])
         result = await bridge.identity()

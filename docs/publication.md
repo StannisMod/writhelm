@@ -506,3 +506,22 @@ logs/XML, instance stores, credentials, machine paths, toolchains, dependencies 
 bundles. Author checks do not establish installed native ordering, provider accounting/cancellation,
 physical writer/source safety, abnormal recovery, Windows/macOS support or an operational H1 pilot.
 Independent review/acceptance, combined native qualification and release/license gates remain open.
+
+## Governed primary and bounded worker lifecycle scope P21 — local commit authorized
+
+The owner requested a local commit and continued implementation. Admit only the 23 exact P21
+exceptions in `.gitignore`, corresponding changes to already admitted source/test/build paths,
+and this publication/ignore record. This does not authorize a push, live inference, stand restart
+or installation into the working harness.
+
+Provenance: newly authored Writhelm AGPL-3.0-only primary admission/policy, passive Git/native
+preparation, scoped enrollment, distinct initial-start protocol and synthetic tests. The context
+coordinators also separate dispatcher execution from scoped hook registration and filter sessions.
+Tests distinguish real local service/Git/HTTP checks from mocked OpenCode/provider effects.
+No external dependency implementation or binary is imported; preserve existing notices.
+
+Private tasks, reports, session histories, stand configuration/stores, keys/proofs, machine paths,
+logs/XML, generated output and dependencies remain excluded. Author checks do not establish
+installed lifecycle ordering, provider accounting/cancellation, physical source/writer safety,
+abnormal recovery, other-platform qualification or complete H1 operation. Effect-native runtime
+composition and remaining pilot/release gates are not represented as complete by this checkpoint.

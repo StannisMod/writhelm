@@ -24,10 +24,10 @@ import kotlin.test.*
 /** Real private HTTP/current-H/auth/Git boundary; native activation observations remain fixtures. */
 class NativeRuntimeEndpointTest {
     private class Boundary(val f: ReviewAppFixture,val app: H1Application,host: java.util.UUID=f.intended.nativeHostId,
-        controller: java.util.UUID=f.controller): AutoCloseable {
+        controller: java.util.UUID=f.controller,onConnect: (()->Unit)?=null): AutoCloseable {
         val proof=ByteArray(32).also { SecureRandom().nextBytes(it) }
         val encoded=Base64.getUrlEncoder().withoutPadding().encodeToString(proof)
-        val endpoint=WrithelmService(app).nativeEndpoint(project,controller,host,proof)
+        val endpoint=WrithelmService(app).nativeEndpoint(project,controller,host,proof,onConnect)
         val port=ServerSocket(0,1,InetAddress.getByName("127.0.0.1")).use { it.localPort }
         val origin="http://127.0.0.1:$port"
         val adapter=HttpAdapter(WrithelmService(app),HttpProfile(origin),nativeEndpoint=endpoint)
@@ -97,5 +97,31 @@ class NativeRuntimeEndpointTest {
             Boundary(f,app,host=id(49997)).use { b -> assertEquals(403,b.call(b.status()).statusCode()) }
             Boundary(f,app,controller=id(49998)).use { b -> assertEquals(403,b.call(b.identity()).statusCode()) }
         }
+    }
+    @Test fun runtimeConnectIsPrivateCurrentControllerOnlyAndNotAnOwnerOrWorkerProxy() {
+        val f=ReviewAppFixture();var calls=0
+        f.publishedActiveApp().use { app -> Boundary(f,app,onConnect={calls++}).use { b ->
+            val connect=JObject(b.identity().entries+("operation" to str("connect")))
+            assertEquals(403,b.call(connect).statusCode())
+            assertEquals(403,b.call(connect,ownerToken).statusCode())
+            assertEquals(403,b.call(connect,plannerToken,proof=null).statusCode())
+            assertEquals(0,calls)
+            assertEquals(200,b.call(connect,plannerToken).statusCode());assertEquals(1,calls)
+            val remove=CoreCommand(id(49003),project,CommandPayload.Revoke(planner))
+            assertIs<CommandResult.Settled>(app.execute(ownerToken,CommandCodec().encode(remove)))
+            assertEquals(403,b.call(connect,plannerToken).statusCode());assertEquals(1,calls)
+        } }
+    }
+    @Test fun withheldDispatchHoldsRuntimeWithoutRemovingIndependentPlannerRead() {
+        val f=ReviewAppFixture()
+        f.publishedActiveApp().use { app -> Boundary(f,app,onConnect={app.coordinationCapture(plannerToken,project)}).use { b ->
+            val remove=Auth3Command(id(49004),project,Auth3Payload.ReplaceWorkGrants(planner,0,
+                workGrantDigest(project,planner,WorkPermission.entries.toSet()),WorkPermission.entries.toSet()-WorkPermission.TASK_DISPATCH))
+            assertIs<CommandResult.Settled>(app.execute(ownerToken,Auth3CommandCodec().encode(remove)))
+            val response=b.call(JObject(b.identity().entries+("operation" to str("connect"))),plannerToken)
+            assertEquals(200,response.statusCode())
+            assertEquals("runtime-held",(StrictJson.decode(response.body()) as JObject).entries.getValue("kind").string())
+            assertEquals(200,b.call(JObject(b.identity().entries+("operation" to str("source-identity"))),plannerToken).statusCode())
+        } }
     }
 }
