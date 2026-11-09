@@ -95,6 +95,13 @@ start/observe command. Pending, revoked, changed or another-incarnation receiver
 protected original records are not treated as absence. New-process incarnation adoption and actual
 writer recovery remain separate unimplemented/unqualified gates, not implied by plugin reload.
 
+Native permission release retains its exact original target before the first update. Reconciliation
+of the same target does not post another update. An observed changed permission set, including a
+new deny-all or stricter owner restriction, holds instead of being overwritten; a lost reply with an
+unchanged passive deny is unknown, not permission to repeat. Local close/release barriers invalidate
+in-flight admission checks. This is not a native compare-and-swap guarantee: actual simultaneous
+external permission edits and host serialization still require installed-profile qualification.
+
 Worker-location instances use an in-process runtime reference only to find the real controller-owned
 gate; reference/metadata presence grants nothing. Missing/reloaded/other-host references hold, and
 every admission rechecks current binding, packet and service policy. Pinned context/message DTOs lack

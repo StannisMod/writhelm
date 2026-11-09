@@ -25,10 +25,16 @@ async function fixture(){
   const profile={family:"profiles",key:{projectId:id(1),profileId:id(6),revision:0},payload:{platform:"linux",qualification:"qualified",model:{providerId:"MOCK",modelId:"no-call",variant:null},
     outputReserveTokens:512,effort:"bounded",route:"no-call",permissions:[{tool:"read",action:"allow",scope:"workspace"}]}}
   let active=false,dispatch=true,wakes=0,lost=false,suppressBoundary=false,epoch="b".repeat(64),permissions:any[]=[{action:"*",resource:"*",effect:"deny"}],boundary:Promise<void>|undefined
+  let permissionUpdates=0,losePermissionReply=false,failPermissionBefore=false,blockedFrame:Promise<void>|undefined,frameEntered:()=>void=()=>{}
   const event=()=>({sessionID:envelope.nativeSessionId,model:{providerID:"MOCK",id:"no-call"},system:[],options:{inherited:"must disappear"},tools:{read:{},shell:{}}})
   const hook=(domain:string)=>(name:string,callback:(e:any)=>Promise<void>)=>{hooks.set(domain+":"+name,callback);return Promise.resolve({dispose:async()=>{hooks.delete(domain+":"+name)}})}
   const ctx={app:{version:"2.2.5"},session:{hook:hook("session"),instructions:{entry:{list:async()=>instructions,put:async({key,value}:any)=>{instructions.push({key,value})}}},
-    update:async(i:any)=>{permissions=i.permissions},prompt:async(i:any)=>{
+    update:async(i:any)=>{
+      permissionUpdates++
+      if(failPermissionBefore)throw Error("MOCK permission outcome unknown before visible update")
+      permissions=i.permissions
+      if(losePermissionReply)throw Error("MOCK lost original permission-update acknowledgement")
+    },prompt:async(i:any)=>{
       await hooks.get("session:prompt")!({sessionID:i.sessionID,messageID:i.id,prompt:{text:i.text},metadata:i.metadata,delivery:i.delivery})
       wakes++;messages.push({id:i.id,type:"user",text:i.text,metadata:i.metadata,time:{created:1}})
       if(!suppressBoundary)boundary=hooks.get("session:context")!(event())
@@ -38,8 +44,11 @@ async function fixture(){
   const native={session:{get:async()=>({id:envelope.nativeSessionId,location:{directory:work},model:{providerID:"MOCK",id:"no-call"},permissions,cost:0}),
     context:async()=>messages,inbox:{list:async()=>[]}}} as unknown as OpenCodeClient
   const registry={inspect:async()=>({scope:"assignment",assignmentId:id(2),executionGeneration:"0",bindingJSON:contextJSON(binding),workRoot:work,epoch}),
-    initialContext:async()=>({envelopeJSON:raw,envelopeDigest:createHash("sha256").update(raw).digest("hex"),packetJSON:packet,profileJSON:contextJSON(profile),
-      assignmentJSON:contextJSON({payload:{intendedExecution:{template:"executor-v1"}}}),active,dispatch})} as unknown as NativeCredentialRegistry
+    initialContext:async()=>{
+      if(blockedFrame){frameEntered();await blockedFrame}
+      return {envelopeJSON:raw,envelopeDigest:createHash("sha256").update(raw).digest("hex"),packetJSON:packet,profileJSON:contextJSON(profile),
+        assignmentJSON:contextJSON({payload:{intendedExecution:{template:"executor-v1"}}}),active,dispatch}
+    }} as unknown as NativeCredentialRegistry
   const custody=new LinuxNativeCustody(path.join(root,"private"),[work]);await custody.initialize()
   const deployment=new LinuxNativeCustody(path.join(root,"deployment"),[work]);await deployment.initialize()
   await deployment.retain("execution-profile",contextJSON(profile.key),contextJSON({formatVersion:1,profileKeyJSON:contextJSON(profile.key),model:{providerID:"MOCK",id:"no-call"},
@@ -47,6 +56,14 @@ async function fixture(){
   const adapter=new NativeInitialAdapter(ctx,native,registry,custody,deployment,"ses_controller");await adapter.register()
   return {adapter,hooks,envelope,root,event,subject:{assignmentId:id(2),executionGeneration:"0",bindingJSON:contextJSON(binding)},
     restart:()=>new NativeInitialAdapter(ctx,native,registry,custody,deployment,"ses_controller"),changeEpoch:()=>{epoch="c".repeat(64)},
+    restrict:()=>{permissions=[...permissions,{action:"read",resource:"private.txt",effect:"deny"}]},denyAll:()=>{permissions=[{action:"*",resource:"*",effect:"deny"}]},
+    permissionUpdates:()=>permissionUpdates,losePermissionReply:()=>{losePermissionReply=true},failPermissionBefore:()=>{failPermissionBefore=true},
+    blockFrame:()=>{
+      let release!:()=>void
+      blockedFrame=new Promise<void>(resolve=>{release=resolve})
+      const entered=new Promise<void>(resolve=>{frameEntered=resolve})
+      return {entered,release}
+    },
     active:()=>{active=true;dispatch=false},revoke:()=>{active=false;dispatch=false},lose:()=>{lost=true},noBoundary:()=>{suppressBoundary=true},wakes:()=>wakes,boundary:()=>boundary,permissions:()=>permissions}
 }
 
@@ -123,4 +140,70 @@ test("startup recovery cannot promote ack-only, pending or another incarnation i
       assert.equal(f.wakes(),1)
     }finally{await f.adapter.close();await restarted.close()}
   }
+})
+
+test("ACTIVE reconciliation never overwrites an observed owner restriction or repeats a permission write",async()=>{
+  for(const mode of ["extra-deny","deny-all"]){
+    const f=await fixture(),restarted=f.restart()
+    try{
+      await f.adapter.deliver(f.subject,id(3));await f.adapter.awaitBoundary(f.envelope.nativeSessionId,new AbortController().signal)
+      f.active();await f.adapter.release(f.envelope.nativeSessionId);await f.boundary()
+      assert.equal(f.permissionUpdates(),1)
+      await f.adapter.release(f.envelope.nativeSessionId);assert.equal(f.permissionUpdates(),1)
+      if(mode==="extra-deny")f.restrict();else f.denyAll()
+      const ownerPermissions=structuredClone(f.permissions())
+      await assert.rejects(f.adapter.release(f.envelope.nativeSessionId));await assert.rejects(f.adapter.admitTool(f.envelope.nativeSessionId))
+      await f.adapter.close();await restarted.register()
+      assert.equal((await restarted.restore())[0]!.phase,"initial-held")
+      await assert.rejects(restarted.admitTool(f.envelope.nativeSessionId))
+      assert.deepEqual(f.permissions(),ownerPermissions);assert.equal(f.permissionUpdates(),1)
+    }finally{await f.adapter.close();await restarted.close()}
+  }
+})
+
+test("lost original permission reply reconciles only the exact target; an unknown unchanged deny never retries",async()=>{
+  for(const performed of [true,false]){
+    const f=await fixture()
+    try{
+      await f.adapter.deliver(f.subject,id(3));await f.adapter.awaitBoundary(f.envelope.nativeSessionId,new AbortController().signal)
+      f.active();if(performed)f.losePermissionReply();else f.failPermissionBefore()
+      await assert.rejects(f.adapter.release(f.envelope.nativeSessionId));assert.equal(f.permissionUpdates(),1)
+      await assert.rejects(f.adapter.admitTool(f.envelope.nativeSessionId))
+      if(performed){await f.adapter.release(f.envelope.nativeSessionId);await f.boundary();await f.adapter.admitTool(f.envelope.nativeSessionId)}
+      else await assert.rejects(f.adapter.release(f.envelope.nativeSessionId))
+      assert.equal(f.permissionUpdates(),1);assert.equal(f.wakes(),1)
+    }finally{void f.boundary()?.catch(()=>{});await f.adapter.close()}
+  }
+})
+
+test("closing initial admission invalidates an in-flight tool check even if its old service reply is ACTIVE",async()=>{
+  const f=await fixture()
+  try{
+    await f.adapter.deliver(f.subject,id(3));await f.adapter.awaitBoundary(f.envelope.nativeSessionId,new AbortController().signal)
+    f.active();await f.adapter.release(f.envelope.nativeSessionId);await f.boundary()
+    const held=f.blockFrame(),admission=f.adapter.admitTool(f.envelope.nativeSessionId)
+    await held.entered;await f.adapter.close();held.release()
+    await assert.rejects(admission)
+  }finally{await f.adapter.close()}
+})
+
+test("concurrent initial releases can reconcile but cannot post two native permission updates",async()=>{
+  const f=await fixture()
+  try{
+    await f.adapter.deliver(f.subject,id(3));await f.adapter.awaitBoundary(f.envelope.nativeSessionId,new AbortController().signal)
+    f.active()
+    const results=await Promise.allSettled([f.adapter.release(f.envelope.nativeSessionId),f.adapter.release(f.envelope.nativeSessionId)])
+    assert.ok(results.some(result=>result.status==="fulfilled"));await f.boundary()
+    assert.equal(f.permissionUpdates(),1);assert.equal(f.wakes(),1)
+  }finally{await f.adapter.close()}
+})
+
+test("closing during initial current-authority read cannot send the original prompt or open permissions",async()=>{
+  const f=await fixture()
+  try{
+    const held=f.blockFrame(),delivery=f.adapter.deliver(f.subject,id(3))
+    await held.entered;await f.adapter.close();held.release()
+    await assert.rejects(delivery)
+    assert.equal(f.wakes(),0);assert.equal(f.permissionUpdates(),0)
+  }finally{await f.adapter.close()}
 })

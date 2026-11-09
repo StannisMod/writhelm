@@ -64,9 +64,10 @@ export class NativeInitialAdapter {
   private applies(sessionID:string){return this.managed(sessionID)&&!this.connected(sessionID)}
   private async frame(gate:Gate){
     const e=gate.envelope
+    if(this.closed||this.gates.get(e.nativeSessionId)!==gate)nativeUnavailable()
     const frame=await this.registry.initialContext(this.controllerSessionID,{assignmentId:e.assignmentId,executionGeneration:e.executionGeneration,
       bindingJSON:contextJSON(e.binding)},e.intentId)
-    if(frame.envelopeJSON!==gate.original.raw||frame.envelopeDigest!==gate.original.digest||frame.packetJSON!==gate.original.packet||
+    if(this.closed||this.gates.get(e.nativeSessionId)!==gate||frame.envelopeJSON!==gate.original.raw||frame.envelopeDigest!==gate.original.digest||frame.packetJSON!==gate.original.packet||
       !same(parse(frame.profileJSON),parse(gate.original.profileJSON)))nativeUnavailable()
     return frame
   }
@@ -137,6 +138,7 @@ export class NativeInitialAdapter {
   async prepare(subject:NativeSubject,intentId:string){
     if(this.closed||!uuidPattern.test(intentId)||subject.executionGeneration!=="0")nativeUnavailable()
     const frame=await this.registry.initialContext(this.controllerSessionID,subject,intentId)
+    if(this.closed)nativeUnavailable()
     if(typeof frame.envelopeJSON!=="string"||hash(frame.envelopeJSON)!==frame.envelopeDigest)nativeUnavailable()
     const e=parse(frame.envelopeJSON)
     if(e.kind!=="initial-start"||e.intentId!==intentId||e.assignmentId!==subject.assignmentId||e.executionGeneration!==subject.executionGeneration||
@@ -189,6 +191,7 @@ export class NativeInitialAdapter {
     if(previous!==undefined){if(previous!==dispatch)nativeUnavailable();return this.witness(intentId)}
     if(!(await this.frame(gate)).dispatch)nativeUnavailable()
     if(!await this.custody.retain("initial-dispatch",intentId,dispatch))return this.witness(intentId)
+    if(!(await this.frame(gate)).dispatch||this.closed||this.gates.get(e.nativeSessionId)!==gate||!gate.closed)nativeUnavailable()
     try{
       const output=await this.ctx.session.prompt({sessionID:e.nativeSessionId,id:e.messageId,text:e.text,metadata:e.metadata,delivery:"queue",resume:true})
       if(!this.matches(output,gate,true))throw new Error("conflicting original initial prompt reply")
@@ -237,7 +240,9 @@ export class NativeInitialAdapter {
   }
   async admitTool(sessionID:string){
     const gate=this.gates.get(sessionID)
-    if(!gate||this.closed||gate.closed||!await this.packet(gate)||!(await this.frame(gate)).active)nativeUnavailable()
+    if(!gate||this.closed||gate.closed)nativeUnavailable()
+    const complete=await this.packet(gate),frame=await this.frame(gate)
+    if(this.gates.get(sessionID)!==gate||this.closed||gate.closed||!complete||!frame.active)nativeUnavailable()
   }
   async awaitBoundary(sessionID:string,signal:AbortSignal){
     const gate=this.gates.get(sessionID);if(!gate||this.closed||signal.aborted)nativeUnavailable()
@@ -268,14 +273,36 @@ export class NativeInitialAdapter {
   }
   async release(sessionID:string){
     const gate=this.gates.get(sessionID);if(!gate||this.closed)nativeUnavailable()
+    gate.closed=true // invalidates in-flight admissions while original permission release reconciles
     const frame=await this.frame(gate)
     const witness=await this.witness(gate.envelope.intentId)
     if(!frame.active||!await this.packet(gate)||!witness?.heldJSON)nativeUnavailable()
     const {permissions}=this.model(gate),a=parse(frame.assignmentJSON).payload
     permissions.push({action:"external_directory",resource:"*",effect:"deny"},{action:"subagent",resource:"*",effect:"deny"})
     if(a.intendedExecution.template==="reviewer-v1")for(const action of ["edit","shell","execute"])permissions.push({action,resource:"*",effect:"deny"})
-    await this.ctx.session.update({sessionID,permissions})
-    if(!(await this.frame(gate)).active)nativeUnavailable()
+    const expected=contextJSON({formatVersion:1,sessionID,digest:gate.original.digest,permissionsJSON:contextJSON(permissions)})
+    const previous=await this.custody.read("initial-release",gate.envelope.intentId)
+    if(previous!==undefined&&previous!==expected)nativeUnavailable()
+    const info=await this.native.session.get({sessionID})
+    if(info.id!==sessionID)nativeUnavailable()
+    if(!same(info.permissions,permissions)){
+      // Only a FIRST original transition from the exact passive deny surface may write. A later
+      // deny/ask change can be an owner restriction; never erase it just because canonical ACTIVE
+      // still permits work. Unknown/lost outcomes reconcile the target, not another update.
+      if(previous!==undefined||!same(info.permissions,[{action:"*",resource:"*",effect:"deny"}]))nativeUnavailable()
+      if(!await this.custody.retain("initial-release",gate.envelope.intentId,expected))nativeUnavailable()
+      if(!(await this.frame(gate)).active)nativeUnavailable()
+      const before=await this.native.session.get({sessionID})
+      if(this.closed||this.gates.get(sessionID)!==gate||before.id!==sessionID||!same(before.permissions,info.permissions))nativeUnavailable()
+      await this.ctx.session.update({sessionID,permissions})
+    }else if(previous===undefined){
+      // Upgrade/reconciliation of an already exact native target grants no new permission and
+      // does not post an update. Retain its original selector for future changed-target detection.
+      await this.custody.retain("initial-release",gate.envelope.intentId,expected)
+    }
+    const actual=await this.native.session.get({sessionID})
+    if(actual.id!==sessionID||!same(actual.permissions,permissions))nativeUnavailable()
+    if(!(await this.frame(gate)).active||this.closed||this.gates.get(sessionID)!==gate)nativeUnavailable()
     gate.closed=false;gate.resolve()
   }
   async close(){this.closed=true;for(const gate of this.gates.values()){
