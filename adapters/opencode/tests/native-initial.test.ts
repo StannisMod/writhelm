@@ -25,7 +25,7 @@ async function fixture(){
   const profile={family:"profiles",key:{projectId:id(1),profileId:id(6),revision:0},payload:{platform:"linux",qualification:"qualified",model:{providerId:"MOCK",modelId:"no-call",variant:null},
     outputReserveTokens:512,effort:"bounded",route:"no-call",permissions:[{tool:"read",action:"allow",scope:"workspace"}]}}
   let active=false,dispatch=true,wakes=0,lost=false,suppressBoundary=false,epoch="b".repeat(64),permissions:any[]=[{action:"*",resource:"*",effect:"deny"}],boundary:Promise<void>|undefined
-  let permissionUpdates=0,losePermissionReply=false,failPermissionBefore=false,blockedFrame:Promise<void>|undefined,frameEntered:()=>void=()=>{}
+  let permissionUpdates=0,losePermissionReply=false,failPermissionBefore=false,policyReady=true,blockedFrame:Promise<void>|undefined,frameEntered:()=>void=()=>{}
   const event=()=>({sessionID:envelope.nativeSessionId,model:{providerID:"MOCK",id:"no-call"},system:[],options:{inherited:"must disappear"},tools:{read:{},shell:{}}})
   const hook=(domain:string)=>(name:string,callback:(e:any)=>Promise<void>)=>{hooks.set(domain+":"+name,callback);return Promise.resolve({dispose:async()=>{hooks.delete(domain+":"+name)}})}
   const ctx={app:{version:"2.2.5"},session:{hook:hook("session"),instructions:{entry:{list:async()=>instructions,put:async({key,value}:any)=>{instructions.push({key,value})}}},
@@ -53,9 +53,11 @@ async function fixture(){
   const deployment=new LinuxNativeCustody(path.join(root,"deployment"),[work]);await deployment.initialize()
   await deployment.retain("execution-profile",contextJSON(profile.key),contextJSON({formatVersion:1,profileKeyJSON:contextJSON(profile.key),model:{providerID:"MOCK",id:"no-call"},
     baseURL:null,routeID:"no-call",effortOptionKey:"effort",nativeOptions:{effort:"bounded",maxTokens:64}}))
-  const adapter=new NativeInitialAdapter(ctx,native,registry,custody,deployment,"ses_controller");await adapter.register()
+  const checkPolicy=async()=>{if(!policyReady)throw Error("MOCK effective context policy changed")}
+  const create=()=>new NativeInitialAdapter(ctx,native,registry,custody,deployment,"ses_controller",()=>false,undefined,checkPolicy)
+  const adapter=create();await adapter.register()
   return {adapter,hooks,envelope,root,event,subject:{assignmentId:id(2),executionGeneration:"0",bindingJSON:contextJSON(binding)},
-    restart:()=>new NativeInitialAdapter(ctx,native,registry,custody,deployment,"ses_controller"),changeEpoch:()=>{epoch="c".repeat(64)},
+    restart:create,changeEpoch:()=>{epoch="c".repeat(64)},revokePolicy:()=>{policyReady=false},
     restrict:()=>{permissions=[...permissions,{action:"read",resource:"private.txt",effect:"deny"}]},denyAll:()=>{permissions=[{action:"*",resource:"*",effect:"deny"}]},
     permissionUpdates:()=>permissionUpdates,losePermissionReply:()=>{losePermissionReply=true},failPermissionBefore:()=>{failPermissionBefore=true},
     blockFrame:()=>{
@@ -206,4 +208,20 @@ test("closing during initial current-authority read cannot send the original pro
     await assert.rejects(delivery)
     assert.equal(f.wakes(),0);assert.equal(f.permissionUpdates(),0)
   }finally{await f.adapter.close()}
+})
+
+test("effective-policy loss blocks both the initial prompt and an already ACTIVE model boundary",async()=>{
+  const fresh=await fixture()
+  try{
+    fresh.revokePolicy();await assert.rejects(fresh.adapter.deliver(fresh.subject,id(3)))
+    assert.equal(fresh.wakes(),0);assert.equal(fresh.permissionUpdates(),0)
+  }finally{await fresh.adapter.close()}
+  const active=await fixture()
+  try{
+    await active.adapter.deliver(active.subject,id(3));await active.adapter.awaitBoundary(active.envelope.nativeSessionId,new AbortController().signal)
+    active.active();await active.adapter.release(active.envelope.nativeSessionId);await active.boundary()
+    active.revokePolicy()
+    await assert.rejects(active.adapter.admitModel({sessionID:active.envelope.nativeSessionId,kind:"primary",model:{providerID:"MOCK",id:"no-call"},headers:{}} as never))
+    assert.equal(active.wakes(),1)
+  }finally{await active.adapter.close()}
 })

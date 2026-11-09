@@ -13,7 +13,7 @@ import { closedObject, nativeUnavailable } from "./native-runtime-client.js"
 const io=<A>(f:(signal:AbortSignal)=>Promise<A>)=>Effect.tryPromise({try:f,catch:error=>error instanceof Error?error:new Error("native task-context unavailable")})
 const parse=(raw:string)=>exactJSON(raw,nativeUnavailable)
 type Coordinator=NativeWorkerCompaction|NativeControllerCompaction
-type Route={runtime:RuntimeReference;coordinator:Coordinator;ready:boolean}
+type Route={runtime:RuntimeReference;coordinator:Coordinator;profileJSON:string;ready:boolean}
 export type NativeContextDispatchConfiguration=Readonly<{root:string;hostId:string;workRoot:string}>
 
 function extraction(raw:string,profileJSON:string):ContextExtractionProfile {
@@ -51,16 +51,23 @@ export function registerNativeContextDispatcher(ctx:Plugin.Context,config:Native
       if(closed||!current||current.hostId!==config.hostId||current.pid!==process.pid)nativeUnavailable()
       return current
     }
-    const authority=async(sessionID:string,unfinished=false)=>{
+    const authority=async(sessionID:string,unfinished=false,profileJSON?:string)=>{
       const current=runtime(),binding=await current.registry.inspect(sessionID)
       if(!binding||binding.hostId!==config.hostId||binding.workRoot!==config.workRoot)nativeUnavailable()
       const identity=await current.registry.sourceIdentity(sessionID)
       if(identity.scope!==binding.scope)nativeUnavailable()
       if(binding.scope==="controller"){
         if(sessionID!==current.controllerSessionID)nativeUnavailable()
+        if(profileJSON!==undefined){
+          const frame=await current.registry.controllerContext(sessionID,profileJSON)
+          if(frame.nativeReady!==true)nativeUnavailable()
+          await current.checkContextPolicy(sessionID,frame.profileRecordJSON)
+        }
       }else {
         const frame=await current.registry.workerContext(sessionID)
         if(frame.nativeReady!==true)nativeUnavailable()
+        if(profileJSON!==undefined&&contextJSON(parse(frame.profileRecordJSON).key)!==profileJSON)nativeUnavailable()
+        await current.checkContextPolicy(sessionID,frame.profileRecordJSON)
         if(unfinished||frame.finishedHandoff!==true)await current.admitTool(sessionID)
       }
       if(runtime()!==current)nativeUnavailable()
@@ -72,23 +79,23 @@ export function registerNativeContextDispatcher(ctx:Plugin.Context,config:Native
       return entry
     }
     const admission:NativeContextAdmission=Object.freeze({
-      async compaction(event){await authority(event.sessionID)},
+      async compaction(event){await authority(event.sessionID,false,routes.get(event.sessionID)?.profileJSON)},
       async generate(event){
         const entry=route(event.sessionID);entry.coordinator.assertGenerate(event)
-        await authority(event.sessionID,true)
+        await authority(event.sessionID,true,entry.profileJSON)
         if(route(event.sessionID)!==entry)nativeUnavailable()
         entry.coordinator.assertGenerate(event)
       },
       async request(event){
         const entry=route(event.sessionID);entry.coordinator.assertRequest(event)
-        await authority(event.sessionID,true)
+        await authority(event.sessionID,true,entry.profileJSON)
         if(route(event.sessionID)!==entry)nativeUnavailable()
         entry.coordinator.assertRequest(event)
       }
     })
     const ensure=(sessionID:string):Effect.Effect<Route,unknown>=>Effect.gen(function*(){
-      const current=yield* io(()=>authority(sessionID))
       const previous=routes.get(sessionID)
+      const current=yield* io(()=>authority(sessionID,false,previous?.profileJSON))
       if(previous){if(!previous.ready||previous.runtime!==current)nativeUnavailable();return previous}
       if(routes.size>=256)nativeUnavailable()
       const binding=yield* io(()=>current.registry.inspect(sessionID));if(!binding)nativeUnavailable()
@@ -107,14 +114,14 @@ export function registerNativeContextDispatcher(ctx:Plugin.Context,config:Native
       if(raw===undefined)throw new Error("qualified extraction deployment unavailable")
       const profile=extraction(raw,profileJSON)
       // Recheck after asynchronous profile reads, before publishing a route or registering hooks.
-      yield* io(()=>authority(sessionID))
+      yield* io(()=>authority(sessionID,false,profileJSON))
       const concurrent=routes.get(sessionID)
       if(concurrent){if(!concurrent.ready||concurrent.runtime!==current)nativeUnavailable();return concurrent}
       const includes=(id:string)=>!closed&&id===sessionID&&lookup()===current
       const coordinator:Coordinator=binding.scope==="controller"?
         new NativeControllerCompaction(ctx,current.registry,current.sources,current.custody,profile,governingTaskJSON!,includes):
         new NativeWorkerCompaction(ctx,current.registry,current.sources,current.custody,profile,includes)
-      const entry:Route={runtime:current,coordinator,ready:false};routes.set(sessionID,entry)
+      const entry:Route={runtime:current,coordinator,profileJSON,ready:false};routes.set(sessionID,entry)
       yield* coordinator.register(false).pipe(Effect.provideService(Scope.Scope,scope))
       if(runtime()!==current)nativeUnavailable()
       entry.ready=true

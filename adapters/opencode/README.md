@@ -140,6 +140,21 @@ authorize a request. Different per-session profiles do not reject each other's c
 Actual module sharing, hook order, native cancellation/accounting and installed replacement/reopen
 behavior remain qualification gates; source composition and model-free fixtures do not prove them.
 
+Production composition also requires a protected `native-context-policy/<exact profile-key JSON>`
+record: `{formatVersion:1,profileKeyJSON,policyId,nativeProfileId,auto:true,background:false,
+keepTokens,bufferTokens}`. The IDs must match the current canonical profile; positive integer-token
+keep/buffer must fit its declared context. Authenticated native `config.get` reads the exact current
+location. Every explicit normalized document layer must agree on auto/keep/buffer and foreground
+mode; missing settings, conflicting overrides, percentages and background extraction refuse. The
+adapter never writes config or exposes raw config/provider fields. Initial/context/model admission,
+task-context dispatch and the explicit context-plugin builder use this read-only guard.
+
+Matching config is not qualification or an actual request-accounting/threshold proof. Canonical
+nativeReady/current rights and source/writer/profile evidence remain independently required. The
+conservative layer rule may refuse an otherwise valid overriding configuration; it never guesses
+how to repair it or modifies user-wide settings. Historical source-pin/N-case and installed-profile
+gates remain held; static observation of current distribution bytes is not their recovered evidence.
+
 - `src/gui.ts`: native session panel, command and exact nonsecret link handler.
 - `src/main.ts`: native main-process Ipc provider and file choosers; no model tool or server RPC.
 - `src/controller.ts`: exact view/answer/current-session binding and retained original retries.

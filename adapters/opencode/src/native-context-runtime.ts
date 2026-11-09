@@ -13,6 +13,7 @@ import { NativeWorkerCompaction } from "./native-worker-compaction.js"
 import { NativeControllerCompaction } from "./native-controller-compaction.js"
 import { NativeWorkerRestoration } from "./native-worker-restoration.js"
 import { NativeControllerRestoration } from "./native-controller-restoration.js"
+import { NativeContextPolicy } from "./native-context-policy.js"
 
 export type NativeContextConfiguration = Readonly<{
   root: string; nativeOrigin: string; serviceOrigin: string; serviceProof: Uint8Array
@@ -55,11 +56,22 @@ export function registerNativeTaskContext(ctx: Plugin.Context, native: OpenCodeC
       if (!bound || bound.scope !== "assignment") return yield* Effect.fail(new Error("assignment binding unavailable"))
     }
     const sources = new NativeContextSources(registry,custody)
-    yield* ctx.session.hook("compaction",event => Effect.sync(() => {
-      const kind=registry.scopeKind(event.sessionID)
+    const deployment=new LinuxNativeCustody(path.join(config.root,"bootstrap"),forbidden)
+    yield* io(()=>deployment.initialize())
+    const policy=new NativeContextPolicy(native,deployment)
+    const checkPolicy=(sessionID:string)=>io(async()=>{
+      const kind=registry.scopeKind(sessionID)
       if (kind === "assignment" && !config.workerProfile || kind === "controller" && !config.controllerProfile)
         throw new Error("managed context profile unavailable; generic compaction forbidden")
-    }))
+      if(!kind)return
+      const binding=await registry.inspect(sessionID);if(!binding)nativeUnavailable()
+      const frame=kind==="assignment"?await registry.workerContext(sessionID):
+        await registry.controllerContext(sessionID,config.controllerProfile!.extraction.profileJSON)
+      if(frame.nativeReady!==true)nativeUnavailable()
+      await policy.check(sessionID,binding.workRoot,frame.profileRecordJSON)
+    })
+    yield* ctx.session.hook("compaction",event=>checkPolicy(event.sessionID).pipe(Effect.orDie))
+    yield* ctx.session.hook("model.request",event=>event.kind==="generate"?checkPolicy(event.sessionID).pipe(Effect.orDie):Effect.void)
     if (config.workerProfile) yield* new NativeWorkerCompaction(ctx,registry,sources,custody,config.workerProfile).register()
     if (config.controllerProfile) yield* new NativeControllerCompaction(ctx,registry,sources,custody,
       config.controllerProfile.extraction,config.controllerProfile.governingTaskJSON).register()

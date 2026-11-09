@@ -452,3 +452,7 @@
 !/adapters/opencode/src/native-context-reference.ts
 !/adapters/opencode/src/native-context-dispatch.ts
 !/adapters/opencode/src/context-server.ts
+
+# P23: read-only native foreground-policy guard — local source checkpoint only
+!/adapters/opencode/src/native-context-policy.ts
+!/adapters/opencode/tests/native-context-policy.test.ts

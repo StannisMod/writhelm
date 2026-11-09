@@ -87,7 +87,7 @@ test("dispatcher references close with Scope; missing/replaced runtime and uncor
   const registry={scopeKind:()=>"assignment",inspect:async()=>({scope:"assignment",hostId:config.hostId,workRoot:config.workRoot}),
     sourceIdentity:async()=>{if(!readable)throw Error("MOCK READ withdrawn");return {scope:"assignment"}},
     workerContext:async()=>({nativeReady:true,finishedHandoff:finished,checkpointReferenceJSON:'{"id":"MOCK-cp"}'})}
-  const runtime={hostId:config.hostId,pid:process.pid,registry,admitTool:async()=>{},deployment:{read:async()=>undefined}} as unknown as RuntimeReference
+  const runtime={hostId:config.hostId,pid:process.pid,registry,admitTool:async()=>{},checkContextPolicy:async()=>{},deployment:{read:async()=>undefined}} as unknown as RuntimeReference
   assert.throws(()=>nativeContextAdmission(config.root,config.hostId,config.workRoot))
   let retained:ReturnType<typeof nativeContextAdmission>|undefined
   await Effect.runPromise(Effect.scoped(Effect.gen(function*(){

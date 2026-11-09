@@ -110,6 +110,7 @@ if(config.profileJSON)await deployment.retain("execution-profile",config.profile
 if(config.governingTaskJSON)await deployment.retain("controller-context","current",contextJSON({formatVersion:1,profileKeyJSON:config.profileJSON,
   governingTaskJSON:config.governingTaskJSON}))
 const runtime={hostId:config.hostId,pid:process.pid,registry,sources,custody,deployment,controllerSessionID:config.controllerSessionID,
+  checkContextPolicy:async()=>{}, // Explicit MOCK profile qualification; not an effective native config probe.
   admitTool:(id:string)=>adapter.admitTool(id)} as unknown as RuntimeReference
 const dispatchConfig={root:config.root,hostId:config.hostId,workRoot:config.workRoot}
 function scopedHooks(){

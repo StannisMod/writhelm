@@ -26,7 +26,8 @@ export class NativeInitialAdapter {
   constructor(private readonly ctx:Plugin.Context,private readonly native:Native,private readonly registry:NativeCredentialRegistry,
     private readonly custody:LinuxNativeCustody,private readonly deployment:LinuxNativeCustody,private readonly controllerSessionID:string,
     private readonly connected:(sessionID:string)=>boolean=()=>false,
-    private readonly auxiliary?:(event:SessionModelRequest)=>Promise<void>){}
+    private readonly auxiliary?:(event:SessionModelRequest)=>Promise<void>,
+    private readonly contextPolicy?:(sessionID:string,profileRecordJSON:string)=>Promise<void>){}
   managed(sessionID:string){return this.gates.has(sessionID)}
   /** Same-incarnation plugin reload only. Rebuild closed local gates from protected ORIGINAL
    * records, then re-enter the existing canonical ACTIVE release protocol. Never dispatch a prompt
@@ -164,6 +165,7 @@ export class NativeInitialAdapter {
       gate={original,envelope:e,closed:true,wait,resolve,reject,held,heldResolve,heldReject};this.gates.set(e.nativeSessionId,gate)
     }
     const profile=this.model(gate)
+    await this.contextPolicy?.(e.nativeSessionId,gate.original.profileJSON)
     const info=await this.native.session.get({sessionID:e.nativeSessionId})
     if(info.id!==e.nativeSessionId||info.parentID||info.fork||info.revert||info.location.directory!==receiver.workRoot||!same(info.model,profile.selected))nativeUnavailable()
     if(retained===undefined){
@@ -217,6 +219,7 @@ export class NativeInitialAdapter {
   async configure(event:SessionContext){
     const sessionID=event.sessionID,gate=this.gates.get(sessionID);if(!gate||this.closed)nativeUnavailable()
     const {selected,options}=this.model(gate)
+    await this.contextPolicy?.(sessionID,gate.original.profileJSON)
       if(!same(event.model,selected))nativeUnavailable()
       for(const key of Object.keys(event.options))delete event.options[key]
       Object.assign(event.options,options)
@@ -236,6 +239,7 @@ export class NativeInitialAdapter {
     }
     const {d,selected}=this.model(gate)
     if(event.kind!=="primary"||!same(event.model,selected)||(event.baseURL??null)!==d.baseURL)nativeUnavailable()
+    await this.contextPolicy?.(event.sessionID,gate.original.profileJSON)
     await this.admitTool(event.sessionID)
   }
   async admitTool(sessionID:string){

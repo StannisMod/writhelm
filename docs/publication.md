@@ -538,3 +538,16 @@ No private task/evidence/session/stand material, generated output, credentials, 
 or binary is admitted. This source checkpoint does not establish installed module sharing/hook
 ordering, request cancellation/accounting, source/writer safety, abnormal recovery, Windows/macOS
 qualification or full H1 operation. No push, live model call or stand restart is authorized here.
+
+## Read-only native policy guard scope P23 — local source checkpoint
+
+Admit the two exact P23 exceptions in `.gitignore` and accompanying changes to admitted adapter
+sources/tests/README and this publication/ignore record under the owner's continued implementation
+instruction. Newly authored AGPL-3.0-only code conservatively checks normalized OpenCode config
+DTOs against a protected selected foreground policy. Tests use synthetic normalized config/client
+fixtures. No external implementation, distribution bytes or source-review archive is imported.
+
+Private static distribution observations, tasks/reports, session material, actual configuration,
+credentials, artifacts/logs and compiled output remain excluded. This checker only adds refusal:
+it does not create nativeReady, profile qualification, source/writer safety, request-budget proof,
+historical N-case acceptance or installed-host evidence. No live/model call, stand restart or push.
