@@ -1,7 +1,7 @@
 # Cooperative worktree execution and immutable review
 
-Contract K-EXECUTION, revision 2. Status: owner approved the disclosed worktree/cooperative-profile,
-read-only review and separate integration scope in the practical-control amendment table. No role/
+Contract K-EXECUTION, revision 3. Status: owner approved the disclosed worktree/cooperative-profile,
+read-only review, separate integration and deterministic non-LLM correction scope. No role/
 runtime/isolation implementation or qualification claimed. Governing [K-HARNESS](agent-workflow.md),
 [K-TASK](task-contract.md), [K-DISPATCH](dispatch.md), [K-CONTEXT](context-continuity.md).
 
@@ -64,6 +64,23 @@ and diff review; do not label E-COOP-1 a proven OS sandbox. No silent Linux-only
 mechanism claim. Cheap/model-free checks first, live/expensive qualification separately authorized.
 Stronger-profile requirements apply before advertising that stronger profile.
 
+## EX-08 — Mechanical application is not another coding agent
+
+An authorized deterministic patch applicator may operate only within the remediation task's exact
+base and exclusive work area. The service authorizes and records the operation; the native adapter
+performs bounded project effects, not arbitrary raw-store edits by the service or primary. No fuzzy
+matching, autonomous conflict resolution, accompanying improvements or interpretation of patch text
+as executable commands. A mismatch refuses without guessing or destroying unrelated/user work.
+
+Mechanical checks use the task's permitted execution/verification profile, not arbitrary commands
+embedded in patch data. Actual resulting bytes/check outcomes form a new result. Original-effect
+identity and uncertain native outcomes must be retained/reconciled before any permitted retry; no
+cross-system atomicity, automatic rollback or exactly-once execution claim is inferred.
+
+The applicator is not an LLM, semantic reviewer or independent verifier. It cannot alter assessed
+immutable inputs, grant scope, accept the result, integrate into another target or publish merely
+because patch application succeeded. Existing per-platform/profile and physical-effect gates apply.
+
 ## Approval provenance/readiness
 
 On 2026-11-05 owner challenged predicted file-edit allowlists; planner proposed exclusive worktrees
@@ -73,3 +90,7 @@ profile. This approves the disclosed scope, not unshown earlier-draft details or
 owner keys in worker inputs. Pin actual roles/tools/credentials/runtime/result capture/recovery and
 integration before implementation. No live install/model call/capability migration/source publication/
 commit/push authorization follows from this record.
+
+Revision 3 records the subsequent owner-approved non-LLM correction route described in TASK-08.
+It preserves E-COOP-1's stated assurance and does not qualify a new native process/filesystem adapter
+or supply missing protocol, authorship, permission or recovery formats.

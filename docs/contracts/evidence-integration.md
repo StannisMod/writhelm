@@ -1,6 +1,6 @@
 # Proportionate verification, exact acceptance and integration
 
-Contract K-EVIDENCE, revision 3. Status: seven disclosed decisions, connected-work mechanical evidence handling and explicit contract-to-test
+Contract K-EVIDENCE, revision 4. Status: seven disclosed decisions, connected-work mechanical evidence handling, deterministic correction attribution and explicit contract-to-test
 traceability approved by owner; no verification/runtime implementation claimed. Governing
 [K-HARNESS](agent-workflow.md), [K-TASK](task-contract.md), [K-DISPATCH](dispatch.md),
 [K-CONTEXT](context-continuity.md), [K-RETRO](retrospective.md), [K-EXECUTION](execution.md).
@@ -92,6 +92,23 @@ condition is resolved. The engine uses that attributed confirmation and required
 coordination; it neither infers truth from a success field nor requires a fresh planner relay for each
 eligible continuation. Apply TASK/DP/CT connected-work rules and their H1 qualification scenario.
 
+## EV-09 — Attribute correction reasoning, not just physical writes
+
+For the TASK-08 route, the planner or other contributor who determines a corrective patch is an
+author of the resulting changes. A deterministic applicator's different identity does not erase
+that authorship or make its patch author an independent reviewer. Preserve the original result,
+diagnosis/requirement link, exact patch/base, actual application/check outcomes and new result.
+
+Required independent assessment excludes patch authors and original producers as applicable;
+renaming a role/session or delegating only the physical write is not independence. A reviewer who
+authors a substantive correction cannot certify the changed result as that result's independent
+reviewer. The assessed snapshot remains immutable; authorized changes belong to a new result/task.
+
+Retain justified unaffected evidence and target changed significant inputs under EV-03/04. No
+automatic full re-review per small patch, inherited pass, waived required check or recursive
+review-of-reviews ritual follows. Mechanical application/test success is evidence of those actual
+operations only, not semantic conformance, acceptance, integration or restored independence.
+
 ## Approval provenance/readiness
 
 On 2026-11-05 owner requested proportionality corrections to draft1, then explicitly asked about
@@ -106,3 +123,8 @@ implementation. E-COOP-1 is not a hardened OS profile; stronger claims need sepa
 Revision 3 records owner approval with “Согласовано” of engine-collected mechanical evidence and
 connected-work resolution/continuation. No automatic semantic-impact proof, verification waiver,
 implemented automation or new publication/live-call permission follows.
+
+Revision 4 records the subsequent owner-approved determined-correction flow with a non-LLM
+applicator and explicit patch-author exclusion from independent review. Attribution schemas and
+enforcement still require scoped design/implementation; no existing single-producer field is
+silently relabeled as complete contributor tracking or independent acceptance.

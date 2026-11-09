@@ -1,8 +1,8 @@
 # Canonical tasks, exact results and authorized acceptance
 
-Contract K-TASK, revision 3. Status: original decisions, practical-control and connected-work coordination amendments approved, including explicit
+Contract K-TASK, revision 4. Status: original decisions, practical-control, connected-work coordination and deterministic correction amendments approved, including explicit
 state-changing planner acceptance of an exact result. No task API implementation/pilot is claimed.
-Governing scope: [K-HARNESS revision 3](agent-workflow.md), accepted D9/D10/D11/D12/D15 and
+Governing scope: [K-HARNESS revision 4](agent-workflow.md), accepted D9/D10/D11/D12/D15 and
 WH-09/10/17/19. Existing snapshot/withdrawal/authority laws remain binding.
 
 ## TASK-01 — Stable identity, immutable revisions
@@ -106,6 +106,29 @@ already happened; changed integrated bytes need appropriate verification. D12 pe
 conforming acceptance/integration; owner still decides design changes/exceptions/agreed checkpoints.
 Remediation is a separate task/new result, not reviewer code editing or R2 inheriting R1 checks.
 
+## TASK-08 — Determined corrections need no second model reasoning pass
+
+When diagnosis already determines an exact correction, an authorized planner may submit the patch
+and its requirement-linked rationale as attributed inputs to a separate bounded remediation task.
+Canonical readiness, exact base/result, rights, scope and work-area/resource claims remain required.
+This is not an unrestricted primary editing role or an exception to required design approval.
+
+Application is a deterministic non-LLM operation through the authorized native adapter, not a second
+agent that rereads/rederives the solution. No model session, fresh inference or automatic model
+fallback is created for application. Base mismatch, conflict or unknown outcome returns facts/holds;
+it does not guess a repair, silently retarget the patch or retry with a fresh effect identity.
+
+The operation produces a new exact result and actual outcomes of the task's selected mechanical
+checks. Patch authorship includes the planner or other contributor who determined the changes,
+not just the process/principal that wrote them. Required independent assessment excludes all such
+authors and the original producer as applicable. Review/check applicability follows EV-03/04; neither
+R1's pass nor a mechanical application's success certifies R2. Existing acceptance/integration and
+self-approval restrictions remain unchanged. New reasoning, if needed, is a separately scoped task.
+
+Exact attribution/operation formats, authority and native recovery boundaries must be designed and
+checked before exposing an operational apply tool. Approval of this route does not silently extend
+the existing work wire schema or grant a patch runner model/owner/canonical-store credentials.
+
 ## Derived obligations and readiness
 
 Refuse incomplete executable contracts, unapproved implementation scope, denied/withdrawn/conflicting
@@ -131,3 +154,9 @@ nonrecursive review of reports. Existing exact-result acceptance/authority and b
 Revision 3 records owner approval with “Согласовано” of connected-work coordination: dependencies
 as continuation conditions, engine-mediated unblock/continuation, minimal notifications and explicit
 agreement-change boundaries. This approves requirements, not implemented synchronization or new rights.
+
+Revision 4 records the owner's subsequent “ок” approval of the disclosed determined-correction route:
+planner supplies an exact attributed patch; a deterministic non-LLM adapter applies it to the exact
+authorized base and runs selected checks; a non-author reviewer assesses the new result. This is a
+manual design decision, not a fabricated service approval, new wire format, implemented tool,
+passing operational test, live-model permission, stand restart or public-push authorization.

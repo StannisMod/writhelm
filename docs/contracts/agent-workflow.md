@@ -1,6 +1,6 @@
 # H1 — governed agent workflow inside OpenCode
 
-Contract K-HARNESS, revision 3. Status: H1 boundary, practical-control and connected-work coordination amendments approved,
+Contract K-HARNESS, revision 4. Status: H1 boundary, practical-control, connected-work coordination and deterministic correction amendments approved,
 including initial cooperative execution. Component implementation/qualification still required. First user-pilot
 target, not a claim of implemented orchestration or acceptance of the whole draft specification.
 
@@ -91,6 +91,12 @@ Fresh-context non-author reviewer assesses an immutable result with separate wri
 reviewer cannot edit assessed code/tests. Findings require concrete requirement-linked scenarios.
 Remediation is a separate task and new exact result, not a review-side fix or producer self-approval.
 
+The primary may propose an exact corrective patch as an attributed artifact when the correction is
+already determined. Applying it is a separately authorized deterministic operation, not another LLM
+assignment or a grant of unrestricted editing to the primary. The primary is an author of those
+changes even if a mechanical adapter writes the files. No patch author, original producer or merely
+renamed role/session may independently verify the resulting changes. See TASK-08, EX-08 and EV-09.
+
 ## H1-07 — Routine acceptance and integration
 
 Planner may accept routine conforming results within approved task/design scope under D12, after
@@ -150,7 +156,7 @@ unknown-outcome recovery. E-COOP-1 replaces mandatory strong OS containment as t
 claim; stronger profiles remain targets. No waived findings, authority/byte laws, evidence
 applicability, platform target or live-call authorization. K-RETRO revision 1 remains unchanged.
 
-Approved execution scope is [K-EXECUTION revision 2](execution.md). E-COOP-1 states actual worktree/
+Approved execution scope is [K-EXECUTION revision 3](execution.md). E-COOP-1 states actual worktree/
 native-permission/review assurances without hostile-shell OS containment claims. Evidence/integration
 and concrete roles/formats/runtime mechanisms remain readiness work.
 
