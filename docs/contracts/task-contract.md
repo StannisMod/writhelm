@@ -1,8 +1,8 @@
 # Canonical tasks, exact results and authorized acceptance
 
-Contract K-TASK, revision 4. Status: original decisions, practical-control, connected-work coordination and deterministic correction amendments approved, including explicit
+Contract K-TASK, revision 5. Status: original decisions, practical-control, connected-work coordination, deterministic correction and grouped delivery amendments approved, including explicit
 state-changing planner acceptance of an exact result. No task API implementation/pilot is claimed.
-Governing scope: [K-HARNESS revision 4](agent-workflow.md), accepted D9/D10/D11/D12/D15 and
+Governing scope: [K-HARNESS revision 5](agent-workflow.md), accepted D9/D10/D11/D12/D15 and
 WH-09/10/17/19. Existing snapshot/withdrawal/authority laws remain binding.
 
 ## TASK-01 — Stable identity, immutable revisions
@@ -129,6 +129,28 @@ Exact attribution/operation formats, authority and native recovery boundaries mu
 checked before exposing an operational apply tool. Approval of this route does not silently extend
 the existing work wire schema or grant a patch runner model/owner/canonical-store credentials.
 
+## TASK-09 — Candidate commits, grouped independent acceptance gate
+
+The default local loop is planner -> bounded executor -> planner bearing-point control -> any
+determined attributed patch -> deterministic application and targeted mechanical checks -> local
+commit-candidate. The planner's check does not become independent because it finds a defect; its
+patch authorship remains explicit. No new LLM reasoning/applying assignment or independent reviewer
+is required merely for each small known patch. Unsupported application remains explicit, not a
+pretend applying tool or unrestricted primary editing.
+
+Before execution identify the coherent bounded umbrella task/MR, related task/result subjects,
+applicable contract/check coverage and the independent gate before their acceptance/integration.
+Child work may be produced, checked and committed while that gate is pending. Consumer use follows
+the planned dependency readiness, not a false accepted/DONE label. The designated non-author reviewer
+assesses the whole exact MR diff against requirements; group membership alone supplies no evidence.
+
+Existing task-specific earlier independent gates cannot be postponed or removed by naming an MR.
+After review, retain justified unaffected evidence and check changed significant inputs/deltas;
+do not restart full review or recruit another reviewer solely because findings led to fixes. Any
+reassessment still binds the new exact subject under actual rights/freshness/assignment rules; the
+old subject is not silently rewritten. A reviewer who authored a correction is not independent for
+those changes. Local commit, canonical acceptance, target merge and publication remain distinct.
+
 ## Derived obligations and readiness
 
 Refuse incomplete executable contracts, unapproved implementation scope, denied/withdrawn/conflicting
@@ -166,3 +188,10 @@ kind that has no LLM profile/session and with explicit author attribution for in
 while preserving readability of existing data. Do not encode a mechanical operation as a fake model,
 native chat session or renamed human producer. Freeze the corresponding closed formats and their
 legacy/current-use behavior before integration; this approval is not an in-place history rewrite.
+
+Revision 5 records the owner's subsequent approval of the disclosed candidate-commit/umbrella-review
+pipeline: primary bearing-point control and attributed deterministic corrections with targeted
+checks, then grouped non-author MR review before acceptance/integration. The owner directed this as
+the default, not a new reviewer per patch. Grouping/readiness is planned before execution, and
+mandatory earlier gates are not silently deferred. This is not independent acceptance of existing
+candidate commits or a claim that mechanical application/store integration is operational.

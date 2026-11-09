@@ -80,6 +80,33 @@ test("ordinary broad primary prompt binds once, preserves owner input and cannot
   }finally{await f.governor.close()}
 })
 
+test("primary installs candidate-commit loop and planned umbrella review without adding a per-patch reviewer or write tool",async()=>{
+  const f=await fixture()
+  try{
+    await f.invoke("session:prompt",{sessionID:"ses_primary"})
+    const request={sessionID:"ses_primary",system:[] as Array<{type:string;text:string}>,tools:{read:{},question:{},shell:{},patch:{},subagent:{}}}
+    await f.invoke("session:context",request)
+    const policy=request.system.map(part=>part.text).join("\n")
+    for(const rule of [
+      "planner -> bounded executor -> planner bearing-point control",
+      "deterministic application and targeted tests -> local commit-candidate",
+      "diagnostic/author-side, not independent review",
+      "not independently verified, accepted, integrated or published",
+      "Do not launch a new LLM applicator or independent reviewer for each small known patch",
+      "Before execution, plan a bounded coherent umbrella task/MR",
+      "independent gate before acceptance/integration",
+      "whole exact selected MR diff against requirements",
+      "Do not postpone, remove or weaken any existing prescribed earlier independent gate",
+      "retain justified unaffected evidence",
+      "new exact subject under the actual assignment/freshness rules",
+    ])assert.ok(policy.includes(rule),rule)
+    assert.deepEqual(Object.keys(request.tools),["read","question"])
+    assert.equal(f.tools.has("writhelm_apply_patch"),false)
+    await assert.rejects(f.invoke("tool:execute.before",{sessionID:"ses_primary",tool:"patch"}))
+    await assert.rejects(f.invoke("tool:execute.before",{sessionID:"ses_primary",tool:"subagent"}))
+  }finally{await f.governor.close()}
+})
+
 test("native read retains owner/secret restrictions and primary cannot grant external-directory access",async()=>{
   const f=await fixture()
   try{

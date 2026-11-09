@@ -1,6 +1,6 @@
 # H1 — governed agent workflow inside OpenCode
 
-Contract K-HARNESS, revision 4. Status: H1 boundary, practical-control, connected-work coordination and deterministic correction amendments approved,
+Contract K-HARNESS, revision 5. Status: H1 boundary, practical-control, connected-work coordination, deterministic correction and grouped delivery amendments approved,
 including initial cooperative execution. Component implementation/qualification still required. First user-pilot
 target, not a claim of implemented orchestration or acceptance of the whole draft specification.
 
@@ -96,6 +96,15 @@ already determined. Applying it is a separately authorized deterministic operati
 assignment or a grant of unrestricted editing to the primary. The primary is an author of those
 changes even if a mechanical adapter writes the files. No patch author, original producer or merely
 renamed role/session may independently verify the resulting changes. See TASK-08, EX-08 and EV-09.
+
+Default delivery is bounded execution, planner control of bearing requirements/interfaces/invariants,
+any already-determined planner corrections applied mechanically, targeted checks and a local
+commit-candidate. Planner control is not independent review, and a commit is not verification,
+acceptance or integration. Do not create another LLM applicator or a new reviewer per small patch.
+Plan a coherent bounded MR/umbrella result set and its independent non-author whole-diff review
+before execution; that gate precedes acceptance/integration of the set. Existing prescribed earlier
+gates remain binding. Exact subjects, applicable evidence and author exclusion are not replaced by
+a group label. See EV-10 and TASK-09.
 
 ## H1-07 — Routine acceptance and integration
 

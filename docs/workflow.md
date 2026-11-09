@@ -1,7 +1,7 @@
 # Developing Writhelm with its own work contracts
 
-Revision: 1. Status: proposed procedure. The owner has directed specification/scenarios first and
-self-application of the intended process; the detailed procedure below awaits ratification.
+Revision: 2. Status: accepted decisions and delivery-loop section below; remaining detailed procedure
+is proposed. The owner directed specification/scenarios first and self-application of the process.
 
 ## Accepted decision D1 — Decision-sized approval waves
 
@@ -27,7 +27,29 @@ or review gates exist. Move records to the service later through an explicit ver
 not an untracked second source of truth. Private run logs/evidence remain outside the public tree;
 only separately approved public evidence summaries may be published.
 
-## Work sequence
+## Accepted default — local candidate loop, grouped independent review
+
+For new work, plan a bounded coherent umbrella task/MR, exact related result/contract coverage,
+consumer readiness and the independent acceptance/integration gate before execution. The default is:
+
+1. Planner gives a bounded execution contract to the executor.
+2. Planner checks bearing requirements, interfaces and invariants; this is diagnostic control, not
+   independent verification. If it authors a determined patch, preserve that authorship.
+3. Apply a determined patch mechanically without another LLM reasoning session; run relevant selected
+   checks. Do not pretend an unfinished applying tool exists or give the primary free editing rights.
+4. Commit the exact produced candidate locally. Pending independent review stays visible; commit
+   does not mean accepted, integrated or published. Intermediate consumers use only planned readiness.
+5. Review the complete exact related MR diff against requirements with a fresh-context non-author
+   reviewer before accepting/integrating that set. No compulsory new reviewer per small patch.
+6. After findings/fixes, retain applicable evidence and check affected deltas, not automatically the
+   whole pipeline again. Reassessment has an exact new subject; old reviews are not rewritten or
+   inherited. A reviewer who authors a correction is not independent for the changed bytes.
+
+Task-specific mandatory earlier gates still apply and cannot be silently moved to the umbrella.
+This section records the owner's explicit approval of that route; it does not ratify every proposed
+step below, certify existing candidates, authorize live inference/push or qualify an applying tool.
+
+## Proposed detailed work sequence
 
 1. **Task:** identify objective, exact inputs, scope, constraints, dependencies, acceptance,
    escalation and expected output. Give the task a stable ID and revision before execution.
@@ -44,6 +66,7 @@ only separately approved public evidence summaries may be published.
 6. **Evidence:** bind changes and checks to the original task/revision, knowledge snapshot and actual
    tree. Keep commands/outcomes/artifact references and unresolved limits. Do not call reports facts.
 7. **Verification:** independently reproduce consequential checks and inspect critical paths by risk.
+    Schedule independent review at the planned gate described above, not by default for each patch.
    A self-check is useful but must be labelled as such, not independent review. If no authorized
    independent review has occurred, leave that gate outstanding or request a scoped owner exception.
    Under accepted D11, use a separate review task/fresh context and a non-author reviewer; do not

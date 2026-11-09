@@ -56,6 +56,14 @@ compaction/restore and installed pilot gates still require their respective qual
 Unqualified execution stays held. No actual model request or working-profile install follows from
 building this package. A live stand must not be restarted implicitly to test the new entrypoint.
 
+The primary's default delivery policy is executor work -> planner bearing-point diagnostic control
+-> any determined attributed mechanical correction -> targeted checks -> local commit-candidate.
+Independent non-author review is planned for a bounded coherent umbrella/MR result set before its
+acceptance/integration, not automatically a new reviewer per small patch. Commit/produced state is
+not acceptance; grouping cannot waive existing earlier gates or establish coverage by a groupId.
+After findings/fixes, retain justified unaffected evidence and assess affected deltas under exact
+new-subject bindings. This policy does not enable the unfinished operational patch applicator.
+
 ### Reserved worker preparation and distinct initial start
 
 `writhelm_prepare_worker` is controller-only orchestration over the existing canonical reserve,

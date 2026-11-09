@@ -53,6 +53,35 @@ class WorkRemediationContractTest {
         assertEquals(key,(f.state.records.values.single { it.payload is WAcceptancesPayload }.payload as WAcceptancesPayload).value.verificationPlan)
         WorkState.restore(f.project,f.state.records.values,f.state.bodies.values)
     }
+    @Test fun `grouped candidate may be produced and retained but passing checks and a group tag cannot replace independent review`() {
+        val f=ReviewProbeFixture()
+        // The independent acceptance gate/group is selected BEFORE execution, not after a failure.
+        val root=f.plan.copy(gates=f.plan.gates.map { it.copy(independent=true,groupId=uid(780),reason="planned related MR review") })
+        f.state=WorkState.restore(f.project,f.state.records.values.filter { it.identity!=WorkRecordIdentity(WorkFamily.VERIFICATION_PLANS,f.planKey) }+
+            record(f.planKey,WVerificationPlansPayload(root)),f.state.bodies.values)
+        f.active();val evidence=f.evidence();val candidate=f.result(evidence=evidence)
+        assertEquals(candidate,f.state.reference(WorkFamily.RESULTS,candidate.identity.key))
+        assertTrue(f.state.records.keys.none { it.family==WorkFamily.ACCEPTANCES })
+        val attempt=acceptance(f,candidate,f.planKey,listOf(evidence),781)
+        val before=f.state
+        assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> { f.apply(attempt) }.problem)
+        assertSame(before,f.state)
+        WorkState.restore(f.project,f.state.records.values,f.state.bodies.values) // pending review is a valid produced state
+    }
+    @Test fun `grouping preserves an existing early independent gate instead of silently moving weakening or deferring it`() {
+        val f=ReviewProbeFixture()
+        for(stage in listOf("dispatch","acceptance","integration")) {
+            val required=f.plan.copy(gates=f.plan.gates.map { it.copy(independent=true,stage=stage) })
+            val grouped=required.copy(gates=required.gates.map { it.copy(groupId=uid(790),reason="same requirements in a related review group") })
+            assertTrue(verificationPlanPreserves(required,grouped),stage)
+            for(weakened in listOf(
+                grouped.copy(gates=grouped.gates.map { it.copy(stage="milestone") }),
+                grouped.copy(gates=grouped.gates.map { it.copy(independent=false) }),
+                grouped.copy(gates=grouped.gates.map { it.copy(deferred=true) }),
+                grouped.copy(gates=emptyList()),
+            ))assertFalse(verificationPlanPreserves(required,weakened),stage)
+        }
+    }
     private fun approvedCoreDecision(f: ReviewProbeFixture): KnowledgeReference {
         val owner=Actor(uid(750));val planner=Actor(f.actor.principalId)
         var core=ApprovalWorkflow.start(AccessPolicy(listOf(Grant(owner.principalId,f.project,Capability.entries.toSet()),

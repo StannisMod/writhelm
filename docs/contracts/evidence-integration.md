@@ -1,6 +1,6 @@
 # Proportionate verification, exact acceptance and integration
 
-Contract K-EVIDENCE, revision 4. Status: seven disclosed decisions, connected-work mechanical evidence handling, deterministic correction attribution and explicit contract-to-test
+Contract K-EVIDENCE, revision 5. Status: seven disclosed decisions, connected-work mechanical evidence handling, deterministic correction attribution, grouped delivery and explicit contract-to-test
 traceability approved by owner; no verification/runtime implementation claimed. Governing
 [K-HARNESS](agent-workflow.md), [K-TASK](task-contract.md), [K-DISPATCH](dispatch.md),
 [K-CONTEXT](context-continuity.md), [K-RETRO](retrospective.md), [K-EXECUTION](execution.md).
@@ -109,6 +109,28 @@ automatic full re-review per small patch, inherited pass, waived required check 
 review-of-reviews ritual follows. Mechanical application/test success is evidence of those actual
 operations only, not semantic conformance, acceptance, integration or restored independence.
 
+## EV-10 — Pay once for planned independent review of the related set
+
+The default implementation loop performs planner control of bearing requirements/interfaces/
+invariants, applies any already-determined attributed patch without another LLM reasoning pass,
+runs targeted checks and records a local commit-candidate. This control is diagnostic/author-side,
+not independent review or permission to accept/integrate. A new exact result need not launch a new
+reviewer immediately: commit identity records produced bytes, not a passed independent gate.
+
+Plan the bounded coherent umbrella/MR result set, exact subject/contract coverage, consumer readiness
+and mandatory independent gate before execution. A fresh-context reviewer who is not an applicable
+original/patch author assesses the whole selected diff against requirements before acceptance and
+integration of that set. One grouped assessment may cover related results where the actual plan,
+subject bindings and evidence applicability support it; a group tag or report's existence is not
+automatic coverage of every child result/gate. Do not defer an already prescribed earlier gate or
+turn failing work into deferred work just to save review cost.
+
+After corrections, retain justified unaffected evidence and assess affected deltas/significant
+inputs. Do not automatically reread/review everything or appoint another reviewer per patch. The
+reviewer need not be replaced just because it reported findings; it must remain non-author and
+follow exact new-subject/assignment/freshness rules for reassessment. Review-side authored changes
+still lose that author's independence. No recursive reviewer-of-reviewer ritual is introduced.
+
 ## Approval provenance/readiness
 
 On 2026-11-05 owner requested proportionality corrections to draft1, then explicitly asked about
@@ -128,3 +150,8 @@ Revision 4 records the subsequent owner-approved determined-correction flow with
 applicator and explicit patch-author exclusion from independent review. Attribution schemas and
 enforcement still require scoped design/implementation; no existing single-producer field is
 silently relabeled as complete contributor tracking or independent acceptance.
+
+Revision 5 records the owner's explicit direction to use planner/executor/local-correction/candidate
+commit followed by planned grouped independent MR review. The approved saving removes duplicate
+reasoning and fragmented reviewer launches, not required independence, exact subjects or pre-existing
+early gates. It does not certify the implementation candidates or enable unfinished runtime tools.
