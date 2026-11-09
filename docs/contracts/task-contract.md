@@ -160,3 +160,9 @@ planner supplies an exact attributed patch; a deterministic non-LLM adapter appl
 authorized base and runs selected checks; a non-author reviewer assesses the new result. This is a
 manual design decision, not a fabricated service approval, new wire format, implemented tool,
 passing operational test, live-model permission, stand restart or public-push authorization.
+
+The owner subsequently explicitly approved extending the model with a separate mechanical execution
+kind that has no LLM profile/session and with explicit author attribution for independence checks,
+while preserving readability of existing data. Do not encode a mechanical operation as a fake model,
+native chat session or renamed human producer. Freeze the corresponding closed formats and their
+legacy/current-use behavior before integration; this approval is not an in-place history rewrite.

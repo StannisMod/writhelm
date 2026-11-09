@@ -563,3 +563,19 @@ Private design/task/evidence/session material, actual project patches, source in
 and generated output remain excluded. This is not an operational apply tool, contributor/authority
 schema, filesystem containment, independent verification or full correction-workflow qualification.
 No public push, live inference, stand launch or user-wide configuration change follows.
+
+## Mechanical descriptors and authorship scope P25 — local source checkpoint
+
+The owner explicitly approved a separate mechanical execution kind without LLM profile/session,
+explicit authors and continued legacy readability. Admit the four exact P25 exceptions in
+`.gitignore`, corresponding admitted contract/status changes and this publication/ignore record.
+Newly authored AGPL-3.0-only bounded profile/producer/result descriptor codecs, contributor-closure
+predicates and synthetic tests; no external source, binaries, private fixtures or histories.
+
+This is staged format/read compatibility work, not a newly enabled store/writer profile, command,
+native apply tool or authority grant. New record2 shapes are not silently admitted by legacy
+record1/command3. Mechanical result descriptors require explicit patch/source/author attribution;
+legacy producer identity is not represented as complete contributor knowledge. Required runtime,
+whole-state/history, rights/claims/effect, review/acceptance and per-platform gates remain separate.
+Private designs/tasks/evidence, logs, stores and generated outputs stay excluded. No push/live call,
+stand restart, migration/history rewrite or operational qualification follows from this checkpoint.

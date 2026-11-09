@@ -460,3 +460,9 @@
 # P24: pure exact-text correction kernel — no operational patch tool
 !/adapters/opencode/src/exact-text-correction.ts
 !/adapters/opencode/tests/exact-text-correction.test.ts
+
+# P25: versioned mechanical descriptors and explicit authorship — no writer enablement
+!/backend/server/src/main/kotlin/dev/writhelm/core/work/ExecutionDescriptors.kt
+!/backend/server/src/main/kotlin/dev/writhelm/core/work/ResultDescriptors.kt
+!/backend/server/src/test/kotlin/dev/writhelm/core/work/ExecutionDescriptorsTest.kt
+!/backend/server/src/test/kotlin/dev/writhelm/core/work/ResultDescriptorsTest.kt
