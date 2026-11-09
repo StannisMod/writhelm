@@ -70,6 +70,7 @@ const adapter=new ConnectedNativeAdapter(ctx,native.session,bridge,cfg.hostId)
 const deployment=new LinuxNativeCustody(path.join(cfg.root,"deployment"),[cfg.sourceRoot,cfg.worktreeParent]);await deployment.initialize()
 const initial=new NativeInitialAdapter(ctx,native,registry,custody,deployment,sessionID);await initial.register()
 const transport=await listenNativeTransport(cfg.transportOrigin,Buffer.from(cfg.transportProof,"base64url"),bridge,adapter,undefined,workers,initial)
+let recoveredInitial:NativeInitialAdapter|undefined
 const signal=new AbortController().signal,parse=(s:string)=>exactJSON(s,()=>{throw Error("invalid service JSON")})
 try{
   const driver=new NativeWorkerPreparation(registry,workers,custody,sessionID,{projectId:cfg.projectId,controllerId:cfg.controllerId,
@@ -98,6 +99,14 @@ try{
     await boundary;assert.equal(contextEvent.options.maxTokens,64);assert.equal(contextEvent.options.effort,"bounded")
     const restored=await starter.run(selected,call,started.startId)
     assert.equal(restored.phase,"active-admission-restored");assert.equal(wakes,1)
+    await initial.close()
+    hooks.clear() // Explicit MOCK host unload of the old plugin lifetime, not installed lifecycle evidence.
+    recoveredInitial=new NativeInitialAdapter(ctx,native,registry,custody,deployment,sessionID);await recoveredInitial.register()
+    const recovered=await recoveredInitial.restore()
+    assert.equal(recovered.length,1);assert.equal(recovered[0]!.phase,"active-admission-restored")
+    await recoveredInitial.admitTool(prepared.nativeSessionId)
+    await invoke("tool:execute.before",{sessionID:prepared.nativeSessionId})
+    assert.equal(wakes,1)
   }
   process.stdout.write(JSON.stringify({passiveAndBound:true,assignmentId:prepared.assignmentId,trees,receivers,wakes,native:"MOCK",gitAndService:"REAL"}))
-}finally{await initial.close();await transport.close()}
+}finally{await recoveredInitial?.close();await initial.close();await transport.close()}

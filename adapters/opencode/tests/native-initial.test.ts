@@ -24,7 +24,7 @@ async function fixture(){
   const raw=contextJSON(envelope),packet=contextJSON([{key:"writhelm-task",value:"EXACT pinned contract, no summary substitution"}])
   const profile={family:"profiles",key:{projectId:id(1),profileId:id(6),revision:0},payload:{platform:"linux",qualification:"qualified",model:{providerId:"MOCK",modelId:"no-call",variant:null},
     outputReserveTokens:512,effort:"bounded",route:"no-call",permissions:[{tool:"read",action:"allow",scope:"workspace"}]}}
-  let active=false,dispatch=true,wakes=0,lost=false,suppressBoundary=false,permissions:any[]=[{action:"*",resource:"*",effect:"deny"}],boundary:Promise<void>|undefined
+  let active=false,dispatch=true,wakes=0,lost=false,suppressBoundary=false,epoch="b".repeat(64),permissions:any[]=[{action:"*",resource:"*",effect:"deny"}],boundary:Promise<void>|undefined
   const event=()=>({sessionID:envelope.nativeSessionId,model:{providerID:"MOCK",id:"no-call"},system:[],options:{inherited:"must disappear"},tools:{read:{},shell:{}}})
   const hook=(domain:string)=>(name:string,callback:(e:any)=>Promise<void>)=>{hooks.set(domain+":"+name,callback);return Promise.resolve({dispose:async()=>{hooks.delete(domain+":"+name)}})}
   const ctx={app:{version:"2.2.5"},session:{hook:hook("session"),instructions:{entry:{list:async()=>instructions,put:async({key,value}:any)=>{instructions.push({key,value})}}},
@@ -37,7 +37,7 @@ async function fixture(){
     }},tool:{hook:hook("tool")}} as unknown as Plugin.Context
   const native={session:{get:async()=>({id:envelope.nativeSessionId,location:{directory:work},model:{providerID:"MOCK",id:"no-call"},permissions,cost:0}),
     context:async()=>messages,inbox:{list:async()=>[]}}} as unknown as OpenCodeClient
-  const registry={inspect:async()=>({scope:"assignment",assignmentId:id(2),bindingJSON:contextJSON(binding),workRoot:work,epoch:"b".repeat(64)}),
+  const registry={inspect:async()=>({scope:"assignment",assignmentId:id(2),executionGeneration:"0",bindingJSON:contextJSON(binding),workRoot:work,epoch}),
     initialContext:async()=>({envelopeJSON:raw,envelopeDigest:createHash("sha256").update(raw).digest("hex"),packetJSON:packet,profileJSON:contextJSON(profile),
       assignmentJSON:contextJSON({payload:{intendedExecution:{template:"executor-v1"}}}),active,dispatch})} as unknown as NativeCredentialRegistry
   const custody=new LinuxNativeCustody(path.join(root,"private"),[work]);await custody.initialize()
@@ -46,6 +46,7 @@ async function fixture(){
     baseURL:null,routeID:"no-call",effortOptionKey:"effort",nativeOptions:{effort:"bounded",maxTokens:64}}))
   const adapter=new NativeInitialAdapter(ctx,native,registry,custody,deployment,"ses_controller");await adapter.register()
   return {adapter,hooks,envelope,root,event,subject:{assignmentId:id(2),executionGeneration:"0",bindingJSON:contextJSON(binding)},
+    restart:()=>new NativeInitialAdapter(ctx,native,registry,custody,deployment,"ses_controller"),changeEpoch:()=>{epoch="c".repeat(64)},
     active:()=>{active=true;dispatch=false},revoke:()=>{active=false;dispatch=false},lose:()=>{lost=true},noBoundary:()=>{suppressBoundary=true},wakes:()=>wakes,boundary:()=>boundary,permissions:()=>permissions}
 }
 
@@ -89,4 +90,37 @@ test("initial inbox/ack alone cannot manufacture a held-boundary witness or rele
     f.active();await assert.rejects(f.adapter.release(f.envelope.nativeSessionId))
     await assert.rejects(f.adapter.admitTool(f.envelope.nativeSessionId))
   }finally{await f.adapter.close()}
+})
+
+test("same-incarnation initial recovery restores current ACTIVE admission without another normal prompt",async()=>{
+  const f=await fixture(),restarted=f.restart()
+  try{
+    await f.adapter.deliver(f.subject,id(3));await f.adapter.awaitBoundary(f.envelope.nativeSessionId,new AbortController().signal)
+    f.active();await f.adapter.release(f.envelope.nativeSessionId);await f.boundary();await f.adapter.close()
+    await restarted.register()
+    const recovered=await restarted.restore()
+    assert.deepEqual(recovered,[{sessionID:f.envelope.nativeSessionId,intentId:id(3),phase:"active-admission-restored"}])
+    await restarted.admitTool(f.envelope.nativeSessionId)
+    assert.equal(f.wakes(),1)
+    f.revoke();await assert.rejects(restarted.admitTool(f.envelope.nativeSessionId))
+  }finally{await f.adapter.close();await restarted.close()}
+})
+
+test("startup recovery cannot promote ack-only, pending or another incarnation into initial ACTIVE admission",async()=>{
+  for(const mode of ["ack-only","pending","new-incarnation"]){
+    const f=await fixture(),restarted=f.restart()
+    try{
+      if(mode!=="new-incarnation")f.noBoundary()
+      await f.adapter.deliver(f.subject,id(3))
+      if(mode!=="pending")f.active()
+      if(mode==="new-incarnation"){
+        await f.adapter.awaitBoundary(f.envelope.nativeSessionId,new AbortController().signal)
+        await f.adapter.release(f.envelope.nativeSessionId);await f.boundary();f.changeEpoch()
+      }
+      await f.adapter.close();await restarted.register()
+      assert.equal((await restarted.restore())[0]?.phase,"initial-held",mode)
+      await assert.rejects(restarted.admitTool(f.envelope.nativeSessionId))
+      assert.equal(f.wakes(),1)
+    }finally{await f.adapter.close();await restarted.close()}
+  }
 })

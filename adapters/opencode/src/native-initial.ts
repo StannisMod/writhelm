@@ -28,6 +28,39 @@ export class NativeInitialAdapter {
     private readonly connected:(sessionID:string)=>boolean=()=>false,
     private readonly auxiliary?:(event:SessionModelRequest)=>Promise<void>){}
   managed(sessionID:string){return this.gates.has(sessionID)}
+  /** Same-incarnation plugin reload only. Rebuild closed local gates from protected ORIGINAL
+   * records, then re-enter the existing canonical ACTIVE release protocol. Never dispatch a prompt
+   * or infer a new host incarnation/adoption from retained metadata, native idle or inbox presence. */
+  async restore():Promise<ReadonlyArray<Readonly<{sessionID:string;intentId:string;phase:"active-admission-restored"|"initial-held"}>>> {
+    if(this.closed)nativeUnavailable()
+    const restored:Array<{sessionID:string;intentId:string;phase:"active-admission-restored"|"initial-held"}>=[]
+    const originals=await this.custody.scan("initial-original")
+    if(originals.length>256)nativeUnavailable()
+    const sessions=new Set<string>()
+    for(const row of originals){
+      const original=closedObject(parse(row.raw),["raw","digest","packet","profileJSON","deploymentJSON","epoch"]),e=parse(original.raw)
+      if(!uuidPattern.test(e.intentId)||row.keyDigest!==hash(e.intentId)||hash(original.raw)!==original.digest||
+        typeof e.nativeSessionId!=="string"||sessions.has(e.nativeSessionId))nativeUnavailable()
+      sessions.add(e.nativeSessionId)
+      // Validate the immutable original/held witness even when the current receiver cannot be
+      // adopted. Malformed protected records are corruption, never a reason to forget a session.
+      await this.witness(e.intentId)
+      const binding=await this.registry.inspect(e.nativeSessionId)
+      let phase:"active-admission-restored"|"initial-held"="initial-held"
+      if(binding?.scope==="assignment"&&binding.assignmentId===e.assignmentId&&binding.executionGeneration===e.executionGeneration&&
+        binding.bindingJSON===contextJSON(e.binding)&&binding.epoch===original.epoch){
+        try{
+          const gate=await this.prepare({assignmentId:e.assignmentId,executionGeneration:e.executionGeneration,bindingJSON:binding.bindingJSON},e.intentId)
+          if((await this.frame(gate)).active){await this.release(e.nativeSessionId);phase="active-admission-restored"}
+        }catch{
+          // Current revocation, source/profile change, pending/unknown outcome or missing held
+          // boundary keeps this receiver held. It cannot disable independent primary planning.
+        }
+      }
+      restored.push(Object.freeze({sessionID:e.nativeSessionId,intentId:e.intentId,phase}))
+    }
+    return Object.freeze(restored)
+  }
   private applies(sessionID:string){return this.managed(sessionID)&&!this.connected(sessionID)}
   private async frame(gate:Gate){
     const e=gate.envelope

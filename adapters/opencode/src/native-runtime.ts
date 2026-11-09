@@ -100,6 +100,7 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
       {projectId:config.projectId,controllerId:config.controllerId,hostId:config.hostId,worktreeParent:p.worktreeParent})
   }
     transport = await listenNativeTransport(config.transportOrigin, config.transportProof, bridge, adapter, sources,workers,initial)
+    const initialRecovery=await initial.restore() // no model wake, canonical transition or incarnation adoption
     tools = await registerConnectedWorkTools(ctx, registry)
     preparationTool=await ctx.tool.transform(editor=>{
       editor.add({name:"writhelm_prepare_worker",
@@ -137,7 +138,7 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
       async admitPrompt(event:SessionPrompt){if(adapter.owns(event.sessionID))await adapter.admitTool(event.sessionID);else await initial.admitPrompt(event)}
     })
     runtimeReferences.set(config.root,reference)
-    return Object.freeze({ registry, bridge, sources, workers, preparations, initial, initialStart, async close() {
+    return Object.freeze({ registry, bridge, sources, workers, preparations, initial, initialStart, initialRecovery, async close() {
       if(runtimeReferences.get(config.root)===reference)runtimeReferences.delete(config.root)
       await transport!.close()
       await preparationTool?.dispose()

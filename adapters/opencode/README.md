@@ -88,6 +88,13 @@ replay/active restoration cannot send a second wake. ACTIVE is admission, not mo
 writer fencing. Connected-work synthetic continuation retains its separate protocol and takes over
 the same worker's admission when its actual continuation gate exists.
 
+On a same-incarnation plugin reload, bounded protected initial-original inventory rebuilds closed
+gates. Only the exact still-bound generation, unchanged qualified profile/packet, original held
+boundary and current canonical ACTIVE may restore admission; this sends no prompt or canonical
+start/observe command. Pending, revoked, changed or another-incarnation receivers stay held. Invalid
+protected original records are not treated as absence. New-process incarnation adoption and actual
+writer recovery remain separate unimplemented/unqualified gates, not implied by plugin reload.
+
 Worker-location instances use an in-process runtime reference only to find the real controller-owned
 gate; reference/metadata presence grants nothing. Missing/reloaded/other-host references hold, and
 every admission rechecks current binding, packet and service policy. Pinned context/message DTOs lack
