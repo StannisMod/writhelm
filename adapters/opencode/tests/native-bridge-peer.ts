@@ -19,9 +19,10 @@ import { prepareNativePeerProofs } from "../src/native-bootstrap-secrets.js"
 import { NativeContextSources } from "../src/native-context-source.js"
 import { NativeContextExtraction } from "../src/native-context-extraction.js"
 import { NativeWorkerCheckpoints } from "../src/native-worker-checkpoint.js"
-import { NativeWorkerCompaction } from "../src/native-worker-compaction.js"
 import { NativeWorkerRestoration } from "../src/native-worker-restoration.js"
-import { NativeControllerCompaction } from "../src/native-controller-compaction.js"
+import { registerNativeContextDispatcher } from "../src/native-context-dispatch.js"
+import { nativeContextAdmission } from "../src/native-context-reference.js"
+import type { RuntimeReference } from "../src/native-runtime.js"
 import { NativeControllerRestoration } from "../src/native-controller-restoration.js"
 import { contextJSON } from "../src/native-context-codec.js"
 import { Effect, Schema, Cause } from "effect"
@@ -103,6 +104,21 @@ const current = bridge.current.bind(bridge)
 bridge.current = async envelope => { const value = await current(envelope); process.stderr.write(`current: ${value}\n`); return value }
 await bridge.manage(config.sessionID)
 const adapter = new ConnectedNativeAdapter(ctx, native, bridge, config.hostId); await adapter.register()
+const deployment=new LinuxNativeCustody(path.join(config.root,"deployment"),[config.workRoot]);await deployment.initialize()
+if(config.profileJSON)await deployment.retain("execution-profile",config.profileJSON,contextJSON({formatVersion:1,profileKeyJSON:config.profileJSON,
+  model:{providerID:"synthetic",id:"no-call"},baseURL:null,routeID:"no-call",effortOptionKey:"effort",nativeOptions:{maxTokens:64,effort:"bounded"}}))
+if(config.governingTaskJSON)await deployment.retain("controller-context","current",contextJSON({formatVersion:1,profileKeyJSON:config.profileJSON,
+  governingTaskJSON:config.governingTaskJSON}))
+const runtime={hostId:config.hostId,pid:process.pid,registry,sources,custody,deployment,controllerSessionID:config.controllerSessionID,
+  admitTool:(id:string)=>adapter.admitTool(id)} as unknown as RuntimeReference
+const dispatchConfig={root:config.root,hostId:config.hostId,workRoot:config.workRoot}
+function scopedHooks(){
+  const callbacks=new Map<string,Array<(event:any)=>Effect.Effect<void,unknown>>>()
+  return {callbacks,hook:(name:string,callback:(event:any)=>Effect.Effect<void,unknown>)=>Effect.acquireRelease(
+    Effect.sync(()=>{callbacks.set(name,[...(callbacks.get(name)??[]),callback]);return {dispose:Effect.void}}),
+    ()=>Effect.sync(()=>{callbacks.set(name,(callbacks.get(name)??[]).filter(c=>c!==callback))})),
+    invoke:(name:string,event:any)=>Effect.gen(function*(){for(const callback of [...(callbacks.get(name)??[])])yield* callback(event)})}
+}
 const transport = await listenNativeTransport(config.transportOrigin, Buffer.from(config.transportProof, "base64url"), bridge, adapter, sources)
 const emit = (value: unknown) => process.stdout.write(JSON.stringify(value) + "\n")
 emit({ ready: true, externalNative: "MOCK" })
@@ -123,29 +139,33 @@ try {
       const decode = Schema.decodeSync(SessionMessage.Info as unknown as Schema.Codec<unknown, unknown>)
       const controllerSource = decode({ id: "msg_controller_frontier", type: "user", text: "MOCK retain all controller tasks, dependencies and decisions",
         time: { created: 1 }, metadata: { sourceRole: "controller-not-executor" } })
-      const callbacks = new Map<string, (event: any) => Effect.Effect<void, unknown>>()
+      const controllerHooks=scopedHooks()
       const event = { sessionID: config.controllerSessionID, model: { providerID: "synthetic", id: "no-call" },
         messages: [{ id: "msg_controller_frontier" }] } as unknown as SessionCompaction
       const effectContext = { app: { version: "2.2.5" }, session: {
+        get:({sessionID}:{sessionID:string})=>Effect.succeed({id:sessionID,location:{directory:config.workRoot}}),
         context: () => Effect.succeed([controllerSource]), instructions: { entry: { list: () => Effect.succeed(effects.controllerInstructions) } },
-        hook: (name: string, callback: (event: any) => Effect.Effect<void, unknown>) => Effect.acquireRelease(
-          Effect.sync(() => { callbacks.set(name, callback); return { dispose: Effect.void } }), () => Effect.sync(() => { callbacks.delete(name) })),
+        hook:controllerHooks.hook,
         generate: ({ sessionID, prompt }: { sessionID: string; prompt: string }) => Effect.gen(function* () {
           const request = { sessionID, model: event.model, system: [], messages: [Message.user(prompt)], options: {}, tools: {} }
-          yield* callbacks.get("generate")!(request)
-          yield* callbacks.get("model.request")!({ sessionID, model: event.model, kind: "generate", headers: {} })
+          yield* controllerHooks.invoke("generate",request)
+          // Controller fixture exercises Effect-first ordering; worker below exercises Promise-first.
+          yield* Effect.promise(()=>nativeContextAdmission(config.root,config.hostId,config.workRoot).generate(request as never))
+          const modelRequest={ sessionID, model: event.model, kind: "generate", headers: {} }
+          yield* controllerHooks.invoke("model.request",modelRequest)
+          yield* Effect.promise(()=>nativeContextAdmission(config.root,config.hostId,config.workRoot).request(modelRequest as never))
           return { text: JSON.stringify({ formatVersion: 1, entries: [{ status: "proposed", text: "MOCK planner proposal remains unaccepted",
             sourceMessageIds: ["msg_controller_frontier"], obligationIds: frame.obligationIds, uncertainty: "MOCK semantic extraction",
             exactFragments: [] }], gaps: [], pending: ["A controller decision remains open; no authority is granted by this proposal"] }) }
         }),
-      }, tool: { hook: (name: string, callback: (event: any) => Effect.Effect<void, unknown>) => Effect.acquireRelease(
-        Effect.sync(() => { callbacks.set("tool:" + name, callback); return { dispose: Effect.void } }),
-        () => Effect.sync(() => { callbacks.delete("tool:" + name) })) } } as unknown as EffectPlugin.Context
-      const coordinator = new NativeControllerCompaction(effectContext, registry, sources, custody, { profileJSON: config.profileJSON,
-        model: event.model, baseURL: null, routeID: "no-call", effortOptionKey: "effort", nativeOptions: { maxTokens: 64, effort: "bounded" } }, config.governingTaskJSON)
+      }, tool: { hook:(name:string,callback:any)=>controllerHooks.hook("tool:"+name,callback) } } as unknown as EffectPlugin.Context
       const outcome = await Effect.runPromise(Effect.scoped(Effect.gen(function* () {
-        yield* coordinator.register()
-        return yield* callbacks.get("compaction")!(event).pipe(Effect.exit)
+        yield* registerNativeContextDispatcher(effectContext,dispatchConfig,()=>runtime)
+        yield* Effect.promise(()=>nativeContextAdmission(config.root,config.hostId,config.workRoot).compaction(event))
+        const result=yield* controllerHooks.invoke("compaction",event).pipe(Effect.exit)
+        const extra=yield* Effect.exit(Effect.promise(()=>nativeContextAdmission(config.root,config.hostId,config.workRoot).generate(event)))
+        if(extra._tag!=="Failure")throw new Error("controller extraction lease survived completion")
+        return result
       })))
       if (outcome._tag === "Failure") process.stderr.write(`controller-compaction-refused: ${Cause.pretty(outcome.cause)}\n`)
       const after = await registry.controllerContext(config.controllerSessionID, config.profileJSON)
@@ -159,20 +179,23 @@ try {
       const native = decode({ id: effects.payload.id, type: "synthetic", text: effects.payload.payload.text,
         metadata: effects.payload.payload.metadata, time: { created: 1 } })
       const contextObservations = [native, ...(effects.pendingInputs ?? []).map(value => decode(value))]
-      const extractionHooks = new Map<string, (event: any) => Effect.Effect<void, unknown>>()
+      const workerHooks=scopedHooks()
       let modelCalls = 0
-      const effectContext = { app: { version: "2.2.5" }, session: { context: () => Effect.succeed(contextObservations), instructions: { entry: {
+      const effectContext = { app: { version: "2.2.5" }, session: {
+        get:({sessionID}:{sessionID:string})=>Effect.succeed({id:sessionID,location:{directory:config.workRoot}}),
+        context: () => Effect.succeed(contextObservations), instructions: { entry: {
         list: () => Effect.succeed(effects.instructions),
         put: ({ key, value }: { key: string; value: string }) => Effect.promise(async () => {
           effects.instructions = [...effects.instructions.filter(i => i.key !== key), { key, value }]; await save()
         }),
-      } }, hook: (name: string, callback: (event: any) => Effect.Effect<void, unknown>) => Effect.acquireRelease(
-        Effect.sync(() => { extractionHooks.set(name, callback); return { dispose: Effect.void } }),
-        () => Effect.sync(() => { extractionHooks.delete(name) })),
+      } }, hook:workerHooks.hook,
       generate: ({ sessionID, prompt }: { sessionID: string; prompt: string }) => Effect.gen(function* () {
         const request = { sessionID, model: { providerID: "synthetic", id: "no-call" }, messages: [Message.user(prompt)], system: [], tools: {}, options: {} }
-        yield* extractionHooks.get("generate")!(request)
-        yield* extractionHooks.get("model.request")!({ sessionID, model: request.model, kind: "generate", headers: {} })
+        if(command.operation!=="checkpoint-source")yield* Effect.promise(()=>nativeContextAdmission(config.root,config.hostId,config.workRoot).generate(request as never))
+        yield* workerHooks.invoke("generate",request)
+        const modelRequest={ sessionID, model: request.model, kind: "generate", headers: {} }
+        if(command.operation!=="checkpoint-source")yield* Effect.promise(()=>nativeContextAdmission(config.root,config.hostId,config.workRoot).request(modelRequest as never))
+        yield* workerHooks.invoke("model.request",modelRequest)
         modelCalls++
         if (command.operation === "compact-late") {
           const late = { id: `msg_after_context_${effects.pendingInputs?.length ?? 0}`, type: "user", text: "Unconsumed late native input",
@@ -184,9 +207,7 @@ try {
           sourceMessageIds: [effects.payload.id], obligationIds: checkpointFrame!.obligationIds, uncertainty: "MOCK native source/provider",
           exactFragments: [] }], gaps: [], pending: [] }) }
       }),
-      }, tool: { hook: (name: string, callback: (event: any) => Effect.Effect<void, unknown>) => Effect.acquireRelease(
-        Effect.sync(() => { extractionHooks.set("tool:" + name, callback); return { dispose: Effect.void } }),
-        () => Effect.sync(() => { extractionHooks.delete("tool:" + name) })) } } as unknown as EffectPlugin.Context
+      }, tool: { hook:(name:string,callback:any)=>workerHooks.hook("tool:"+name,callback) } } as unknown as EffectPlugin.Context
       const event = { sessionID: config.sessionID, model: { providerID: "synthetic", id: "no-call" },
         messages: [{ id: effects.payload.id }] } as unknown as SessionCompaction
       const packet = contextJSON([...effects.instructions].sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
@@ -204,14 +225,16 @@ try {
         const profile = { profileJSON: config.profileJSON, model: event.model, baseURL: null, routeID: "no-call",
           effortOptionKey: "effort", nativeOptions: { maxTokens: 64, effort: "bounded" } }
         if (command.operation !== "checkpoint-source") {
-          const compaction = new NativeWorkerCompaction(effectContext, registry, sources, custody, profile)
           let retiredAdmissionHeld = false, retiredToolHeld = false
           const outcome = await Effect.runPromise(Effect.scoped(Effect.gen(function* () {
-            yield* compaction.register()
-            const result = yield* extractionHooks.get("compaction")!(event).pipe(Effect.exit)
+            yield* registerNativeContextDispatcher(effectContext,dispatchConfig,()=>runtime)
+            yield* Effect.promise(()=>nativeContextAdmission(config.root,config.hostId,config.workRoot).compaction(event))
+            const result = yield* workerHooks.invoke("compaction",event).pipe(Effect.exit)
+            const extra=yield* Effect.exit(Effect.promise(()=>nativeContextAdmission(config.root,config.hostId,config.workRoot).generate(event)))
+            if(extra._tag!=="Failure")throw new Error("worker extraction lease survived completion")
             if ((event.result?.metadata?.writhelm as any)?.finishedHandoff === true) {
-              retiredAdmissionHeld = (yield* extractionHooks.get("context")!({ sessionID: config.sessionID }).pipe(Effect.exit))._tag === "Failure"
-              retiredToolHeld = (yield* extractionHooks.get("tool:execute.before")!({ sessionID: config.sessionID }).pipe(Effect.exit))._tag === "Failure"
+              retiredAdmissionHeld = (yield* workerHooks.invoke("context",{ sessionID: config.sessionID }).pipe(Effect.exit))._tag === "Failure"
+              retiredToolHeld = (yield* workerHooks.invoke("tool:execute.before",{ sessionID: config.sessionID }).pipe(Effect.exit))._tag === "Failure"
             }
             return result
           })))

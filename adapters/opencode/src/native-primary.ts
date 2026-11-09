@@ -9,6 +9,7 @@ import { contextJSON } from "./native-context-codec.js"
 import { exactJSON } from "./strict-json.js"
 import { nativeUnavailable, uuidPattern } from "./native-runtime-client.js"
 import { primaryPermissionRules, requirePrimaryPolicy } from "./primary-policy.js"
+import type { NativeContextAdmission } from "./native-context-reference.js"
 
 export const primaryTools = new Set(["question", "read", "writhelm_work_command", "writhelm_work_read", "writhelm_knowledge_command", "writhelm_knowledge_read", "writhelm_schema", "writhelm_prepare_worker", "writhelm_start_worker"])
 export const primaryInstructions = `You are the Writhelm primary PLANNER, not a coding executor.
@@ -32,7 +33,8 @@ export type PrimaryConfiguration = Readonly<{
  * harness control, not an OS sandbox. Unknown sessions in the configured project HOLD, not fallback
  * to an unrestricted agent. The primary NEVER receives coding tools, even after a task is ready. */
 export async function registerPrimaryGovernor(ctx: Plugin.Context, registry: NativeCredentialRegistry,
-  custody: LinuxNativeCustody, config: PrimaryConfiguration, onBound?: (sessionID:string)=>Promise<void>) {
+  custody: LinuxNativeCustody, config: PrimaryConfiguration, onBound?: (sessionID:string)=>Promise<void>,
+  context?:()=>NativeContextAdmission) {
   if(process.platform!=="linux"||ctx.app.version!=="2.2.5"||!path.isAbsolute(config.workRoot)
     ||![config.controllerId,config.controllerCredentialId,config.projectId].every(id=>uuidPattern.test(id)))nativeUnavailable()
   const workRoot=await fs.realpath(config.workRoot)
@@ -86,10 +88,22 @@ export async function registerPrimaryGovernor(ctx: Plugin.Context, registry: Nat
       event.system.push({type:"text",text:primaryInstructions+"\nCanonical projectId: "+config.projectId})
       for(const name of Object.keys(event.tools))if(!primaryTools.has(name))delete event.tools[name]
     }))
-    registrations.push(await ctx.session.hook("model.request",async event=>{if(await applies(event.sessionID))await selected(event.sessionID)}))
+    registrations.push(await ctx.session.hook("model.request",async event=>{
+      if(!await applies(event.sessionID)||await selected(event.sessionID)!=="controller")return
+      if(event.kind!=="primary"){
+        if(!context)nativeUnavailable()
+        await context().request(event)
+      }
+    }))
+    registrations.push(await ctx.session.hook("generate",async event=>{
+      if(!await applies(event.sessionID)||await selected(event.sessionID)!=="controller")return
+      if(!context)nativeUnavailable()
+      await context().generate(event)
+    }))
     registrations.push(await ctx.session.hook("compaction",async event=>{
-      if(await applies(event.sessionID)&&await selected(event.sessionID)==="controller"&&event.result===undefined)
-        throw new Error("Writhelm primary requires confirmed task-shaped controller continuation; generic compaction is held")
+      if(!await applies(event.sessionID)||await selected(event.sessionID)!=="controller")return
+      if(!context)throw new Error("Writhelm primary requires confirmed task-shaped controller continuation; generic compaction is held")
+      await context().compaction(event)
     }))
     registrations.push(await ctx.session.hook("title",async event=>{
       if(await applies(event.sessionID)&&await selected(event.sessionID)==="controller")event.result="Writhelm — governed planning"

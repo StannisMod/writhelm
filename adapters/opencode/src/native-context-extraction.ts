@@ -75,6 +75,21 @@ export class NativeContextExtraction {
       if (!isLosslessNumber(p[key]) || BigInt(p[key].value) < BigInt(Number(this.#profile.nativeOptions.maxTokens))) nativeUnavailable()
     }
   }
+  /** Promise-side routing can check the lease without running an Effect runtime. The Effect hooks
+   * still own source/current-scope validation and request mutation in their original host scope. */
+  assertGenerate(event: SessionGenerate): void {
+    const lease=this.#jobs.get(event.sessionID)
+    if(!this.#registered||!this.includes(event.sessionID)||!lease?.source||
+      !["prepared","generating"].includes(lease.phase)||!equal(model(event.model),this.#profile.model))nativeUnavailable()
+    const users=event.messages.filter(message=>message.role==="user")
+    const candidates=users.filter(message=>message.content.length===1&&message.content[0]?.type==="text"&&message.content[0].text===lease.source!.prompt)
+    if(candidates.length!==1||candidates[0]!==users.at(-1))nativeUnavailable()
+  }
+  assertRequest(event: SessionModelRequest): void {
+    const lease=this.#jobs.get(event.sessionID)
+    if(!this.#registered||!this.includes(event.sessionID)||event.kind!=="generate"||lease?.phase!=="generating"||
+      !equal(model(event.model),this.#profile.model)||(event.baseURL??null)!==this.#profile.baseURL)nativeUnavailable()
+  }
   register(): Effect.Effect<void, never, Scope.Scope> {
     const self = this
     return Effect.gen(function* () {

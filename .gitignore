@@ -447,3 +447,8 @@
 !/backend/server/src/test/kotlin/dev/writhelm/core/app/NativePreparationFactsTest.kt
 !/backend/server/src/test/kotlin/dev/writhelm/core/app/NativePrimaryJourneyTest.kt
 !/backend/server/src/test/kotlin/dev/writhelm/core/app/NativeWorkerPreparationJourneyTest.kt
+
+# P22: Effect-native context dispatcher — local source checkpoint only
+!/adapters/opencode/src/native-context-reference.ts
+!/adapters/opencode/src/native-context-dispatch.ts
+!/adapters/opencode/src/context-server.ts

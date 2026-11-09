@@ -25,7 +25,8 @@ export class NativeInitialAdapter {
   private closed=false
   constructor(private readonly ctx:Plugin.Context,private readonly native:Native,private readonly registry:NativeCredentialRegistry,
     private readonly custody:LinuxNativeCustody,private readonly deployment:LinuxNativeCustody,private readonly controllerSessionID:string,
-    private readonly connected:(sessionID:string)=>boolean=()=>false){}
+    private readonly connected:(sessionID:string)=>boolean=()=>false,
+    private readonly auxiliary?:(event:SessionModelRequest)=>Promise<void>){}
   managed(sessionID:string){return this.gates.has(sessionID)}
   private applies(sessionID:string){return this.managed(sessionID)&&!this.connected(sessionID)}
   private async frame(gate:Gate){
@@ -192,6 +193,11 @@ export class NativeInitialAdapter {
   }
   async admitModel(event:SessionModelRequest){
     const gate=this.gates.get(event.sessionID);if(!gate||this.closed)nativeUnavailable()
+    if(event.kind!=="primary"){
+      if(!this.auxiliary)nativeUnavailable()
+      await this.auxiliary(event)
+      return
+    }
     const {d,selected}=this.model(gate)
     if(event.kind!=="primary"||!same(event.model,selected)||(event.baseURL??null)!==d.baseURL)nativeUnavailable()
     await this.admitTool(event.sessionID)

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./build/src/primary-server.js", "./gui-experimental": "./dist/gui-experimental.cjs" },
+  "exports": { ".": "./build/src/primary-server.js", "./task-context": "./build/src/context-server.js", "./gui-experimental": "./dist/gui-experimental.cjs" },
   "dependencies": {
     "@opencode/client": "2.2.5",
     "@opencode/plugin": "2.2.5",

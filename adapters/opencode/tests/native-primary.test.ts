@@ -63,6 +63,10 @@ test("ordinary broad primary prompt binds once, preserves owner input and cannot
     for(const tool of ["shell","patch","subagent","newly_registered_mutator"])
       await assert.rejects(f.invoke("tool:execute.before",{sessionID:"ses_primary",tool}))
     await f.invoke("tool:execute.before",{sessionID:"ses_primary",tool:"question"})
+    for(const kind of ["generate","title","compaction"])
+      await assert.rejects(f.invoke("session:model.request",{sessionID:"ses_primary",kind}))
+    await assert.rejects(f.invoke("session:generate",{sessionID:"ses_primary",messages:[]}))
+    await assert.rejects(f.invoke("session:compaction",{sessionID:"ses_primary",result:{summary:"untrusted prefilled summary"}}))
     const permission={sessionID:"ses_primary",action:"shell",effect:"allow",resources:["*"]}
     await f.invoke("permission:evaluate",permission);assert.equal(permission.effect,"deny")
     const question={sessionID:"ses_primary",action:"question",effect:"allow",resources:["*"]}
@@ -87,7 +91,7 @@ test("native read retains owner/secret restrictions and primary cannot grant ext
     await f.invoke("permission:evaluate",external);assert.equal(external.effect,"deny")
     const ownerRestriction={action:"read",resource:"private.txt",effect:"deny"}
     f.sessions.get("ses_primary").permissions.push(ownerRestriction)
-    await f.invoke("session:model.request",{sessionID:"ses_primary"})
+    await f.invoke("session:model.request",{sessionID:"ses_primary",kind:"primary"})
     assert.ok(f.sessions.get("ses_primary").permissions.some((r:unknown)=>JSON.stringify(r)===JSON.stringify(ownerRestriction)))
     f.revoke();await assert.rejects(f.invoke("tool:execute.before",{sessionID:"ses_primary",tool:"read"}))
   }finally{await f.governor.close()}
@@ -105,7 +109,7 @@ test("concurrent root selection has one durable winner; unknown direct model/too
     await assert.rejects(f.invoke("session:compaction",{sessionID:winner}))
     // A stale permissive rule after a stored deny is normalized back to exactly one deny rule.
     f.sessions.get(winner).permissions.push({action:"shell",resource:"*",effect:"allow"})
-    await f.invoke("session:model.request",{sessionID:winner})
+    await f.invoke("session:model.request",{sessionID:winner,kind:"primary"})
     assert.deepEqual(f.sessions.get(winner).permissions.slice(-primaryPermissionRules.length),primaryPermissionRules)
     const unrelated="ses_unrelated"
     f.sessions.set(unrelated,{id:unrelated,location:{directory:path.join(f.root,"unrelated")},permissions:[]})

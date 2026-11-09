@@ -49,10 +49,10 @@ rights remain independently checked by the service; duplicate connection cannot 
 
 This implements initial primary admission/contract tooling, not an operational full-H1 claim.
 Semantic clarification/approval sufficiency still belongs to planner and independent verification,
-not a field or finite fixture. Generic primary compaction holds until a qualified task-shaped
-controller continuation coordinator is configured; it never silently discards obligations. Native
+not a field or finite fixture. Generic primary compaction holds without the Effect-native companion
+and qualified task-shaped controller deployment; it never silently discards obligations. Native
 worker/work-area qualification, profiles, physical/source safety, incarnation adoption, end-to-end
-compaction/restore and installed pilot gates still require their respective composition/qualification.
+compaction/restore and installed pilot gates still require their respective qualification.
 Unqualified execution stays held. No actual model request or working-profile install follows from
 building this package. A live stand must not be restarted implicitly to test the new entrypoint.
 
@@ -93,8 +93,38 @@ gate; reference/metadata presence grants nothing. Missing/reloaded/other-host re
 every admission rechecks current binding, packet and service policy. Pinned context/message DTOs lack
 sessionID and are checked under the exact queried receiver; inbox DTOs still require their explicit
 sessionID. Actual host module sharing, lifecycle ordering, request options/accounting and physical
-source/writer safety remain installed-qualification gates. Generic compaction is still refused until
-the separately required Effect-native task-shaped coordinator is composed.
+source/writer safety remain installed-qualification gates. Missing task-context composition refuses
+generic compaction rather than falling back to a narrative summary.
+
+### Effect-native task-context companion (source composition, not installed qualification)
+
+`build/src/context-server.js` (package export `./task-context`) is a separate Effect-native server
+plugin alongside the Promise primary entrypoint. A governed deployment must explicitly load both;
+enabling only the primary does not authorize generic generation/compaction. The companion reads
+the same protected bootstrap root, registers native hooks in the host lifetime Scope and starts no
+service, model or second compaction scheduler. Extraction calls remain direct host Effects, never
+`runPromise` nested inside a Promise hook. Missing/unqualified profiles hold.
+
+For a worker, its current canonical profile key selects the protected `execution-profile` record.
+For the controller, `controller-context/current` contains `{formatVersion:1,profileKeyJSON,
+governingTaskJSON}`; the task must belong to the actual captured frontier. Its exact profile key
+selects the same explicit deployment shape described above. Output must fit both canonical output
+and compaction reserves. Configuration is a deployment selector, never qualification evidence.
+
+On native compaction the dispatcher checks actual current scope/READ, worker binding/admission,
+profile and native safety; lazily registers the per-session coordinator's extraction hooks in the
+plugin lifetime Scope; then invokes its foreground worker/controller protocol. Current-source cuts,
+checkpoint publication/confirmation, late-input detection and full-controller frontier retain their
+existing independent checks before any replacement result is set. Finished-worker retirement makes
+no extraction call; persisted native retirement metadata is checked before lazy coordinator creation
+on later ordinary context/tool events too.
+
+Promise guards use lifecycle-owned routing references to require the exact extraction lease plus
+current admission for auxiliary generation. Effect hooks independently validate source correlation,
+model/route/options and current scope. Missing/closed/other-host or replaced-runtime routes cannot
+authorize a request. Different per-session profiles do not reject each other's correlated extraction.
+Actual module sharing, hook order, native cancellation/accounting and installed replacement/reopen
+behavior remain qualification gates; source composition and model-free fixtures do not prove them.
 
 - `src/gui.ts`: native session panel, command and exact nonsecret link handler.
 - `src/main.ts`: native main-process Ipc provider and file choosers; no model tool or server RPC.

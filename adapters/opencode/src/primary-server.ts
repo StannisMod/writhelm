@@ -11,6 +11,7 @@ import { createNativeCredentialRegistry } from "./native-host-identity.js"
 import { registerPrimaryGovernor } from "./native-primary.js"
 import { startProtectedNativeRuntime, nativeRuntimeReference } from "./native-runtime.js"
 import { exactJSON } from "./strict-json.js"
+import { nativeContextAdmission } from "./native-context-reference.js"
 
 /** Real server entrypoint. Enabling the package without a trusted protected bootstrap refuses;
  * there is no GUI-only success followed by ordinary unrestricted coding. No ctx.options token,
@@ -26,6 +27,7 @@ export default Plugin.define({id:"writhelm-opencode",async setup(ctx){
   const cfg=closedObject(exactJSON(raw,nativeUnavailable),["formatVersion","storeId","projectId","controllerId","hostId","controllerCredentialId",
     "workRoot","serviceOrigin","nativeOrigin","nativeRegistrationFile","transportOrigin","serviceProof","transportProof","schemas"])
   if(cfg.formatVersion?.value!=="1"||![cfg.storeId,cfg.projectId,cfg.controllerId,cfg.hostId,cfg.controllerCredentialId].every(v=>typeof v==="string"&&uuidPattern.test(v)))nativeUnavailable()
+  const context=()=>nativeContextAdmission(root,cfg.hostId,workRoot)
   // Desktop first loads its default location too. A configured governed stand must not silently
   // become ordinary coding there. Keep the GUI available, but hold that location's execution until
   // its project has an explicit controller binding; never repoint the configured primary.
@@ -42,11 +44,13 @@ export default Plugin.define({id:"writhelm-opencode",async setup(ctx){
     await ctx.session.hook("prompt",async event=>{if(await belongs(event.sessionID)){const runtime=await receiver(event.sessionID);await runtime.admitPrompt(event)}})
     await ctx.session.hook("context",async event=>{if(await belongs(event.sessionID)){const runtime=await receiver(event.sessionID);await runtime.admitContext(event.sessionID,event)}})
     await ctx.session.hook("model.request",async event=>{if(await belongs(event.sessionID)){
-      if(event.kind!=="primary")throw new Error("Qualified worker auxiliary-generation/compaction composition is required")
-      const runtime=await receiver(event.sessionID);await runtime.admitModel(event)
+      const runtime=await receiver(event.sessionID)
+      if(event.kind!=="primary")await context().request(event)
+      else await runtime.admitModel(event)
     }})
     await ctx.session.hook("title",async event=>{if(await belongs(event.sessionID))event.result="Writhelm — bounded session"})
-    await ctx.session.hook("compaction",async event=>{if(await belongs(event.sessionID))throw new Error("Generic worker compaction is held; task-shaped composition required")})
+    await ctx.session.hook("generate",async event=>{if(await belongs(event.sessionID)){await receiver(event.sessionID);await context().generate(event)}})
+    await ctx.session.hook("compaction",async event=>{if(await belongs(event.sessionID)){await receiver(event.sessionID);await context().compaction(event)}})
     await ctx.tool.hook("execute.before",async event=>{if(await belongs(event.sessionID)){const runtime=await receiver(event.sessionID);await runtime.admitTool(event.sessionID)}})
     await ctx.permission.hook("evaluate",async event=>{if(await belongs(event.sessionID)){
       try{const runtime=await receiver(event.sessionID);await runtime.admitTool(event.sessionID)}
@@ -77,6 +81,6 @@ export default Plugin.define({id:"writhelm-opencode",async setup(ctx){
       storeId:cfg.storeId,projectId:cfg.projectId,controllerId:cfg.controllerId,hostId:cfg.hostId,
       controllerSessionID:sessionID,assignmentSessionIDs:[],serviceProof,transportProof})
     await registry.connectRuntime(sessionID)
-  })
+  },context)
   return async()=>{await governor.close();await runtime?.close();serviceProof.fill(0);transportProof.fill(0)}
 }})

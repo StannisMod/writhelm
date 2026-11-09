@@ -39,6 +39,8 @@ export class NativeControllerCompaction {
       yield* Effect.addFinalizer(() => Effect.sync(() => { self.#registered = false }))
     })
   }
+  assertGenerate(event: Parameters<NativeContextExtraction["assertGenerate"]>[0]) { this.#extraction.assertGenerate(event) }
+  assertRequest(event: Parameters<NativeContextExtraction["assertRequest"]>[0]) { this.#extraction.assertRequest(event) }
   compact(event: SessionCompaction): Effect.Effect<void, unknown> {
     const self = this
     if (!self.includes(event.sessionID) || self.sources.scopeKind(event.sessionID) !== "controller") return Effect.void

@@ -15,9 +15,22 @@ import { nativeUnavailable } from "./native-runtime-client.js"
 const io = <A>(f: (signal: AbortSignal) => Promise<A>) => Effect.tryPromise({ try: f, catch: error =>
   error instanceof Error ? error : new Error("native checkpoint operation unavailable") })
 
-/** Native foreground UNFINISHED-worker protocol. No second scheduler/counter or generic summary
- * fallback. Controller-wide and finished-executor retirement are explicitly unsupported here,
- * not silently treated as an unfinished single task. The outer orchestrator selects that profile.
+/** Restored native retirement markers are checked even before a lazy coordinator is constructed. */
+export function nativeWorkerRetired(ctx:Plugin.Context,registry:NativeCredentialRegistry,sessionID:string):Effect.Effect<boolean,unknown> {
+  return Effect.gen(function*(){
+    if(registry.scopeKind(sessionID)!=="assignment")return false
+    const messages=yield* ctx.session.context({sessionID:sessionID as SessionCompaction["sessionID"]})
+    const markers=messages.filter(message=>message.type==="compaction").map(message=>message.metadata?.writhelm)
+    if(!markers.length)return false
+    const frame=yield* io(signal=>registry.workerContext(sessionID,signal))
+    if(frame.finishedHandoff!==true||frame.checkpointReferenceJSON===null)return false
+    return markers.some(m=>m!==null&&typeof m==="object"&&(m as any).finishedHandoff===true&&contextJSON((m as any).checkpoint)===frame.checkpointReferenceJSON)
+  })
+}
+
+/** Native foreground worker protocol. No second scheduler/counter or generic summary fallback.
+ * Finished handoffs retire without another extraction; unfinished work publishes its checkpoint
+ * before replacement. Controller-wide context has its own coordinator, not a fake worker task.
  * Installed native event ordering/accounting/physical recovery still need their held qualification. */
 export class NativeWorkerCompaction {
   readonly #active = new Set<string>()
@@ -47,18 +60,14 @@ export class NativeWorkerCompaction {
       yield* Effect.addFinalizer(() => Effect.sync(() => { self.#registered = false }))
     })
   }
-  private retired(sessionID: string): Effect.Effect<boolean, unknown> {
+  assertGenerate(event: Parameters<NativeContextExtraction["assertGenerate"]>[0]) { this.#extraction.assertGenerate(event) }
+  assertRequest(event: Parameters<NativeContextExtraction["assertRequest"]>[0]) { this.#extraction.assertRequest(event) }
+  retired(sessionID: string): Effect.Effect<boolean, unknown> {
     const self = this
     return Effect.gen(function* () {
       if (!self.includes(sessionID) || self.registry.scopeKind(sessionID) !== "assignment") return false
       if (self.#retired.has(sessionID)) return true
-      const messages = yield* self.ctx.session.context({ sessionID: sessionID as SessionCompaction["sessionID"] })
-      const markers = messages.filter(message => message.type === "compaction").map(message => message.metadata?.writhelm)
-      if (!markers.length) return false
-      const frame = yield* io(signal => self.registry.workerContext(sessionID, signal))
-      if (frame.finishedHandoff !== true || frame.checkpointReferenceJSON === null) return false
-      return markers.some(m => m !== null && typeof m === "object" && (m as any).finishedHandoff === true
-        && contextJSON((m as any).checkpoint) === frame.checkpointReferenceJSON)
+      return yield* nativeWorkerRetired(self.ctx,self.registry,sessionID)
     })
   }
   compact(event: SessionCompaction): Effect.Effect<void, unknown> {

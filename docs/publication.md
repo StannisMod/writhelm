@@ -525,3 +525,16 @@ logs/XML, generated output and dependencies remain excluded. Author checks do no
 installed lifecycle ordering, provider accounting/cancellation, physical source/writer safety,
 abnormal recovery, other-platform qualification or complete H1 operation. Effect-native runtime
 composition and remaining pilot/release gates are not represented as complete by this checkpoint.
+
+## Effect-native context composition scope P22 — local source checkpoint
+
+Under the owner's instruction to commit and continue implementation, admit the three exact P22
+source exceptions in `.gitignore`, accompanying changes to admitted adapter sources/tests/package
+exports/README and this publication/ignore record. Newly authored AGPL-3.0-only code composes the
+existing approved task-context protocols in the native Effect lifetime; synthetic tests do not call
+a provider. Real service/Git/HTTP component fixtures retain explicit mocked native/profile effects.
+
+No private task/evidence/session/stand material, generated output, credentials, dependency source
+or binary is admitted. This source checkpoint does not establish installed module sharing/hook
+ordering, request cancellation/accounting, source/writer safety, abnormal recovery, Windows/macOS
+qualification or full H1 operation. No push, live model call or stand restart is authorized here.

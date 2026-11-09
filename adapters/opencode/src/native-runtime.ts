@@ -21,8 +21,10 @@ import type { NativeCredentialRegistry } from "./native-credentials.js"
 import { NativeInitialAdapter } from "./native-initial.js"
 import { NativeInitialStart } from "./native-initial-start.js"
 import type { SessionContext,SessionModelRequest,SessionPrompt } from "@opencode/plugin/promise/session"
+import { nativeContextAdmission } from "./native-context-reference.js"
 
-type RuntimeReference=Readonly<{hostId:string;pid:number;registry:NativeCredentialRegistry;
+export type RuntimeReference=Readonly<{hostId:string;pid:number;registry:NativeCredentialRegistry;
+  sources:NativeContextSources;custody:LinuxNativeCustody;deployment:LinuxNativeCustody;controllerSessionID:string;
   bridge:ProtectedNativeBridge;adapter:ConnectedNativeAdapter;initial:NativeInitialAdapter;
   admitContext(sessionID:string,event?:SessionContext):Promise<void>;admitTool(sessionID:string):Promise<void>;admitModel(event:SessionModelRequest):Promise<void>;
   admitPrompt(event:SessionPrompt):Promise<void>}>
@@ -72,7 +74,10 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
   await Promise.all([...new Set([...restored, ...config.assignmentSessionIDs])].map(sessionID => bridge.manage(sessionID)))
   const adapter = new ConnectedNativeAdapter(ctx, native.session, bridge, config.hostId)
   const deployment=new LinuxNativeCustody(path.join(config.root,"bootstrap"),forbidden);await deployment.initialize()
-  const initial=new NativeInitialAdapter(ctx,native,registry,custody,deployment,config.controllerSessionID,sid=>adapter.owns(sid))
+  const initial=new NativeInitialAdapter(ctx,native,registry,custody,deployment,config.controllerSessionID,sid=>adapter.owns(sid),async event=>{
+    const binding=await registry.inspect(event.sessionID);if(!binding)nativeUnavailable()
+    await nativeContextAdmission(config.root,config.hostId,binding.workRoot).request(event)
+  })
   const initialStart=new NativeInitialStart(registry,initial,custody,deployment,config.controllerSessionID,config.projectId)
   await adapter.register(sid=>adapter.owns(sid)||!initial.managed(sid))
   await initial.register()
@@ -120,7 +125,8 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
         },options:{codemode:false}})
     })
     await ctx.tool.reload()
-    const reference:RuntimeReference=Object.freeze({hostId:config.hostId,pid:process.pid,registry,bridge,adapter,initial,
+    const reference:RuntimeReference=Object.freeze({hostId:config.hostId,pid:process.pid,registry,bridge,adapter,initial,sources,custody,deployment,
+      controllerSessionID:config.controllerSessionID,
       async admitContext(sessionID:string,event?:SessionContext){
         if(adapter.owns(sessionID)){if(event&&initial.managed(sessionID))await initial.configure(event);await adapter.admitContext(sessionID)}
         else await initial.admitContext(sessionID,event)
