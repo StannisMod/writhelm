@@ -44,7 +44,8 @@ result shapes, with bounded digest-checked prepare attachments. It is not regist
 journal, service or tool; decoding an attachment does not publish or authorize it.
 Candidate pure reservation, binding, effect-observation and result transitions use the same graph
 and claims, but depend on service-derived current authority, qualification and native facts not yet wired.
-An isolated original-state-to-candidate footprint validator exists; it is not yet a Git history auditor.
+An isolated original-state-to-candidate footprint validator and successful-command reconstruction
+exist; they are not yet a Git history auditor or receipt verifier.
 See [upstream provenance](docs/upstream.md).
 Writhelm is an independent project, not an official upstream distribution.
 

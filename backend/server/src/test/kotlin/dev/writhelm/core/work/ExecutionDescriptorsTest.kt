@@ -177,6 +177,12 @@ class ExecutionDescriptorsTest {
         val facts=MechanicalReservationFacts(base,setOf(qualification),setOf(workspace))
         val actor=WorkExecutionInput(f.data.authorship.declaredBy,uid(1122),f.data.producer.controllerId,null,null)
         val reserve=MechanicalCommand(uid(1123),project,MechanicalCommandOperation.Reserve(id,f.data,listOf(MechanicalResourceExpectation(f.data.resources.single(),null))))
+        fun replay(effect:WorkEffect,name:String,original:MechanicalCommand) {
+            val recovered=reconstructMechanicalTransition(effect.before,effect.after,name,original.requestKey,effect.result,actor)
+            val wire=MechanicalCommandCodec()
+            assertContentEquals(wire.encode(original),wire.encode(recovered),name)
+            assertEquals(wire.fingerprint(original),wire.fingerprint(recovered),name)
+        }
         assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> { reducer.reserve(initial,reserve,actor,facts.copy(qualifiedProfiles=emptySet())) }.problem)
         assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> { reducer.reserve(initial,reserve,actor,facts.copy(qualifiedWorkspaces=emptySet())) }.problem)
         assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> { reducer.reserve(initial,reserve,actor,facts.copy(base=base.copy(approvedDecisions=emptySet()))) }.problem)
@@ -204,6 +210,7 @@ class ExecutionDescriptorsTest {
         assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> { reducer.reserve(revisedState,reserve,actor,facts) }.problem)
         val reserved=reducer.reserve(initial,reserve,actor,facts)
         validateMechanicalTransition(initial,reserved.after,reserve,actor)
+        replay(reserved,"reserve_mechanical",reserve)
         assertFailsWith<WorkFault> { validateMechanicalTransition(initial,reserved.after,reserve,actor.copy(controllerId=uid(1140))) }
         assertFailsWith<WorkFault> { validateMechanicalTransition(initial,initial,reserve,actor) }
         assertSame(initial,reserved.before);assertEquals(f.assignment.identity,reserved.result)
@@ -219,6 +226,7 @@ class ExecutionDescriptorsTest {
         assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> { reducer.bind(reserved.after,bind,actor,facts.copy(qualifiedProfiles=emptySet())) }.problem)
         val bound=reducer.bind(reserved.after,bind,actor,facts)
         validateMechanicalTransition(reserved.after,bound.after,bind,actor)
+        replay(bound,"bind_mechanical",bind)
         assertEquals("bound",(bound.after.records.getValue(f.assignment.identity).payload as WMechanicalAssignmentsPayload).value.state)
         assertEquals(bound.after.records,WorkState.restore(project,bound.after.records.values,bound.after.bodies.values,modelVersion=3).records)
         assertEquals(WorkProblem.STALE_GENERATION,assertFailsWith<WorkFault> { reducer.bind(bound.after,bind,actor,facts) }.problem)
@@ -232,12 +240,19 @@ class ExecutionDescriptorsTest {
         assertEquals(WorkProblem.NATIVE_UNKNOWN,assertFailsWith<WorkFault> { reducer.prepare(bound.after,prepare,actor,pendingFacts) }.problem)
         val prepared=MechanicalPreparedObservation(f.data.producer.operation,effect,f.data.producer.workspaceId,f.data.producer.nativeHostId)
         val withPrepared=pendingFacts.copy(prepared=setOf(prepared))
+        val alreadyRetained=bound.after.derive(emptyList(),listOf(Utf8Content.fromText(patchText)))
+        assertEquals(WorkProblem.DUPLICATE_ID,assertFailsWith<WorkFault> { reducer.prepare(alreadyRetained,prepare,actor,withPrepared) }.problem)
         val withoutBodies=prepare.copy(operation=(prepare.operation as MechanicalCommandOperation.Prepare).copy(bodies=emptyList()))
         assertEquals(WorkProblem.MISSING_BODY,assertFailsWith<WorkFault> { reducer.prepare(bound.after,withoutBodies,actor,withPrepared) }.problem)
         val active=reducer.prepare(bound.after,prepare,actor,withPrepared)
         validateMechanicalTransition(bound.after,active.after,prepare,actor)
+        replay(active,"prepare_mechanical_effect",prepare)
+        assertFailsWith<WorkFault> { reconstructMechanicalTransition(bound.after,active.after,"bind_mechanical",prepare.requestKey,active.result,actor) }
         val wrongPrepare=prepare.copy(operation=(prepare.operation as MechanicalCommandOperation.Prepare).copy(bodies=emptyList()))
         assertFailsWith<WorkFault> { validateMechanicalTransition(bound.after,active.after,wrongPrepare,actor) }
+        val bodiesAlreadyPresent=bound.after.derive(emptyList(),listOf(Utf8Content.fromText(patchText),Utf8Content.fromText(witnessText)))
+        val noBodies=reducer.prepare(bodiesAlreadyPresent,wrongPrepare,actor,withPrepared)
+        assertTrue(noBodies.addedBodies.isEmpty());replay(noBodies,"prepare_mechanical_effect",wrongPrepare)
         assertEquals("active",(active.after.records.getValue(f.assignment.identity).payload as WMechanicalAssignmentsPayload).value.state)
         assertEquals(setOf(patch.digest,witness.digest),active.addedBodies.map { it.digest }.toSet())
         val unknown=effect.copy(generation=1,outcome="unknown",observedDigest=effect.afterDigest)
@@ -246,6 +261,7 @@ class ExecutionDescriptorsTest {
         assertEquals(WorkProblem.NATIVE_UNKNOWN,assertFailsWith<WorkFault> { reducer.observe(active.after,observe,actor,pendingFacts) }.problem)
         val held=reducer.observe(active.after,observe,actor,pendingFacts.copy(observations=setOf(unknownFact)))
         validateMechanicalTransition(active.after,held.after,observe,actor)
+        replay(held,"observe_mechanical_effect",observe)
         assertEquals("unknown",(held.after.records.getValue(f.assignment.identity).payload as WMechanicalAssignmentsPayload).value.state)
         assertEquals("held",(held.after.record(WorkFamily.CLAIMS,f.data.resources.single()).payload as WClaimsPayload).value.state)
         val applied=unknown.copy(generation=2,outcome="applied",writerCompleted=true,observations=listOf(f.source))
@@ -255,6 +271,7 @@ class ExecutionDescriptorsTest {
         val fenced=notFenced.copy(writersFenced=true)
         val completed=reducer.observe(held.after,finish,actor,pendingFacts.copy(observations=setOf(fenced)))
         validateMechanicalTransition(held.after,completed.after,finish,actor)
+        replay(completed,"observe_mechanical_effect",finish)
         assertEquals("completed",(completed.after.records.getValue(f.assignment.identity).payload as WMechanicalAssignmentsPayload).value.state)
         assertEquals("held",(completed.after.record(WorkFamily.CLAIMS,f.data.resources.single()).payload as WClaimsPayload).value.state)
         assertEquals(completed.after.records,WorkState.restore(project,completed.after.records.values,completed.after.bodies.values,modelVersion=3).records)
@@ -267,6 +284,7 @@ class ExecutionDescriptorsTest {
             operation=(recordRetro.operation as MechanicalCommandOperation.Retrospective).copy(generation=3)),actor,base) }.problem)
         val retroResult=reducer.retrospective(completed.after,recordRetro,actor,base)
         validateMechanicalTransition(completed.after,retroResult.after,recordRetro,actor)
+        replay(retroResult,"record_mechanical_retrospective",recordRetro)
         val retroRef=retroResult.after.reference(WorkFamily.RETROSPECTIVES,retrospectiveKey)
         val native=(initial.resolve(f.data.authorship.sourceResults.single()).payload as WResultsPayload).value
         val result=MechanicalResultDescriptor(WorkKey.Id(project,uid(1136)),MechanicalResult(f.data.task,WAssignmentSubject(id,0),f.data.producer,
@@ -280,6 +298,7 @@ class ExecutionDescriptorsTest {
         assertEquals(WorkProblem.INVALID_BINDING,assertFailsWith<WorkFault> { reducer.submit(retroResult.after,submit,actor.copy(principalId=uid(1138)),submission) }.problem)
         val submitted=reducer.submit(retroResult.after,submit,actor,submission)
         validateMechanicalTransition(retroResult.after,submitted.after,submit,actor)
+        replay(submitted,"submit_mechanical_result",submit)
         assertFailsWith<WorkFault> { validateMechanicalTransition(retroResult.after,submitted.after,submit,actor.copy(principalId=uid(1138))) }
         assertEquals(result.key,submitted.result.key)
         assertEquals("held",(submitted.after.record(WorkFamily.CLAIMS,f.data.resources.single()).payload as WClaimsPayload).value.state)

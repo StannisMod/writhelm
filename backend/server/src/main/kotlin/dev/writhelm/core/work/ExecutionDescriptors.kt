@@ -326,7 +326,10 @@ internal class MechanicalReservationReducer {
         val op=WorkRecordIdentity(WorkFamily.NATIVE_INTENTS,v.operation)
         workRequire(op !in h.records,WorkProblem.DUPLICATE_ID)
         val bodies=v.bodies.map { Utf8Content.fromText(it.body) }
-        val added=bodies.filter { body -> h.bodies[body.digest]?.let { workRequire(it==body,WorkProblem.DIGEST_MISMATCH);false } ?: true }
+        // A redundant attachment cannot be reconstructed from the resulting H->C body diff.
+        // Exact-key replay must resolve its receipt before evaluation, never reattach old bytes.
+        bodies.forEach { body -> workRequire(body.digest !in h.bodies,WorkProblem.DUPLICATE_ID) }
+        val added=bodies
         listOf(v.effect.patch,v.effect.witnesses).forEach { ref ->
             val body=h.bodies[ref.digest] ?: added.singleOrNull { it.digest==ref.digest }
             workRequire(body!=null && body.sizeBytes==ref.byteLength,WorkProblem.MISSING_BODY)
@@ -473,8 +476,8 @@ internal fun validateMechanicalTransition(h:WorkState,c:WorkState,original:Mecha
                 c.records[key]?.payload==WMechanicalOperationsPayload(v.effect),WorkProblem.INVALID_BINDING)
             validateMechanicalRecordEdge(h.records[id],c.records[id]);validateMechanicalRecordEdge(null,c.records[key])
             val supplied=v.bodies.map { Utf8Content.fromText(it.body) }
-            supplied.forEach { body -> workRequire(c.bodies[body.digest]==body && (h.bodies[body.digest]==null || h.bodies[body.digest]==body),WorkProblem.DIGEST_MISMATCH) }
-            val expected=supplied.filter { it.digest !in h.bodies }.map { it.digest }.toSet()
+            supplied.forEach { body -> workRequire(body.digest !in h.bodies && c.bodies[body.digest]==body,WorkProblem.DIGEST_MISMATCH) }
+            val expected=supplied.map { it.digest }.toSet()
             sameBodyChanges(expected);workRequire(changed==setOf(id,key),WorkProblem.INVALID_SUBJECT)
         }
         is MechanicalCommandOperation.Observe -> {
@@ -505,6 +508,68 @@ internal fun validateMechanicalTransition(h:WorkState,c:WorkState,original:Mecha
             workRequire(changed==setOf(key),WorkProblem.INVALID_SUBJECT);sameBodyChanges(emptySet())
         }
     }
+}
+
+/** Reconstruct the canonical command for a *successful* mechanical H->C edge from validated
+ * snapshots, receipt operation/request key and exact result identity. Newly supplied prepare
+ * attachments are exactly the new C bodies: redundant existing attachments are refused by the
+ * reducer. Caller MUST compare the reconstructed fingerprint/result to the actual receipt and
+ * separately authenticate original-H authority and native evidence. Rejections have no reconstructible
+ * subject by design and are not handled here. No store or Git history integration is enabled. */
+internal fun reconstructMechanicalTransition(h:WorkState,c:WorkState,operation:String,requestKey:UUID,
+    result:WorkRecordIdentity,actor:WorkExecutionInput):MechanicalCommand {
+    workRequire(h.modelVersion==3 && c.modelVersion==3 && h.projectId==c.projectId && result.key.projectId==h.projectId,WorkProblem.FOREIGN_REFERENCE)
+    val project=h.projectId
+    fun assignment(id:UUID):MechanicalAssignment=(h.records[WorkRecordIdentity(WorkFamily.ASSIGNMENTS,WorkKey.Id(project,id))]?.payload as? WMechanicalAssignmentsPayload)?.value
+        ?: throw WorkFault(WorkProblem.WRONG_ASSIGNMENT)
+    val v:MechanicalCommandOperation=when(operation) {
+        "reserve_mechanical" -> {
+            workRequire(result.family==WorkFamily.ASSIGNMENTS,WorkProblem.INVALID_REFERENCE)
+            val id=(result.key as WorkKey.Id).id
+            val a=(c.records[result]?.payload as? WMechanicalAssignmentsPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+            val resources=a.bindingData.resources.map { key -> MechanicalResourceExpectation(key,(h.records[WorkRecordIdentity(WorkFamily.CLAIMS,key)]?.payload as? WClaimsPayload)?.value?.generation) }
+            MechanicalCommandOperation.Reserve(id,a.bindingData,resources)
+        }
+        "bind_mechanical" -> {
+            workRequire(result.family==WorkFamily.ASSIGNMENTS,WorkProblem.INVALID_REFERENCE)
+            val id=(result.key as WorkKey.Id).id;val old=assignment(id)
+            val next=(c.records[result]?.payload as? WMechanicalAssignmentsPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+            MechanicalCommandOperation.Bind(id,old.generation,next.binding ?: throw WorkFault(WorkProblem.INVALID_BINDING))
+        }
+        "prepare_mechanical_effect" -> {
+            workRequire(result.family==WorkFamily.NATIVE_INTENTS,WorkProblem.INVALID_REFERENCE)
+            val effect=(c.records[result]?.payload as? WMechanicalOperationsPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+            val a=assignment(effect.assignment.assignmentId)
+            val bodies=(c.bodies.keys-h.bodies.keys).map { digest ->
+                val body=c.bodies.getValue(digest);MechanicalAttachment(digest,body.text())
+            }
+            MechanicalCommandOperation.Prepare(effect.assignment.assignmentId,a.generation,result.key as WorkKey.Id,effect,bodies)
+        }
+        "observe_mechanical_effect" -> {
+            workRequire(result.family==WorkFamily.NATIVE_INTENTS,WorkProblem.INVALID_REFERENCE)
+            val old=(h.records[result]?.payload as? WMechanicalOperationsPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+            val next=(c.records[result]?.payload as? WMechanicalOperationsPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+            val a=assignment(old.assignment.assignmentId)
+            MechanicalCommandOperation.Observe(old.assignment.assignmentId,a.generation,result.key as WorkKey.Id,old.generation,next)
+        }
+        "record_mechanical_retrospective" -> {
+            workRequire(result.family==WorkFamily.RETROSPECTIVES,WorkProblem.INVALID_REFERENCE)
+            val data=(c.records[result]?.payload as? WRetrospectivesPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+            MechanicalCommandOperation.Retrospective(data.assignment.assignmentId,assignment(data.assignment.assignmentId).generation,result.key as WorkKey.Id,data)
+        }
+        "submit_mechanical_result" -> {
+            workRequire(result.family==WorkFamily.RESULTS,WorkProblem.INVALID_REFERENCE)
+            val data=(c.records[result]?.payload as? WMechanicalResultsPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+            val a=assignment(data.assignment.assignmentId)
+            val effect=(h.record(WorkFamily.NATIVE_INTENTS,a.bindingData.producer.operation).payload as? WMechanicalOperationsPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+            MechanicalCommandOperation.Submit(data.assignment.assignmentId,a.generation,effect.generation,MechanicalResultDescriptor(result.key as WorkKey.Id,data))
+        }
+        else -> throw WorkFault(WorkProblem.INVALID_SUBJECT)
+    }
+    val codec=MechanicalCommandCodec()
+    val command=codec.decode(codec.encode(MechanicalCommand(requestKey,project,v)))
+    validateMechanicalTransition(h,c,command,actor)
+    return command
 }
 
 /** Candidate record2 shapes only. This codec has no authenticated command, writer or native effect. */

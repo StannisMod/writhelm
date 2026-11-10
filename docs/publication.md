@@ -687,8 +687,10 @@ source, actual credentials, patch or private run material is introduced.
 ## Candidate mechanical transition audit scope P36 — local source checkpoint
 
 Extend the existing mechanical descriptor and synthetic test paths with a candidate exact H-to-C
-row/body footprint validator for the six command4 operations. It checks original identities,
-generation edges, claimed actor/controller binding and unchanged unrelated records/bodies. This is
+row/body footprint validator and successful-command reconstruction for the six command4 operations.
+Prepare rejects redundant previously retained attachments so newly supplied bodies are reconstructible
+from the actual C-minus-H body set; exact-key replay remains a receipt lookup, not re-execution.
+The validator checks original identities, generation edges, claimed actor/controller binding and unchanged unrelated records/bodies. This is
 not a Git journal auditor: actual receipts, historical/current authority, readiness and native
 capture/fencing facts still require separate original-H verification before model3 publication.
 No store writer, service route or primary applying tool is enabled; no new paths or private data.
