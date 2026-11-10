@@ -224,6 +224,28 @@ class ExecutionDescriptorsTest {
         val resultRef=state.reference(WorkFamily.RESULTS,resultRecord.identity.key)
         assertEquals(resultRecord,state.resolve(resultRef))
         assertEquals(result.task,recordTasks(resultRecord).single())
+        // A subsequent correction must inherit every declared predecessor author, not only the
+        // immediately preceding physical producer or the newest submitter.
+        val nextTask=WorkKey.TaskRevision(project,uid(980),0);val nextPlan=WorkKey.Revision(project,uid(981),0)
+        val nextManifestKey=WorkKey.Id(project,uid(982));val nextResource=WorkKey.Resource(project,uid(983));val nextId=uid(984)
+        fun row(k:WorkKey,p:WorkPayload)=WorkRecord(WorkRecordIdentity(payloadFamily(p),k),p)
+        val task=(state.record(WorkFamily.TASK_REVISIONS,f.data.task).payload as WTaskRevisionsPayload).value
+        val nextTaskRow=row(nextTask,WTaskRevisionsPayload(task.copy(verificationPlan=nextPlan,
+            dependencies=listOf(WDependency(f.data.task,"implemented",resultRef,emptyList(),"exact mechanical predecessor")))))
+        val nextPlanRow=row(nextPlan,WVerificationPlansPayload((state.record(WorkFamily.VERIFICATION_PLANS,task.verificationPlan!!).payload as WVerificationPlansPayload).value.copy(task=nextTask)))
+        val nextManifestRow=row(nextManifestKey,WInputManifestsPayload((state.resolve(f.data.manifest).payload as WInputManifestsPayload).value.copy(task=nextTask)))
+        val nextManifest=WorkReference(nextManifestRow.identity,codec.digest(nextManifestRow))
+        val nextProducer=MechanicalProducerDescriptor(uid(985),uid(986),uid(987),uid(988),WorkKey.Id(project,uid(989)))
+        val author=uid(990)
+        val nextBinding=MechanicalBinding(nextTask,nextManifest,f.data.profile,nextProducer,listOf(nextResource),
+            DeclaredResultAuthorship(author,listOf(author)+f.data.authorship.authors,listOf(resultRef)))
+        val nextAssignment=row(WorkKey.Id(project,nextId),WMechanicalAssignmentsPayload(MechanicalAssignment(0,nextBinding,null,"reserved")))
+        val nextClaim=row(nextResource,WClaimsPayload(WClaims(0,WClaimsHolderVariant0Value(WClaimsHolderVariant0("assignment",WAssignmentSubject(nextId,0))),nextProducer.workspaceId,"held",emptyList(),f.source)))
+        val newRows=listOf(nextTaskRow,nextPlanRow,nextManifestRow,nextAssignment,nextClaim)
+        val derived=state.derive(newRows,emptyList())
+        assertEquals(derived.records,WorkState.restore(project,derived.records.values,derived.bodies.values,modelVersion=3).records)
+        val omitted=nextAssignment.copy(payload=WMechanicalAssignmentsPayload(MechanicalAssignment(0,nextBinding.copy(authorship=nextBinding.authorship.copy(authors=listOf(author))),null,"reserved")))
+        assertFailsWith<CodecFault> { state.derive(newRows.filter { it.identity!=nextAssignment.identity }+omitted,emptyList()) }
         assertEquals(state.records,WorkState.restore(project,state.records.values,state.bodies.values,modelVersion=3).records)
         assertFailsWith<WorkFault> { state.derive(listOf(f.assignment.copy(payload=WMechanicalAssignmentsPayload(assignment.copy(generation=5,state="active")))),emptyList()) }
         // These are synthetic stored facts; no authenticated command or physical writer proof is asserted.
