@@ -3,12 +3,65 @@ package dev.writhelm.core.store
 
 import dev.writhelm.core.codec.*
 import dev.writhelm.core.work.*
+import dev.writhelm.core.knowledge.Digest
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.*
 import org.junit.jupiter.api.Test
 
 class H1JournalTest {
+    @Test fun `candidate mechanical receipt4 has closed ordered effects and legacy readers refuse it`() {
+        val project=id(2);val assignment=WorkKey.Id(project,id(80));val claim=WorkKey.Resource(project,id(81))
+        val binding=WorkKey.AssignmentBinding(project,assignment.id,0);val intent=WorkKey.Id(project,id(82))
+        val retro=WorkKey.Id(project,id(83));val result=WorkKey.Id(project,id(84))
+        fun key(family:WorkFamily,k:WorkKey)=RecordKey("work",family.tag,StrictJson.decode(WorkIdentityCodec().encodeKey(k)))
+        fun write(family:WorkFamily,k:WorkKey,before:String?,after:String)=WriteDescriptor(key(family,k),before,after)
+        val aNew=write(WorkFamily.ASSIGNMENTS,assignment,null,"1".repeat(64))
+        val aUpdate=write(WorkFamily.ASSIGNMENTS,assignment,"1".repeat(64),"2".repeat(64))
+        val claimNew=write(WorkFamily.CLAIMS,claim,null,"3".repeat(64))
+        val bindNew=write(WorkFamily.ASSIGNMENT_BINDINGS,binding,null,"4".repeat(64))
+        val intentNew=write(WorkFamily.NATIVE_INTENTS,intent,null,"5".repeat(64))
+        val intentUpdate=write(WorkFamily.NATIVE_INTENTS,intent,"5".repeat(64),"6".repeat(64))
+        val retroNew=write(WorkFamily.RETROSPECTIVES,retro,null,"7".repeat(64))
+        val resultNew=write(WorkFamily.RESULTS,result,null,"8".repeat(64))
+        val body=WriteDescriptor(RecordKey("work","bodies",str("a".repeat(64))),null,"a".repeat(64))
+        fun receipt(op:String,family:WorkFamily,k:WorkKey,generation:Long?,hash:String,writes:List<WriteDescriptor>)=MechanicalReceipt(
+            id(1),MechanicalReceiptIdentity(id(3),project,op,id(5)),Digest.parse("b".repeat(64)),GitOid("sha1","c".repeat(40)),id(4),
+            MechanicalReceiptOutcome.Success(MechanicalReceiptResult(WorkRecordIdentity(family,k),generation,Digest.parse(hash))),writes.sortedBy { it.path })
+        val examples=listOf(
+            receipt("reserve_mechanical",WorkFamily.ASSIGNMENTS,assignment,0,"1".repeat(64),listOf(aNew,claimNew)),
+            receipt("bind_mechanical",WorkFamily.ASSIGNMENTS,assignment,1,"2".repeat(64),listOf(aUpdate,bindNew)),
+            receipt("prepare_mechanical_effect",WorkFamily.NATIVE_INTENTS,intent,0,"5".repeat(64),listOf(aUpdate,intentNew,body)),
+            receipt("observe_mechanical_effect",WorkFamily.NATIVE_INTENTS,intent,1,"6".repeat(64),listOf(aUpdate,intentUpdate)),
+            receipt("record_mechanical_retrospective",WorkFamily.RETROSPECTIVES,retro,null,"7".repeat(64),listOf(retroNew)),
+            receipt("submit_mechanical_result",WorkFamily.RESULTS,result,null,"8".repeat(64),listOf(resultNew)))
+        // Independently computed from canonical JSON and length-framed SHA-256.
+        assertEquals("commands/receipts/cc/cc8d76941df7c9acc8f366d572e43b3f19b7ae4983119f264229d9e20658bcd3.json",examples.first().path)
+        examples.forEach { r ->
+            val bytes=MechanicalReceiptCodec.encode(r)
+            assertContentEquals(bytes,MechanicalReceiptCodec.encode(MechanicalReceiptCodec.decode(bytes,r.path)))
+            assertEquals(StoreProblem.UNSUPPORTED,assertFailsWith<StoreFault> { JournalCodec.decode(bytes,r.path) }.problem)
+            assertFailsWith<StoreFault> { MechanicalReceiptCodec.decode(bytes,"commands/receipts/incorrect.json") }
+        }
+        assertFailsWith<StoreFault> { receipt("reserve_mechanical",WorkFamily.ASSIGNMENTS,assignment,0,"1".repeat(64),listOf(aNew)) }
+        assertFailsWith<StoreFault> { receipt("bind_mechanical",WorkFamily.ASSIGNMENTS,assignment,0,"2".repeat(64),listOf(aUpdate,bindNew)) }
+        assertFailsWith<StoreFault> { receipt("prepare_mechanical_effect",WorkFamily.NATIVE_INTENTS,intent,0,"6".repeat(64),listOf(aUpdate,intentNew)) }
+        assertFailsWith<StoreFault> { receipt("observe_mechanical_effect",WorkFamily.NATIVE_INTENTS,intent,1,"6".repeat(64),listOf(aUpdate,intentUpdate,body)) }
+        assertFailsWith<StoreFault> { receipt("submit_mechanical_result",WorkFamily.RESULTS,result,null,"8".repeat(64),listOf(resultNew,body)) }
+        assertFailsWith<StoreFault> { receipt("reserve_mechanical",WorkFamily.ASSIGNMENTS,assignment,0,"1".repeat(64),listOf(aNew,claimNew,claimNew)) }
+        assertFailsWith<StoreFault> { receipt("prepare_mechanical_effect",WorkFamily.NATIVE_INTENTS,intent,0,"5".repeat(64),
+            listOf(aUpdate,intentNew,WriteDescriptor(RecordKey("work","bodies",str("a".repeat(64))),null,"b".repeat(64)))) }
+        val foreignClaim=write(WorkFamily.CLAIMS,WorkKey.Resource(id(99),id(81)),null,"3".repeat(64))
+        assertFailsWith<StoreFault> { receipt("reserve_mechanical",WorkFamily.ASSIGNMENTS,assignment,0,"1".repeat(64),listOf(aNew,foreignClaim)) }
+        val successBytes=MechanicalReceiptCodec.encode(examples.first());val root=StrictJson.decode(successBytes) as JObject
+        val payload=root.entries.getValue("payload") as JObject;val outcome=payload.entries.getValue("outcome") as JObject
+        val replay=JObject(root.entries+("payload" to JObject(payload.entries+("outcome" to JObject(outcome.entries+("domainReplayed" to JBoolean(true)))))))
+        assertFailsWith<StoreFault> { MechanicalReceiptCodec.decode(StrictJson.encode(replay),examples.first().path) }
+        val rejection=MechanicalReceipt(id(1),MechanicalReceiptIdentity(id(3),project,"reserve_mechanical",id(5)),Digest.parse("b".repeat(64)),GitOid("sha1","c".repeat(40)),id(4),MechanicalReceiptOutcome.Rejected(WorkProblem.CLAIM_CONFLICT),emptyList())
+        assertContentEquals(MechanicalReceiptCodec.encode(rejection),MechanicalReceiptCodec.encode(MechanicalReceiptCodec.decode(MechanicalReceiptCodec.encode(rejection),rejection.path)))
+        assertFailsWith<StoreFault> { MechanicalReceipt(id(1),rejection.identity,rejection.fingerprint,rejection.validatedAt,id(4),MechanicalReceiptOutcome.Rejected(WorkProblem.NATIVE_UNKNOWN),emptyList()) }
+        assertFailsWith<StoreFault> { MechanicalReceipt(id(1),rejection.identity,rejection.fingerprint,rejection.validatedAt,id(4),rejection.outcome,listOf(aNew)) }
+    }
     private fun frozen(name: String): JsonValue {
         val root=Path.of(System.getenv("WRITHELM_H1_READY_ROOT") ?: error("WRITHELM_H1_READY_ROOT required for exact frozen vectors"))
         return StrictJson.decode(Files.readAllBytes(root.resolve(name)),JsonLimits(bytes=8*1024*1024,stringBytes=2*1024*1024,depth=128,collection=8192,tokens=500000))
