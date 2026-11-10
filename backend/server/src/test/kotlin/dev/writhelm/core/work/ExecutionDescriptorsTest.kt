@@ -192,6 +192,9 @@ class ExecutionDescriptorsTest {
         val ref=WorkReference(WorkRecordIdentity(WorkFamily.ASSIGNMENT_BINDINGS,bindingKey),Digest.of("binding".toByteArray()))
         val bind=MechanicalCommand(uid(963),project,MechanicalCommandOperation.Bind(id,1,ref))
         assertEquals(bind,codec.decode(codec.encode(bind)))
+        // Independently calculated using sorted compact UTF-8 JSON and big-endian length-framed
+        // SHA-256 over the literal command4 domain and envelope without requestKey.
+        assertEquals("e5260842d4f6ac2bf5178ab69265e333c8ef1c579cead17b290f92b782741077",codec.fingerprint(bind).hex)
         assertFailsWith<CodecFault> { codec.encode(bind.copy(operation=(bind.operation as MechanicalCommandOperation.Bind).copy(assignmentId=uid(964)))) }
         assertFailsWith<CodecFault> { codec.encode(bind.copy(operation=(bind.operation as MechanicalCommandOperation.Bind).copy(generation=-1))) }
         val root=StrictJson.decode(bytes) as JObject
