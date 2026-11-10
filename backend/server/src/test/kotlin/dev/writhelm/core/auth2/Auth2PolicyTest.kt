@@ -14,6 +14,26 @@ import java.nio.file.Path
 import kotlin.test.*
 
 class Auth2PolicyTest {
+    @Test fun mechanicalControllerPrerequisiteUsesCurrentCredentialControllerAndDispatchGrant() {
+        val f=Fixture();val state=f.registered()
+        token(plannerKey) { key ->
+            assertEquals(planner,state.authenticateMechanicalController(key,project,controller)?.credential?.principalId)
+            assertNull(state.authenticateMechanicalController(key,project,aid(999)))
+            assertNull(state.authenticateMechanicalController(key,aid(998),controller))
+        }
+        token(ownerKey) { assertNull(state.authenticateMechanicalController(it,project,controller)) } // project owner is not this controller
+        token(workerKey) { assertNull(state.authenticateMechanicalController(it,project,controller)) } // delegated worker is not controller
+        val work=f.work(AssignmentPhase.ACTIVE,1,true)
+        val grants=state.records().map { row -> if(row is Auth2Record.WorkGrants && row.value.enrollment==Enrollment(planner,project))
+            Auth2Record.WorkGrants(WorkGrant(row.value.enrollment,row.value.generation,row.value.permissions.filterNot { it==WorkPermission.TASK_DISPATCH })) else row }
+        val revoked=f.state(grants,state.policy,work)
+        token(plannerKey) { assertNull(revoked.authenticateMechanicalController(it,project,controller)) }
+        val keys=state.records().map { row -> if(row is Auth2Record.Key && row.value.credential.id==plannerKey)
+            Auth2Record.Key(row.value.copy(credential=row.value.credential.copy(status=CredentialStatus.REVOKED,generation=1))) else row }
+        val revokedKey=f.state(keys,state.policy,work)
+        token(plannerKey) { assertNull(revokedKey.authenticateMechanicalController(it,project,controller)) }
+        // This tests one prerequisite only, not a service operation, task/claim scope or replay.
+    }
     @TestFactory fun actualFrozenRoleStateMatrix() : List<org.junit.jupiter.api.DynamicTest> {
         val current=Path.of(requireNotNull(System.getenv("WRITHELM_COORDINATION_READY_ROOT")))
         val matrix=(StrictJson.decode(Files.readAllBytes(current.resolve("operation-role-state-matrix.json")),

@@ -45,6 +45,13 @@ internal class Auth2State private constructor(
     }
     private fun dispatch(c: ScopedCredential, project: UUID, id: UUID): Boolean =
         controller(c,project)==id && workAllows(c,project,WorkPermission.TASK_DISPATCH)
+    /** One current-policy prerequisite for future mechanical command4 admission. expectedController
+     * must be obtained from the validated canonical assignment/binding, never from a body actor or
+     * a cached session claim. This does not authorize task scope, replay, evidence or native effects. */
+    internal fun authenticateMechanicalController(presented:PresentedCredential,project:UUID,expectedController:UUID):ScopedCredential? {
+        val c=authenticate(presented,project) ?: return null
+        return c.takeIf { dispatch(it,project,expectedController) }
+    }
     internal fun requireProjection(work: AuthWorkProjection) { graph(work.basis==basis) }
     internal fun boundIdentityMatches(a: AssignmentAuthorityFacts, d: Delegation): Boolean = a.boundExecution?.let {
         it.principalId==d.binding.principalId && credentials[it.credentialId]?.let { c ->

@@ -644,3 +644,11 @@ not an authorization for replay, proof of absence or writer fencing. The helper 
 an authenticated service/controller route; closed-effect validation, actual operation admission,
 recovery and per-platform qualification remain separate. No new paths, external source, actual
 patches, identities, worktrees or private custody contents are published.
+
+## Current mechanical-controller prerequisite scope P32 — local source checkpoint
+
+Extend the already admitted auth2 state and synthetic policy-test paths with an internal current
+credential/controller/TASK_DISPATCH prerequisite for a future mechanical operation. This is not a
+new permission, command, replay rule, endpoint, task/claim authorization or native effect. The
+expected controller must come from validated canonical bindings, not a body identity. No new
+publication path, external source, credential, real store data or private evidence is introduced.
