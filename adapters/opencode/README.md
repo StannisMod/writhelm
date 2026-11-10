@@ -285,7 +285,7 @@ fenced by `build-guard.cjs`.
 
 ```text
 node --require ./build-guard.cjs ./build-schemas.mjs
-node --require ./build-guard.cjs ./node_modules/typescript/bin/tsc6 -p tsconfig.json
+node --max-old-space-size=1024 --require ./build-guard.cjs ./node_modules/typescript/bin/tsc6 -p tsconfig.json
 node --require ./build-guard.cjs ./node_modules/vite/bin/vite.js build --configLoader native
 node --max-old-space-size=128 --conditions=browser --test --test-concurrency=1 build/tests/native.test.js
 ```
