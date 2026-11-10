@@ -5,6 +5,7 @@ import dev.writhelm.core.codec.*
 import dev.writhelm.core.auth2.*
 import dev.writhelm.core.work.*
 import dev.writhelm.core.store.*
+import dev.writhelm.core.knowledge.Digest
 import dev.writhelm.service.*
 import io.ktor.server.cio.*
 import io.ktor.server.engine.*
@@ -28,6 +29,57 @@ import kotlin.test.*
  * Not an installed host, physical-writer, actual server-incarnation or compaction qualification. */
 class NativeBridgeJourneyTest {
     private fun port()=ServerSocket(0,1,InetAddress.getByName("127.0.0.1")).use { it.localPort }
+    @Test @Timeout(60) fun protectedTransportSelectorIsIndependentlyCheckedAgainstActualNodeProcess() {
+        val node=Path.of(requireNotNull(System.getenv("WRITHELM_NODE")))
+        val js=Path.of(requireNotNull(System.getenv("WRITHELM_NATIVE_JS")))
+        val root=Files.createTempDirectory("writhelm-process-peer-")
+        val script=root.resolve("peer.mjs")
+        Files.writeString(script,"""
+            import {pathToFileURL} from 'node:url'
+            import {createHash} from 'node:crypto'
+            import * as fs from 'node:fs/promises'
+            import {createReadStream} from 'node:fs'
+            const {listenNativeTransport}=await import(pathToFileURL(process.env.TEST_NATIVE_JS+'/src/native-transport.js').href)
+            const origin=process.env.TEST_ORIGIN, proof=Buffer.from(process.env.TEST_PROOF,'base64url')
+            const hash=createHash('sha256');for await(const chunk of createReadStream('/proc/self/exe'))hash.update(chunk)
+            const digest=hash.digest('hex'),stat=await fs.readFile('/proc/self/stat','utf8')
+            const start=stat.slice(stat.lastIndexOf(')')+1).trim().split(/\s+/)[19]
+            const boot=(await fs.readFile('/proc/sys/kernel/random/boot_id','utf8')).trim()
+            const epoch=createHash('sha256').update(JSON.stringify(['native-linux-process-v1',digest,boot,process.pid,start,origin])).digest('hex')
+            const selector=()=>({pid:process.env.TEST_SPOOF==='1'?process.pid+1:process.pid,nativeOrigin:origin})
+            const transport=await listenNativeTransport(origin,proof,{}, {},undefined,undefined,undefined,selector)
+            console.log(JSON.stringify({pid:process.pid,digest,epoch}))
+            process.stdin.once('data',async()=>{await transport.close();process.exit(0)})
+            process.stdin.resume()
+        """.trimIndent())
+        val proof=ByteArray(32) { 31 }
+        fun testPeer(spoof:Boolean) {
+            val origin="http://127.0.0.1:${port()}"
+            val builder=ProcessBuilder(node.toString(),script.toString()).redirectError(root.resolve("peer-$spoof.stderr").toFile())
+            builder.environment()["TEST_ORIGIN"]=origin
+            builder.environment()["TEST_NATIVE_JS"]=js.toString()
+            builder.environment()["TEST_PROOF"]=Base64.getUrlEncoder().withoutPadding().encodeToString(proof)
+            builder.environment()["TEST_SPOOF"]=if(spoof)"1" else "0"
+            val peer=builder.start()
+            try {
+                val ready=StrictJson.decode(requireNotNull(peer.inputStream.bufferedReader().readLine()).toByteArray()).fields("pid","digest","epoch")
+                val epoch=ready.getValue("epoch").string();val pin=PinnedNativeExecutable("fixture-node",digest(ready.getValue("digest")))
+                HttpConnectedNativeControl(origin,proof).use { client ->
+                    val actual=client.observeProcess(epoch,pin)
+                    if(spoof)assertNull(actual) else assertEquals(ObservedNativeProcess(pin.version,pin.digest,epoch),actual)
+                    assertNull(client.observeProcess("0".repeat(64),pin))
+                    assertNull(client.observeProcess(epoch,pin.copy(digest=Digest.of("wrong executable".toByteArray()))))
+                }
+                HttpConnectedNativeControl(origin,ByteArray(32) { 32 }).use { client ->
+                    assertNull(client.observeProcess(epoch,pin))
+                }
+                peer.outputStream.write(1);peer.outputStream.flush()
+                assertTrue(peer.waitFor(10,TimeUnit.SECONDS));assertEquals(0,peer.exitValue())
+            } finally { if(peer.isAlive) { peer.destroy();if(!peer.waitFor(5,TimeUnit.SECONDS))peer.destroyForcibly() } }
+        }
+        testPeer(false);testPeer(true);proof.fill(0)
+        // Real protected HTTP transport and Linux Node process; OpenCode SDK/session is not run.
+    }
     /** Real local fault proxy: drain the ORIGINAL successful peer reply, then lose its delivery.
      * No synthetic alternate response or assertion of native completion is supplied to the engine. */
     private class DropFirstDelivery(private val destination: String,private val lost: (String)->Unit={}): AutoCloseable {

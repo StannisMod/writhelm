@@ -37,6 +37,12 @@ internal class HttpConnectedNativeControl(origin: String,proof: ByteArray): Conn
     private fun key(e: ConnectedEnvelope)=e.continuation.id.toString()
     fun identity(): Map<String,JsonValue> = call("identity").fields("hostId","controllerId","principalId","credentialId","sessionID","epoch","workRoots")
     fun startupIdentity(): Map<String,JsonValue> = call("identity-immutable").fields("hostId","controllerId","principalId","credentialId","sessionID","epoch","workRoots")
+    /** Authenticated peer supplies only a process selector. Executable digest and incarnation are
+     * independently read from Linux by the service; this is not a profile qualification. */
+    fun observeProcess(epoch: String,pin: PinnedNativeExecutable): ObservedNativeProcess?=try {
+        val selector=call("process-selector").fields("pid","nativeOrigin")
+        LinuxNativeProcessObserver.observe(selector.getValue("pid").long(),selector.getValue("nativeOrigin").string(),epoch,pin)
+    } catch(_: Exception) { null }
     /** Narrow immutable source witness, not a raw artifact disclosure. May be called by runtime
      * capture under the service monitor: receiving peer must not query current service policy. */
     override fun sourceProof(locator: java.util.UUID): JsonValue?=try { call("source-proof","locatorId" to uuid(locator),maximum=1024*1024) }

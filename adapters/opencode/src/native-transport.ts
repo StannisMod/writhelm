@@ -15,7 +15,8 @@ import type { NativeInitialAdapter } from "./native-initial.js"
  * service authority; effect methods perform their own current scoped checks through the bridge.
  * This transport installs no plugin/profile and starts no model or native host. */
 export async function listenNativeTransport(origin: string, proof: Uint8Array, bridge: ProtectedNativeBridge,
-  adapter: ConnectedNativeAdapter, sources?: NativeContextSources, workers?: NativePassiveWorkers,initial?:NativeInitialAdapter): Promise<Readonly<{ close(): Promise<void> }>> {
+  adapter: ConnectedNativeAdapter, sources?: NativeContextSources, workers?: NativePassiveWorkers,initial?:NativeInitialAdapter,
+  processSelector?:()=>Readonly<{pid:number;nativeOrigin:string}>): Promise<Readonly<{ close(): Promise<void> }>> {
   exactLoopback(origin, nativeUnavailable)
   if (process.platform !== "linux" || proof.length !== 32) nativeUnavailable()
   const secret = Buffer.from(proof), url = new URL(origin)
@@ -50,7 +51,14 @@ export async function listenNativeTransport(origin: string, proof: Uint8Array, b
       const input = exactJSON(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)), nativeUnavailable)
       if (!isLosslessNumber(input.formatVersion) || input.formatVersion.value !== "1") nativeUnavailable()
       let result: unknown = null
-      if(input.operation==="initial-proof"){
+      if(input.operation==="process-selector"){
+        closedObject(input,["formatVersion","operation"])
+        if(!processSelector)nativeUnavailable()
+        const selected=processSelector()
+        if(!Number.isSafeInteger(selected.pid)||selected.pid<=0||selected.pid>2147483647)nativeUnavailable()
+        exactLoopback(selected.nativeOrigin,nativeUnavailable)
+        result={pid:selected.pid,nativeOrigin:selected.nativeOrigin}
+      } else if(input.operation==="initial-proof"){
         closedObject(input,["formatVersion","operation","intentId"])
         if(!initial||typeof input.intentId!=="string")nativeUnavailable()
         result=await initial.witness(input.intentId)

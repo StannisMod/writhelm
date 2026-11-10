@@ -134,8 +134,17 @@ test("real local credential transport with MOCK service policy/native session: p
     await new Promise<void>((resolve, reject) => reserve.close(error => error ? reject(error) : resolve()))
     const nativeOrigin = `http://127.0.0.1:${reserved.port}`, peerProof = Buffer.alloc(32, 3)
     const transport = await listenNativeTransport(nativeOrigin, peerProof, restoredBridge,
-      new ConnectedNativeAdapter(ctx, {} as Pick<SessionApi, "inbox" | "message" | "context">, restoredBridge, id))
+      new ConnectedNativeAdapter(ctx, {} as Pick<SessionApi, "inbox" | "message" | "context">, restoredBridge, id),
+      undefined, undefined, undefined, () => ({ pid: process.pid, nativeOrigin: origin }))
     try {
+      const selector = (auth: string, extra = {}) => fetch(nativeOrigin + "/native/v1", { method: "POST",
+        headers: { "Content-Type": "application/json", "X-Writhelm-Native-Proof": auth },
+        body: JSON.stringify({ formatVersion: 1, operation: "process-selector", ...extra }) })
+      assert.equal((await selector("A".repeat(43))).status, 403)
+      assert.equal((await selector(peerProof.toString("base64url"), { pid: process.pid })).status, 403)
+      const observed=await selector(peerProof.toString("base64url"))
+      assert.equal(observed.status, 200)
+      assert.deepEqual((await observed.json() as any).result, { pid: process.pid, nativeOrigin: origin })
       const call = (auth: string, operation: string, extra = {}) => fetch(nativeOrigin + "/native/v1", { method: "POST",
         headers: { "Content-Type": "application/json", "X-Writhelm-Native-Proof": auth },
         body: JSON.stringify({ formatVersion: 1, operation, key: target.key, digest: target.digest, ...extra }) })

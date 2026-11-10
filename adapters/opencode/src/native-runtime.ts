@@ -108,7 +108,8 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
     preparations=new NativeWorkerPreparation(registry,workers,custody,config.controllerSessionID,
       {projectId:config.projectId,controllerId:config.controllerId,hostId:config.hostId,worktreeParent:p.worktreeParent})
   }
-    transport = await listenNativeTransport(config.transportOrigin, config.transportProof, bridge, adapter, sources,workers,initial)
+    transport = await listenNativeTransport(config.transportOrigin, config.transportProof, bridge, adapter, sources,workers,initial,
+      ()=>({pid:process.pid,nativeOrigin:config.nativeOrigin}))
     const initialRecovery=await initial.restore() // no model wake, canonical transition or incarnation adoption
     tools = await registerConnectedWorkTools(ctx, registry)
     preparationTool=await ctx.tool.transform(editor=>{

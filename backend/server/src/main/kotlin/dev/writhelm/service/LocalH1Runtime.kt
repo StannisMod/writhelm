@@ -39,6 +39,10 @@ internal class LocalH1Runtime private constructor(val app: H1Application,private
             uuid(identity.getValue("principalId"))==access.principalId && uuid(identity.getValue("credentialId"))==credential)
         val session=identity.getValue("sessionID").string();require(session.matches(Regex("ses_[A-Za-z0-9_-]{1,128}")))
         val epoch=identity.getValue("epoch").string();require(epoch.matches(Regex("[0-9a-f]{64}")))
+        // Match the existing pinned native-host executable independently through /proc. A selector
+        // from the authenticated peer is not itself a process or profile qualification.
+        val pin=PinnedNativeExecutable("2.2.5",Digest.parse("8d060e1d2fbb9bb44cf09ae6ed1f3f6a7cff070b5227e2f90970132b23a92050"))
+        require(native.observeProcess(epoch,pin)!=null) { "native process identity unavailable" }
         val areas=(identity.getValue("workRoots") as? JArray)?.values ?: error("actual native areas required")
         require(areas.isNotEmpty() && areas.size<=257)
         areas.forEach { outside(root,Path.of(it.string()).toRealPath()) }
