@@ -264,6 +264,14 @@ class ExecutionDescriptorsTest {
         for(author in result.authorship.authors)assertFailsWith<CodecFault> { ready.derive(listOf(WorkRecord(acceptanceKey,WAcceptancesPayload(acceptance.copy(acceptedBy=author)))),emptyList()) }
         val accepted=ready.derive(listOf(WorkRecord(acceptanceKey,WAcceptancesPayload(acceptance))),emptyList())
         assertEquals(accepted.records,WorkState.restore(project,accepted.records.values,accepted.bodies.values,modelVersion=3).records)
+        val alternatePlan=mechanicalPlan.copy(id=uid(998))
+        val rootPlan=(state.record(WorkFamily.VERIFICATION_PLANS,mechanicalPlan).payload as WVerificationPlansPayload).value
+        val alternateRow=WorkRecord(WorkRecordIdentity(WorkFamily.VERIFICATION_PLANS,alternatePlan),WVerificationPlansPayload(rootPlan.copy(previous=mechanicalPlan)))
+        val alternateReport=report.copy(identity=WorkRecordIdentity(WorkFamily.VERIFICATION_REPORTS,WorkKey.Id(project,uid(999))),
+            payload=WVerificationReportsPayload((report.payload as WVerificationReportsPayload).value.copy(plan=alternatePlan)))
+        val withAlternate=ready.derive(listOf(alternateRow,alternateReport),emptyList())
+        val alternateRef=withAlternate.reference(WorkFamily.VERIFICATION_REPORTS,alternateReport.identity.key)
+        assertFailsWith<CodecFault> { withAlternate.derive(listOf(WorkRecord(acceptanceKey,WAcceptancesPayload(acceptance.copy(reports=listOf(alternateRef))))),emptyList()) }
         // Synthetic structural gate only: no command route, current rights, actual checks or acceptance claim.
         // A subsequent correction must inherit every declared predecessor author, not only the
         // immediately preceding physical producer or the newest submitter.
