@@ -47,6 +47,7 @@ internal fun encodeWorkPayload(v: WorkPayload): JsonValue = when(v) {
     is WLoadedViewsPayload -> encodeWLoadedViews(v.value)
     is WProfilesPayload -> encodeWProfiles(v.value)
     is WMechanicalProfilesPayload -> ExecutionDescriptorCodec().encodeMechanicalProfile(v.value)
+    is WMechanicalAssignmentsPayload,is WMechanicalBindingsPayload,is WMechanicalOperationsPayload -> MechanicalWorkCodec().encode(v)
     is WAssignmentsPayload -> encodeWAssignments(v.value)
     is WAssignmentBindingsPayload -> encodeWAssignmentBindings(v.value)
     is WClaimsPayload -> encodeWClaims(v.value)
@@ -81,6 +82,9 @@ internal fun payloadFamily(v: WorkPayload): WorkFamily = when(v) {
     is WLoadedViewsPayload -> WorkFamily.LOADED_VIEWS
     is WProfilesPayload -> WorkFamily.PROFILES
     is WMechanicalProfilesPayload -> WorkFamily.PROFILES
+    is WMechanicalAssignmentsPayload -> WorkFamily.ASSIGNMENTS
+    is WMechanicalBindingsPayload -> WorkFamily.ASSIGNMENT_BINDINGS
+    is WMechanicalOperationsPayload -> WorkFamily.NATIVE_INTENTS
     is WAssignmentsPayload -> WorkFamily.ASSIGNMENTS
     is WAssignmentBindingsPayload -> WorkFamily.ASSIGNMENT_BINDINGS
     is WClaimsPayload -> WorkFamily.CLAIMS

@@ -42,6 +42,8 @@ internal fun recordGeneration(p: WorkPayload): Long? = when(p) {
     is WAssignmentsPayload -> p.value.generation
     is WClaimsPayload -> p.value.generation
     is WNativeIntentsPayload -> p.value.generation
+    is WMechanicalAssignmentsPayload -> p.value.generation
+    is WMechanicalOperationsPayload -> p.value.generation
     is WDeliveriesPayload -> p.value.generation
     is WIntegrationIntentsPayload -> p.value.generation
     is WContinuationsPayload -> p.value.generation
@@ -75,10 +77,10 @@ internal class WorkState private constructor(
         val r=records[ref.identity] ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
         workRequire(codec.digest(r)==ref.digest,WorkProblem.DIGEST_MISMATCH);return r
     }
-    fun assignment(id: UUID): WAssignments = (record(WorkFamily.ASSIGNMENTS,WorkKey.Id(projectId,id)).payload as WAssignmentsPayload).value
+    fun assignment(id: UUID): WAssignments = (record(WorkFamily.ASSIGNMENTS,WorkKey.Id(projectId,id)).payload as? WAssignmentsPayload)?.value ?: throw WorkFault(WorkProblem.WRONG_ASSIGNMENT)
     fun task(key: WorkKey.TaskRevision): WTaskRevisions = (record(WorkFamily.TASK_REVISIONS,key).payload as WTaskRevisionsPayload).value
     fun binding(subject: WAssignmentSubject): WAssignmentBindings = (record(WorkFamily.ASSIGNMENT_BINDINGS,
-        WorkKey.AssignmentBinding(projectId,subject.assignmentId,subject.generation)).payload as WAssignmentBindingsPayload).value
+        WorkKey.AssignmentBinding(projectId,subject.assignmentId,subject.generation)).payload as? WAssignmentBindingsPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_BINDING)
     fun reference(f: WorkFamily,k: WorkKey): WorkReference {
         val r=record(f,k);return WorkReference(r.identity,codec.digest(r))
     }
@@ -131,7 +133,12 @@ internal class WorkState private constructor(
                 graph(recordGeneration(r.payload)==nextGeneration(recordGeneration(old.payload)!!))
                 if(old.payload is WContinuationsPayload && r.payload is WContinuationsPayload)
                     validateContinuationEdge(old.payload.value,r.payload.value)
-            } else if(r.identity.family.mutable)graph(recordGeneration(r.payload)==0L)
+                validateMechanicalEdge(old.payload,r.payload)
+            } else if(r.identity.family.mutable) {
+                graph(recordGeneration(r.payload)==0L)
+                if(r.payload is WMechanicalAssignmentsPayload)graph(r.payload.value.state=="reserved")
+                if(r.payload is WMechanicalOperationsPayload)graph(r.payload.value.outcome=="pending")
+            }
             val encoded=codec.encodeRecord(r)
             bytes-=sizes[r.identity] ?: 0
             if(encoded.size>budget.aggregateBytes-bytes)refuse(CodecProblem.RESOURCE_UNAVAILABLE)
@@ -172,7 +179,21 @@ internal class WorkState private constructor(
         }
         fun required(f: WorkFamily,k: WorkKey): WorkRecord { edge();graph(k.projectId==projectId);val id=WorkRecordIdentity(f,k);dependency(id);return records[id] ?: refuse(CodecProblem.INVALID_GRAPH) }
         fun task(k: WorkKey.TaskRevision)=required(WorkFamily.TASK_REVISIONS,k)
-        fun bind(s: WAssignmentSubject)=required(WorkFamily.ASSIGNMENT_BINDINGS,WorkKey.AssignmentBinding(projectId,s.assignmentId,s.generation))
+        fun bind(s: WAssignmentSubject)=required(WorkFamily.ASSIGNMENT_BINDINGS,WorkKey.AssignmentBinding(projectId,s.assignmentId,s.generation)).also { graph(it.payload is WAssignmentBindingsPayload) }
+        fun mechanicalBinding(v:MechanicalBinding) {
+            val t=(task(v.task).payload as WTaskRevisionsPayload).value
+            graph(t.state=="executable" && t.executionProfile==v.profile)
+            graph(required(WorkFamily.PROFILES,v.profile).payload is WMechanicalProfilesPayload)
+            val manifest=resolve(v.manifest).payload as? WInputManifestsPayload ?: refuse(CodecProblem.INVALID_GRAPH)
+            graph(manifest.value.task==v.task && manifest.value.base==t.base)
+            val selected=t.dependencies.mapNotNull { it.selectedResult }.toSet()
+            graph(selected.isNotEmpty() && v.authorship.sourceResults.toSet()==selected)
+            val authors=selected.flatMap { ref ->
+                val source=resolve(ref).payload as? WResultsPayload ?: refuse(CodecProblem.INVALID_GRAPH)
+                listOf(source.value.producer.principalId)
+            }.toSet()
+            graph(v.authorship.declaredBy in v.authorship.authors && v.authorship.authors.containsAll(authors))
+        }
         val checked=selected?.map { records.getValue(it) } ?: records.values
         checked.forEach { r ->
             current=r.identity
@@ -193,6 +214,42 @@ internal class WorkState private constructor(
             links.records.forEach { ref -> edge();dependency(ref.identity);try { resolve(ref) }catch(_: WorkFault) { refuse(CodecProblem.INVALID_GRAPH) } }
             links.bodies.forEach { b -> edge();graph(bodies[b.digest]?.sizeBytes==b.byteLength) }
             when(val p=r.payload) {
+                is WMechanicalAssignmentsPayload -> {
+                    val a=p.value;val v=a.bindingData;mechanicalBinding(v)
+                    val subject=WAssignmentSubject((r.identity.key as WorkKey.Id).id,0)
+                    a.binding?.let { ref ->
+                        graph(ref.identity.key==WorkKey.AssignmentBinding(projectId,subject.assignmentId,0))
+                        graph((resolve(ref).payload as? WMechanicalBindingsPayload)?.value==v)
+                    }
+                    v.resources.forEach { resource ->
+                        val c=(required(WorkFamily.CLAIMS,resource).payload as WClaimsPayload).value
+                        if(a.state!="completed")graph(c.state!="free" && (c.holder as? WClaimsHolderVariant0Value)?.value?.subject==subject && c.workspaceId==v.producer.workspaceId)
+                        if(a.state in setOf("reserved","bound","active"))graph(c.state=="held")
+                    }
+                    if(a.state in setOf("active","unknown","completed")) {
+                        val o=(required(WorkFamily.NATIVE_INTENTS,v.producer.operation).payload as? WMechanicalOperationsPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
+                        graph(o.assignment==subject && o.binding==a.binding)
+                        if(a.state=="active")graph(o.outcome=="pending")
+                        if(a.state=="unknown")graph(o.outcome=="unknown")
+                        if(a.state=="completed")graph(o.writerCompleted)
+                    } else graph(WorkRecordIdentity(WorkFamily.NATIVE_INTENTS,v.producer.operation) !in records)
+                }
+                is WMechanicalBindingsPayload -> {
+                    mechanicalBinding(p.value)
+                    val key=r.identity.key as WorkKey.AssignmentBinding;graph(key.generation==0L)
+                    val a=(required(WorkFamily.ASSIGNMENTS,WorkKey.Id(projectId,key.assignmentId)).payload as? WMechanicalAssignmentsPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
+                    graph(a.bindingData==p.value && a.binding?.identity==r.identity)
+                }
+                is WMechanicalOperationsPayload -> {
+                    val o=p.value
+                    val b=(resolve(o.binding).payload as? WMechanicalBindingsPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
+                    graph(b.producer.operation==r.identity.key && o.binding.identity.key==WorkKey.AssignmentBinding(projectId,o.assignment.assignmentId,0))
+                    val profile=(required(WorkFamily.PROFILES,b.profile).payload as? WMechanicalProfilesPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
+                    graph(o.patch.byteLength<=profile.maximumPatchBytes)
+                    val a=(required(WorkFamily.ASSIGNMENTS,WorkKey.Id(projectId,o.assignment.assignmentId)).payload as? WMechanicalAssignmentsPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
+                    graph(a.binding==o.binding && a.bindingData==b && a.state in setOf("active","unknown","completed"))
+                    if(o.writerCompleted)graph(o.observations.isNotEmpty())
+                }
                 is WTaskRevisionsPayload -> p.value.let { v ->
                     v.dependencies.forEach { task(it.producer); it.selectedResult?.let { selected ->
                         graph(selected.identity.family==WorkFamily.RESULTS)
@@ -221,6 +278,8 @@ internal class WorkState private constructor(
                     }
                 }
                 is WAssignmentBindingsPayload -> p.value.let { v ->
+                    val id=(r.identity.key as WorkKey.AssignmentBinding).assignmentId
+                    graph(records[WorkRecordIdentity(WorkFamily.ASSIGNMENTS,WorkKey.Id(projectId,id))]?.payload !is WMechanicalAssignmentsPayload)
                     task(v.task);graph(required(WorkFamily.PROFILES,v.profile).payload is WProfilesPayload)
                     val e=v.execution;val i=v.intendedExecution
                     graph(e.executionId==i.executionId && e.nativeHostId==i.nativeHostId && e.nativeSessionId==i.nativeSessionId && e.workspaceId==v.workspaceId)
@@ -266,14 +325,18 @@ internal class WorkState private constructor(
                     catch(_: WorkFault) { refuse(CodecProblem.INVALID_GRAPH) } }
                 is WRetrospectivesPayload -> { graph((bind(p.value.assignment).payload as WAssignmentBindingsPayload).value.task==p.value.task)
                     p.value.result?.let { try { ownHandoffOutcome(p.value.task,p.value.assignment,it) }catch(_: WorkFault) { refuse(CodecProblem.INVALID_GRAPH) } } }
-                is WRecoveriesPayload -> { required(WorkFamily.ASSIGNMENTS,WorkKey.Id(projectId,p.value.assignment.assignmentId)) }
-                is WNativeIntentsPayload -> { required(WorkFamily.ASSIGNMENTS,WorkKey.Id(projectId,p.value.assignment.assignmentId)) }
+                is WRecoveriesPayload -> { graph(required(WorkFamily.ASSIGNMENTS,WorkKey.Id(projectId,p.value.assignment.assignmentId)).payload is WAssignmentsPayload) }
+                is WNativeIntentsPayload -> { graph(required(WorkFamily.ASSIGNMENTS,WorkKey.Id(projectId,p.value.assignment.assignmentId)).payload is WAssignmentsPayload) }
                 is WClaimsPayload -> p.value.let { c ->
                     when(val holder=c.holder) {
                         is WClaimsHolderVariant0Value -> {
-                            val a=(required(WorkFamily.ASSIGNMENTS,WorkKey.Id(projectId,holder.value.subject.assignmentId)).payload as WAssignmentsPayload).value
-                            graph(holder.value.subject.generation<=a.executionGeneration)
-                            if(c.state=="held")graph(holder.value.subject.generation==a.executionGeneration && c.workspaceId==a.workspaceId && r.identity.key in a.requiredResources)
+                            when(val p=required(WorkFamily.ASSIGNMENTS,WorkKey.Id(projectId,holder.value.subject.assignmentId)).payload) {
+                                is WAssignmentsPayload -> { val a=p.value;graph(holder.value.subject.generation<=a.executionGeneration)
+                                    if(c.state=="held")graph(holder.value.subject.generation==a.executionGeneration && c.workspaceId==a.workspaceId && r.identity.key in a.requiredResources) }
+                                is WMechanicalAssignmentsPayload -> { graph(holder.value.subject.generation==0L)
+                                    if(c.state=="held")graph(c.workspaceId==p.value.bindingData.producer.workspaceId && r.identity.key in p.value.bindingData.resources) }
+                                else -> refuse(CodecProblem.INVALID_GRAPH)
+                            }
                         }
                         is WClaimsHolderVariant1Value -> {
                             val i=(required(WorkFamily.INTEGRATION_INTENTS,WorkKey.Id(projectId,holder.value.integrationIntentId)).payload as WIntegrationIntentsPayload).value
@@ -355,6 +418,19 @@ internal class WorkState private constructor(
             val executors=live.filter { it.intendedExecution.template=="executor-v1" }
             graph(executors.map { it.task.taskId }.distinct().size==executors.size)
         }
+        // Shared live workspace/task exclusion includes mechanical work even on incremental derive.
+        val mechanical=records.values.mapNotNull { (it.payload as? WMechanicalAssignmentsPayload)?.value }
+        val mechanicalLive=mechanical.filter { it.state!="completed" }
+        val nativeLive=records.values.mapNotNull { (it.payload as? WAssignmentsPayload)?.value }.filter { it.state !in setOf("completed","replaced") }
+        val workspaces=mechanicalLive.map { it.bindingData.producer.workspaceId }+nativeLive.map { it.workspaceId }
+        graph(workspaces.distinct().size==workspaces.size)
+        val executorTasks=mechanicalLive.map { it.bindingData.task.taskId }+nativeLive.filter { it.intendedExecution.template=="executor-v1" }.map { it.task.taskId }
+        graph(executorTasks.distinct().size==executorTasks.size)
+        graph(mechanical.map { it.bindingData.producer.operation }.distinct().size==mechanical.size)
+        val mechanicalExecutions=mechanical.map { it.bindingData.producer.executionId }
+        graph(mechanicalExecutions.distinct().size==mechanicalExecutions.size)
+        val nativeExecutions=records.values.mapNotNull { (it.payload as? WAssignmentsPayload)?.value?.intendedExecution?.executionId }.toSet()
+        graph(mechanicalExecutions.none { it in nativeExecutions })
         val reverse=LinkedHashMap(reverseDependencies)
         discovered.forEach { (from,targets) ->
             dependencies[from].orEmpty().forEach { target ->reverse[target]=reverse[target].orEmpty()-from }

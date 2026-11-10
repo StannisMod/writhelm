@@ -39,6 +39,8 @@ internal fun WorkState.listSelectors(family: WorkFamily,taskId: UUID?): List<Wor
 internal fun recordTasks(r: WorkRecord): List<WorkKey.TaskRevision> = when(val p=r.payload) {
     is WTaskRevisionsPayload -> listOf(r.identity.key as WorkKey.TaskRevision)
     is WAssignmentsPayload -> listOf(p.value.task)
+    is WMechanicalAssignmentsPayload -> listOf(p.value.bindingData.task)
+    is WMechanicalBindingsPayload -> listOf(p.value.task)
     is WAssignmentBindingsPayload -> listOf(p.value.task)
     is WPlansPayload -> listOf(p.value.task)
     is WInputManifestsPayload -> listOf(p.value.task)

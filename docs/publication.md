@@ -602,4 +602,14 @@ test paths for explicit candidate model3 profile restoration in the same bounded
 external source, private fixtures or generated output is introduced. Legacy model2 bytes/readers stay
 unchanged; the legacy command3 reducer/registration and read2 codecs do not become model3 writers.
 Mechanical profiles cannot masquerade as native assignment/binding/controller profiles. Record2
-result/operation admission and new store/journal/service selection remain held, not silently enabled.
+result/service-operation admission and new store/journal/service selection remain held, not silently enabled.
+
+## Mechanical assignment/effect graph scope P28 — local source checkpoint
+
+Extend the existing execution-descriptor, work codec/state/registry/query and descriptor-test paths
+with closed candidate record2 mechanical assignment, immutable binding and retained original-operation
+shapes. Newly authored source and synthetic graph fixtures only; no new public path, external code,
+actual patch/identity/witness, native store or private run artifact. Shared claims, source-result author
+closure, cross-kind workspace exclusion and immutable original-effect edges are structural checks.
+Stored writerCompleted metadata is not verified physical termination; no command4/read3/journal4,
+store writer, authenticated admission, native port connection or primary tool is enabled here.

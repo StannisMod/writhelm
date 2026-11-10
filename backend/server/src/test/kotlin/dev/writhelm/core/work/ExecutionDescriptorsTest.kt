@@ -3,6 +3,7 @@ package dev.writhelm.core.work
 
 import dev.writhelm.core.codec.*
 import dev.writhelm.core.knowledge.Digest
+import dev.writhelm.core.knowledge.Utf8Content
 import org.junit.jupiter.api.Test
 import kotlin.test.*
 
@@ -133,5 +134,85 @@ class ExecutionDescriptorsTest {
         val mechanicalRow=WorkRecord(WorkRecordIdentity(WorkFamily.PROFILES,f.profileKey),WMechanicalProfilesPayload(profile().value))
         assertFailsWith<CodecFault> { WorkState.restore(project,f.state.records.values.filter { it.identity!=mechanicalRow.identity }+mechanicalRow,
             f.state.bodies.values,modelVersion=3) }
+    }
+    private data class MechanicalGraphFixture(val state:WorkState,val assignment:WorkRecord,val claim:WorkRecord,val data:MechanicalBinding,val source:WSource)
+    private fun mechanicalGraph():MechanicalGraphFixture {
+        val f=ReviewProbeFixture();f.active();val predecessor=f.result()
+        val selected=WorkCodec(modelVersion=3)
+        fun record(k:WorkKey,p:WorkPayload)=WorkRecord(WorkRecordIdentity(payloadFamily(p),k),p)
+        val task=WorkKey.TaskRevision(project,uid(950),0);val plan=WorkKey.Revision(project,uid(951),0)
+        val manifest=record(WorkKey.Id(project,uid(952)),WInputManifestsPayload((f.state.record(WorkFamily.INPUT_MANIFESTS,f.manifestKey).payload as WInputManifestsPayload).value.copy(task=task)))
+        val resource=WorkKey.Resource(project,uid(954));val assignmentId=uid(953)
+        val producer=MechanicalProducerDescriptor(uid(957),f.controller,uid(958),uid(955),WorkKey.Id(project,uid(956)))
+        val data=MechanicalBinding(task,WorkReference(manifest.identity,selected.digest(manifest)),key,producer,listOf(resource),
+            DeclaredResultAuthorship(f.actor.principalId,listOf(f.actor.principalId,f.execution.principalId),listOf(predecessor)))
+        val assignment=record(WorkKey.Id(project,assignmentId),WMechanicalAssignmentsPayload(MechanicalAssignment(0,data,null,"reserved")))
+        val claim=record(resource,WClaimsPayload(WClaims(0,WClaimsHolderVariant0Value(WClaimsHolderVariant0("assignment",WAssignmentSubject(assignmentId,0))),producer.workspaceId,"held",emptyList(),f.source)))
+        val rows=f.state.records.values+listOf(manifest,assignment,claim,record(key,WMechanicalProfilesPayload(profile().value)),
+            record(task,WTaskRevisionsPayload(f.task.copy(kind="remediation",executionProfile=key,verificationPlan=plan,
+                dependencies=listOf(WDependency(f.taskKey,"implemented",predecessor,emptyList(),"exact correction predecessor"))))),
+            record(plan,WVerificationPlansPayload(f.plan.copy(task=task))))
+        val state=WorkState.restore(project,rows,f.state.bodies.values,modelVersion=3)
+        return MechanicalGraphFixture(state,state.records.getValue(assignment.identity),state.records.getValue(claim.identity),
+            (state.records.getValue(assignment.identity).payload as WMechanicalAssignmentsPayload).value.bindingData,f.source)
+    }
+    @Test fun mechanicalAssignmentUsesRealSharedClaimsAndTaskSelectedPredecessorAuthorsWithoutNativeIdentity() {
+        val f=mechanicalGraph();val a=(f.assignment.payload as WMechanicalAssignmentsPayload).value
+        val bytes=WorkCodec(modelVersion=3).encodeRecord(f.assignment)
+        assertFalse(bytes.decodeToString().contains("nativeSessionId"));assertFalse(bytes.decodeToString().contains("credentialId"))
+        assertEquals(CodecProblem.UNSUPPORTED_FORMAT,assertFailsWith<CodecFault> { WorkCodec().decodeRecord(bytes) }.problem)
+        assertEquals(WorkProblem.WRONG_ASSIGNMENT,assertFailsWith<WorkFault> { f.state.assignment((f.assignment.identity.key as WorkKey.Id).id) }.problem)
+        for(field in listOf("nativeSessionId","credentialId","actor","model"))assertFailsWith<CodecFault> {
+            WorkCodec(modelVersion=3).decodeRecord(rewrite(bytes) { row ->val p=row.entries.getValue("payload") as JObject
+                JObject(row.entries+("payload" to JObject(p.entries+(field to str("injected"))))) })
+        }
+        val claim=(f.claim.payload as WClaimsPayload).value
+        assertFailsWith<CodecFault> { f.state.derive(listOf(f.claim.copy(payload=WClaimsPayload(claim.copy(generation=1,state="free",holder=null,workspaceId=null)))),emptyList()) }
+        assertFailsWith<CodecFault> { f.state.derive(listOf(f.claim.copy(payload=WClaimsPayload(claim.copy(generation=1,state="isolated")))),emptyList()) }
+        for(bad in listOf(a.bindingData.copy(producer=a.bindingData.producer.copy(workspaceId=uid(4))),
+            a.bindingData.copy(authorship=a.bindingData.authorship.copy(authors=listOf(a.bindingData.authorship.declaredBy))),
+            a.bindingData.copy(profile=WorkKey.Profile(project,uid(6),0)))) {
+            val changed=f.assignment.copy(payload=WMechanicalAssignmentsPayload(a.copy(bindingData=bad)))
+            assertFailsWith<CodecFault> { WorkState.restore(project,f.state.records.values.filter { it.identity!=changed.identity }+changed,f.state.bodies.values,modelVersion=3) }
+        }
+    }
+    @Test fun retainedUnknownMechanicalEffectCannotReleaseClaimsAndCompletedOriginalCannotBeRetargetedOrReopened() {
+        val f=mechanicalGraph();val codec=WorkCodec(modelVersion=3)
+        val id=(f.assignment.identity.key as WorkKey.Id).id;val subject=WAssignmentSubject(id,0)
+        val bindingRow=WorkRecord(WorkRecordIdentity(WorkFamily.ASSIGNMENT_BINDINGS,WorkKey.AssignmentBinding(project,id,0)),WMechanicalBindingsPayload(f.data))
+        val binding=WorkReference(bindingRow.identity,codec.digest(bindingRow))
+        var assignment=(f.assignment.payload as WMechanicalAssignmentsPayload).value.copy(generation=1,binding=binding,state="bound")
+        var state=f.state.derive(listOf(f.assignment.copy(payload=WMechanicalAssignmentsPayload(assignment)),bindingRow),emptyList())
+        val patch=Utf8Content.fromText("synthetic exact patch\n");val witnesses=Utf8Content.fromText("synthetic retained original witnesses\n")
+        var operation=MechanicalOperation(0,subject,binding,WorkBodyReference(patch.digest,patch.sizeBytes),WorkBodyReference(witnesses.digest,witnesses.sizeBytes),
+            Digest.of(byteArrayOf(1)),Digest.of(byteArrayOf(2)),"pending",null,false,emptyList(),emptyList())
+        val opId=WorkRecordIdentity(WorkFamily.NATIVE_INTENTS,f.data.producer.operation)
+        assignment=assignment.copy(generation=2,state="active")
+        assertFailsWith<CodecFault> { state.derive(listOf(f.assignment.copy(payload=WMechanicalAssignmentsPayload(assignment)),
+            WorkRecord(opId,WMechanicalOperationsPayload(operation.copy(outcome="unknown")))),listOf(patch,witnesses)) }
+        state=state.derive(listOf(f.assignment.copy(payload=WMechanicalAssignmentsPayload(assignment)),WorkRecord(opId,WMechanicalOperationsPayload(operation))),listOf(patch,witnesses))
+        for(row in state.records.values.filter { it.payload is WMechanicalAssignmentsPayload || it.payload is WMechanicalBindingsPayload || it.payload is WMechanicalOperationsPayload }) {
+            val bytes=codec.encodeRecord(row,true)
+            assertEquals(row,codec.decodeRecord(bytes,true))
+            assertEquals(CodecProblem.UNSUPPORTED_FORMAT,assertFailsWith<CodecFault> { WorkCodec().decodeRecord(bytes,true) }.problem)
+        }
+        for(bad in listOf(operation.copy(outcome="applied",observedDigest=operation.afterDigest),
+            operation.copy(writerCompleted=true),operation.copy(outcome="partial",writerCompleted=true,observedDigest=operation.afterDigest),
+            operation.copy(assignment=subject.copy(generation=1)),operation.copy(generation=-1))) {
+            assertFailsWith<CodecFault> { codec.encodeRecord(WorkRecord(opId,WMechanicalOperationsPayload(bad))) }
+        }
+        assignment=assignment.copy(generation=3,state="unknown")
+        operation=operation.copy(generation=1,outcome="unknown",observedDigest=operation.afterDigest)
+        state=state.derive(listOf(f.assignment.copy(payload=WMechanicalAssignmentsPayload(assignment)),WorkRecord(opId,WMechanicalOperationsPayload(operation))),emptyList())
+        val claim=(f.claim.payload as WClaimsPayload).value
+        val free=f.claim.copy(payload=WClaimsPayload(claim.copy(generation=1,state="free",holder=null,workspaceId=null)))
+        assertFailsWith<CodecFault> { state.derive(listOf(free),emptyList()) } // after bytes do not establish writer completion
+        assertFailsWith<WorkFault> { state.derive(listOf(WorkRecord(opId,WMechanicalOperationsPayload(operation.copy(generation=2,afterDigest=Digest.of(byteArrayOf(3)))))),emptyList()) }
+        operation=operation.copy(generation=2,outcome="applied",writerCompleted=true,observations=listOf(f.source))
+        assignment=assignment.copy(generation=4,state="completed")
+        state=state.derive(listOf(f.assignment.copy(payload=WMechanicalAssignmentsPayload(assignment)),WorkRecord(opId,WMechanicalOperationsPayload(operation)),free),emptyList())
+        assertEquals(state.records,WorkState.restore(project,state.records.values,state.bodies.values,modelVersion=3).records)
+        assertFailsWith<WorkFault> { state.derive(listOf(f.assignment.copy(payload=WMechanicalAssignmentsPayload(assignment.copy(generation=5,state="active")))),emptyList()) }
+        // These are synthetic stored facts; no authenticated command or physical writer proof is asserted.
     }
 }

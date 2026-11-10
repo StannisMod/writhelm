@@ -114,12 +114,17 @@ internal class WorkCodec(
         val f=StrictJson.decode(bytes,if(historical)historicalLimits else metadataLimits,unavailable=historical)
             .fields("formatVersion","family","key","payload")
         if(modelVersion==3 && f.getValue("formatVersion").long()==2L) {
-            // Candidate model3 currently admits mechanical profiles only. No arbitrary record2
+            // Candidate model3 admits explicit mechanical shapes only. No arbitrary record2
             // passthrough, descriptor map overlay or implicit upgrade of a legacy selected reader.
-            shape(f.getValue("family").string()=="profiles")
-            val p=ExecutionDescriptorCodec().decodeProfile(bytes,historical) as? MechanicalProfileDescriptor
-                ?: refuse(CodecProblem.INVALID_SHAPE)
-            return WorkRecord(WorkRecordIdentity(WorkFamily.PROFILES,p.key),WMechanicalProfilesPayload(p.value))
+            if(f.getValue("family").string()=="profiles") {
+                val p=ExecutionDescriptorCodec().decodeProfile(bytes,historical) as? MechanicalProfileDescriptor ?: refuse(CodecProblem.INVALID_SHAPE)
+                return WorkRecord(WorkRecordIdentity(WorkFamily.PROFILES,p.key),WMechanicalProfilesPayload(p.value))
+            }
+            val family=WorkFamily.entries.firstOrNull { it.tag==f.getValue("family").string() } ?: refuse(CodecProblem.INVALID_SHAPE)
+            val key=identityCodec.decodeKey(family,StrictJson.encode(f.getValue("key")))
+            val payload=MechanicalWorkCodec().decode(family,f.getValue("payload"),key.projectId)
+            sameProject(encodeWorkPayload(payload),key.projectId)
+            return WorkRecord(WorkRecordIdentity(family,key),payload)
         }
         version(f.getValue("formatVersion"))
         val family=WorkFamily.entries.firstOrNull { it.tag==f.getValue("family").string() } ?: refuse(CodecProblem.INVALID_SHAPE)
@@ -137,6 +142,13 @@ internal class WorkCodec(
             shape(modelVersion==3)
             val bytes=ExecutionDescriptorCodec().encodeProfile(MechanicalProfileDescriptor(v.identity.key as WorkKey.Profile,v.payload.value),historical)
             // Apply this selected reader's own limits as well as descriptor-specific constraints.
+            decodeRecord(bytes,historical);return bytes
+        }
+        if(v.payload is WMechanicalAssignmentsPayload || v.payload is WMechanicalBindingsPayload || v.payload is WMechanicalOperationsPayload) {
+            shape(modelVersion==3)
+            val lim=if(historical)historicalLimits else metadataLimits
+            val bytes=JsonConstruction.bounded(lim,{ _,_-> },historical) { StrictJson.encode(obj("formatVersion" to JNumber(2),"family" to str(v.identity.family.tag),
+                "key" to StrictJson.decode(identityCodec.encodeKey(v.identity.key)),"payload" to encodeWorkPayload(v.payload)),lim.bytes,unavailable=historical,maxDepth=lim.depth) }
             decodeRecord(bytes,historical);return bytes
         }
         val lim=if(historical)historicalLimits else metadataLimits

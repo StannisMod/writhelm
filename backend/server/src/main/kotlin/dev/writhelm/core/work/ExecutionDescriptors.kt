@@ -2,6 +2,7 @@
 package dev.writhelm.core.work
 
 import dev.writhelm.core.codec.*
+import dev.writhelm.core.knowledge.Digest
 import java.util.UUID
 
 /** Read alternatives, not an enabled writer/dispatch profile. Legacy bytes keep their old codec. */
@@ -27,6 +28,116 @@ internal data class MechanicalProducerDescriptor(
     override val executionId:UUID,val controllerId:UUID,val nativeHostId:UUID,
     override val workspaceId:UUID,val operation:WorkKey.Id
 ):ExecutionProducerDescriptor
+
+/** One bounded correction has one execution/operation and no native session or delegation.
+ * New work needs a new assignment, not an adoption/rebind of an uncertain original effect. */
+internal data class MechanicalBinding(
+    val task:WorkKey.TaskRevision,val manifest:WorkReference,val profile:WorkKey.Profile,
+    val producer:MechanicalProducerDescriptor,val resources:List<WorkKey.Resource>,val authorship:DeclaredResultAuthorship
+)
+internal data class MechanicalAssignment(val generation:Long,val bindingData:MechanicalBinding,val binding:WorkReference?,val state:String)
+internal data class MechanicalOperation(
+    val generation:Long,val assignment:WAssignmentSubject,val binding:WorkReference,
+    val patch:WorkBodyReference,val witnesses:WorkBodyReference,val beforeDigest:Digest,val afterDigest:Digest,
+    val outcome:String,val observedDigest:Digest?,val writerCompleted:Boolean,val evidence:List<WorkReference>,val observations:List<WSource>
+)
+internal data class WMechanicalAssignmentsPayload(val value:MechanicalAssignment):WorkPayload
+internal data class WMechanicalBindingsPayload(val value:MechanicalBinding):WorkPayload
+internal data class WMechanicalOperationsPayload(val value:MechanicalOperation):WorkPayload
+
+/** Candidate record2 shapes only. This codec has no authenticated command, writer or native effect. */
+internal class MechanicalWorkCodec {
+    private val execution=ExecutionDescriptorCodec()
+    private fun key(f:WorkFamily,v:JsonValue)=identityCodec.decodeKey(f,StrictJson.encode(v))
+    private fun ref(v:JsonValue,f:WorkFamily)=identityCodec.decodeReference(StrictJson.encode(v)).also { shape(it.identity.family==f) }
+    private fun key(v:WorkKey)=StrictJson.decode(identityCodec.encodeKey(v))
+    private fun ref(v:WorkReference)=StrictJson.decode(identityCodec.encodeReference(v))
+    private fun body(v:WorkBodyReference)=StrictJson.decode(identityCodec.encodeBodyReference(v))
+    fun decodeBinding(v:JsonValue,project:UUID):MechanicalBinding {
+        val f=v.fields("kind","task","manifest","profile","producer","resources","authorship")
+        shape(f.getValue("kind").string()=="mechanical-v1")
+        val producer=execution.decodeProducer(StrictJson.encode(f.getValue("producer")),project) as? MechanicalProducerDescriptor ?: refuse(CodecProblem.INVALID_SHAPE)
+        val authorship=execution.decodeAuthorship(StrictJson.encode(f.getValue("authorship")),project)
+        shape(authorship.sourceResults.isNotEmpty())
+        return MechanicalBinding(key(WorkFamily.TASK_REVISIONS,f.getValue("task")) as WorkKey.TaskRevision,
+            ref(f.getValue("manifest"),WorkFamily.INPUT_MANIFESTS),key(WorkFamily.PROFILES,f.getValue("profile")) as WorkKey.Profile,producer,
+            workList(f.getValue("resources"),1,256,true) { key(WorkFamily.CLAIMS,it) as WorkKey.Resource },authorship)
+    }
+    fun encodeBinding(v:MechanicalBinding):JsonValue=obj("kind" to str("mechanical-v1"),"task" to key(v.task),"manifest" to ref(v.manifest),
+        "profile" to key(v.profile),"producer" to StrictJson.decode(execution.encodeProducer(v.producer,v.task.projectId)),
+        "resources" to workArray(v.resources,1,256,true,::key),"authorship" to StrictJson.decode(execution.encodeAuthorship(v.authorship,v.task.projectId)))
+    fun decode(family:WorkFamily,v:JsonValue,project:UUID):WorkPayload=when(family) {
+        WorkFamily.ASSIGNMENT_BINDINGS -> WMechanicalBindingsPayload(decodeBinding(v,project))
+        WorkFamily.ASSIGNMENTS -> {
+            val f=v.fields("kind","generation","bindingData","binding","state")
+            shape(f.getValue("kind").string()=="mechanical-v1")
+            val generation=f.getValue("generation").long().also { shape(it>=0) }
+            val state=f.getValue("state").string().also { shape(it in setOf("reserved","bound","active","unknown","completed")) }
+            val binding=f.getValue("binding").let { if(it===JNull)null else ref(it,WorkFamily.ASSIGNMENT_BINDINGS) }
+            shape((state=="reserved")== (binding==null))
+            WMechanicalAssignmentsPayload(MechanicalAssignment(generation,decodeBinding(f.getValue("bindingData"),project),binding,state))
+        }
+        WorkFamily.NATIVE_INTENTS -> {
+            val f=v.fields("kind","generation","assignment","binding","patch","witnesses","beforeDigest","afterDigest","outcome","observedDigest","writerCompleted","evidence","observations")
+            shape(f.getValue("kind").string()=="mechanical-v1")
+            val generation=f.getValue("generation").long().also { shape(it>=0) }
+            val outcome=f.getValue("outcome").string().also { shape(it in setOf("pending","unknown","applied","not-applied","partial")) }
+            val before=digest(f.getValue("beforeDigest"));val after=digest(f.getValue("afterDigest"));shape(before!=after)
+            val observed=f.getValue("observedDigest").let { if(it===JNull)null else digest(it) }
+            val completed=workBoolean(f.getValue("writerCompleted"))
+            shape(completed==(outcome in setOf("applied","not-applied","partial")))
+            if(outcome=="pending")shape(observed==null)
+            if(outcome=="applied")shape(observed==after)
+            if(outcome=="not-applied")shape(observed==before)
+            if(outcome=="partial")shape(observed!=null && observed!=before && observed!=after)
+            val patch=identityCodec.decodeBodyReference(StrictJson.encode(f.getValue("patch")))
+            val witnesses=identityCodec.decodeBodyReference(StrictJson.encode(f.getValue("witnesses")))
+            shape(patch.byteLength>0 && witnesses.byteLength>0)
+            val assignment=decodeWAssignmentSubject(f.getValue("assignment"));shape(assignment.generation==0L)
+            WMechanicalOperationsPayload(MechanicalOperation(generation,assignment,ref(f.getValue("binding"),WorkFamily.ASSIGNMENT_BINDINGS),patch,witnesses,before,after,outcome,observed,completed,
+                workList(f.getValue("evidence"),0,256,true) { ref(it,WorkFamily.EVIDENCE) },workList(f.getValue("observations"),0,256,false,::decodeWSource)))
+        }
+        else -> refuse(CodecProblem.INVALID_SHAPE)
+    }
+    fun encode(p:WorkPayload):JsonValue=when(p) {
+        is WMechanicalBindingsPayload -> encodeBinding(p.value)
+        is WMechanicalAssignmentsPayload -> p.value.let { obj("kind" to str("mechanical-v1"),"generation" to JNumber(it.generation),
+            "bindingData" to encodeBinding(it.bindingData),"binding" to (it.binding?.let(::ref) ?: JNull),"state" to str(it.state)) }
+        is WMechanicalOperationsPayload -> p.value.let { obj("kind" to str("mechanical-v1"),"generation" to JNumber(it.generation),
+            "assignment" to encodeWAssignmentSubject(it.assignment),"binding" to ref(it.binding),"patch" to body(it.patch),"witnesses" to body(it.witnesses),
+            "beforeDigest" to digest(it.beforeDigest),"afterDigest" to digest(it.afterDigest),"outcome" to str(it.outcome),
+            "observedDigest" to (it.observedDigest?.let(::digest) ?: JNull),"writerCompleted" to JBoolean(it.writerCompleted),
+            "evidence" to workArray(it.evidence,0,256,true,::ref),"observations" to workArray(it.observations,0,256,false,::encodeWSource)) }
+        else -> refuse(CodecProblem.INVALID_SHAPE)
+    }
+}
+
+/** Structural history invariants only. Actual effect/writer facts still require authenticated
+ * command admission; a consistent uploaded record is never authority to apply/release claims. */
+internal fun validateMechanicalEdge(old:WorkPayload,next:WorkPayload) {
+    if(old is WMechanicalAssignmentsPayload || next is WMechanicalAssignmentsPayload) {
+        workRequire(old is WMechanicalAssignmentsPayload && next is WMechanicalAssignmentsPayload,WorkProblem.INVALID_TRANSITION)
+        old as WMechanicalAssignmentsPayload;next as WMechanicalAssignmentsPayload
+        val a=old.value;val b=next.value
+        workRequire(a.bindingData==b.bindingData && (a.binding==null || a.binding==b.binding),WorkProblem.INVALID_BINDING)
+        val allowed=when(a.state) {
+            "reserved" -> setOf("bound")
+            "bound" -> setOf("active")
+            "active" -> setOf("unknown","completed")
+            "unknown" -> setOf("unknown","completed")
+            else -> emptySet()
+        }
+        workRequire(b.state in allowed,WorkProblem.INVALID_TRANSITION)
+    }
+    if(old is WMechanicalOperationsPayload || next is WMechanicalOperationsPayload) {
+        workRequire(old is WMechanicalOperationsPayload && next is WMechanicalOperationsPayload,WorkProblem.INVALID_TRANSITION)
+        old as WMechanicalOperationsPayload;next as WMechanicalOperationsPayload
+        val a=old.value;val b=next.value
+        workRequire(a.copy(generation=b.generation,outcome=b.outcome,observedDigest=b.observedDigest,writerCompleted=b.writerCompleted,
+            evidence=b.evidence,observations=b.observations)==b,WorkProblem.INVALID_SUBJECT)
+        workRequire(!a.writerCompleted && b.outcome!="pending" && b.observations.containsAll(a.observations) && b.evidence.containsAll(a.evidence),WorkProblem.INVALID_TRANSITION)
+    }
+}
 
 internal sealed interface ResultAuthorship
 internal data class LegacyProducerAuthorship(val principalId:UUID):ResultAuthorship
