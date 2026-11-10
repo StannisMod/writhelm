@@ -42,8 +42,8 @@ Legacy command/read/service writer selection remains unchanged and refuses it.
 An isolated candidate command4 metadata codec covers mechanical reservation, binding, effect and
 result shapes, with bounded digest-checked prepare attachments. It is not registered in the store,
 journal, service or tool; decoding an attachment does not publish or authorize it.
-Candidate pure reservation, binding and effect-observation transitions use the same graph and
-claims, but depend on service-derived current authority, qualification and native facts not yet wired.
+Candidate pure reservation, binding, effect-observation and result transitions use the same graph
+and claims, but depend on service-derived current authority, qualification and native facts not yet wired.
 See [upstream provenance](docs/upstream.md).
 Writhelm is an independent project, not an official upstream distribution.
 

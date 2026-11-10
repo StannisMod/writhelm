@@ -458,6 +458,8 @@ internal class WorkState private constructor(
         }
         // Shared live workspace/task exclusion includes mechanical work even on incremental derive.
         val mechanical=records.values.mapNotNull { (it.payload as? WMechanicalAssignmentsPayload)?.value }
+        val mechanicalResults=records.values.mapNotNull { (it.payload as? WMechanicalResultsPayload)?.value }
+        graph(mechanicalResults.map { it.assignment }.distinct().size==mechanicalResults.size)
         val mechanicalLive=mechanical.filter { it.state!="completed" }
         val nativeLive=records.values.mapNotNull { (it.payload as? WAssignmentsPayload)?.value }.filter { it.state !in setOf("completed","replaced") }
         val workspaces=mechanicalLive.map { it.bindingData.producer.workspaceId }+nativeLive.map { it.workspaceId }

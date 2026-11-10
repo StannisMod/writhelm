@@ -664,7 +664,7 @@ Only synthetic tests and existing project-authored source are included; no new p
 ## Candidate mechanical command codec scope P34 — local source checkpoint
 
 Extend the existing mechanical descriptor and synthetic test paths with a closed candidate command4
-codec for reservation, binding, prepare/observe effect and result, including bounded digest-checked
+codec for reservation, binding, prepare/observe effect, retrospective and result, including bounded digest-checked
 prepare attachments, separate framed fingerprint domain, exact resource expectations and project/
 identity checks. No attachment publication, store catalogue, journal, authenticated admission, new
 endpoint or tool is enabled. Independently derived
@@ -674,11 +674,12 @@ unchanged. No new path, external source, actual credentials, patch or private ru
 ## Candidate mechanical reservation transition scope P35 — local source checkpoint
 
 Extend the existing mechanical descriptor and synthetic test paths with pure candidate reservation,
-binding and original-effect prepare/observe transitions over model3 WorkState. They check exact remediation task/manifest, selected
+binding, original-effect prepare/observe and retrospective/result transitions over model3 WorkState. They check exact remediation task/manifest, selected
 dependencies, known authors, shared claims and service-supplied profile/workspace/source facts. The caller must perform
 current same-H controller/dispatch authentication and receipt/publication; no route or writer is
 enabled and synthetic qualification/native observations are not host evidence. Nondeferred dispatch-stage gates
 remain held until exact earlier evidence mapping exists; grouping never moves them. Terminal effect
 transitions require separately supplied writer-fencing observations and do not release claims. Result
-publication, runtime integration and per-platform qualification remain held. No new path, external
+transitions require exact service-supplied capture facts and allow at most one result per completed
+mechanical assignment; they do not publish a result. Store publication, runtime integration and per-platform qualification remain held. No new path, external
 source, actual credentials, patch or private run material is introduced.

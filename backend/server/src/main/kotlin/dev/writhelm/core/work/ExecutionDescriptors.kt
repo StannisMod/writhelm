@@ -55,6 +55,7 @@ internal sealed interface MechanicalCommandOperation {
     data class Bind(val assignmentId:UUID,val generation:Long,val binding:WorkReference):MechanicalCommandOperation
     data class Prepare(val assignmentId:UUID,val generation:Long,val operation:WorkKey.Id,val effect:MechanicalOperation,val bodies:List<MechanicalAttachment> = emptyList()):MechanicalCommandOperation
     data class Observe(val assignmentId:UUID,val generation:Long,val operation:WorkKey.Id,val expectedOperationGeneration:Long,val effect:MechanicalOperation):MechanicalCommandOperation
+    data class Retrospective(val assignmentId:UUID,val generation:Long,val key:WorkKey.Id,val value:WRetrospectives):MechanicalCommandOperation
     data class Submit(val assignmentId:UUID,val generation:Long,val operationGeneration:Long,val result:MechanicalResultDescriptor):MechanicalCommandOperation
 }
 internal data class MechanicalCommand(val requestKey:UUID,val projectId:UUID,val operation:MechanicalCommandOperation)
@@ -126,6 +127,14 @@ internal class MechanicalCommandCodec {
                 shape(result.key.projectId==project && result.value.assignment==WAssignmentSubject(assignment,0))
                 MechanicalCommandOperation.Submit(assignment,generation(p.getValue("expectedGeneration")),generation(p.getValue("expectedOperationGeneration")),result)
             }
+            "record_mechanical_retrospective" -> {
+                val p=payload.fields("assignmentId","expectedGeneration","key","data")
+                val assignment=uuid(p.getValue("assignmentId"))
+                val key=identityCodec.decodeKey(WorkFamily.RETROSPECTIVES,StrictJson.encode(p.getValue("key"))) as WorkKey.Id
+                val data=decodeWRetrospectives(p.getValue("data"));validateWorkShape(WRetrospectivesPayload(data))
+                shape(key.projectId==project && data.assignment==WAssignmentSubject(assignment,0) && data.result==null)
+                MechanicalCommandOperation.Retrospective(assignment,generation(p.getValue("expectedGeneration")),key,data)
+            }
             else -> refuse(CodecProblem.UNSUPPORTED_FORMAT)
         }
         val command=MechanicalCommand(uuid(f.getValue("requestKey")),project,operation)
@@ -146,6 +155,8 @@ internal class MechanicalCommandCodec {
             "bodies" to workArray(v.bodies,0,2,true) { obj("digest" to digest(it.digest),"body" to str(it.body)) })
         is MechanicalCommandOperation.Observe -> "observe_mechanical_effect" to obj("assignmentId" to uuid(v.assignmentId),"expectedGeneration" to JNumber(v.generation),
             "operation" to json(v.operation),"expectedOperationGeneration" to JNumber(v.expectedOperationGeneration),"effect" to mechanical.encode(WMechanicalOperationsPayload(v.effect)))
+        is MechanicalCommandOperation.Retrospective -> "record_mechanical_retrospective" to obj("assignmentId" to uuid(v.assignmentId),"expectedGeneration" to JNumber(v.generation),
+            "key" to json(v.key),"data" to encodeWRetrospectives(v.value))
         is MechanicalCommandOperation.Submit -> "submit_mechanical_result" to obj("assignmentId" to uuid(v.assignmentId),"expectedGeneration" to JNumber(v.generation),
             "expectedOperationGeneration" to JNumber(v.operationGeneration),"result" to StrictJson.decode(results.encode(v.result)))
     }
@@ -182,6 +193,11 @@ internal data class MechanicalEffectObservation(val operation:WorkKey.Id,val pre
     val workspaceId:UUID,val nativeHostId:UUID,val writersFenced:Boolean)
 internal data class MechanicalEffectFacts(val reservation:MechanicalReservationFacts,val prepared:Set<MechanicalPreparedObservation>,
     val observations:Set<MechanicalEffectObservation>)
+/** Exact retained result capture after the original operation; this is not inferred from a caller's
+ * chosen snapshots or from after-bytes alone. No production capture provider is installed. */
+internal data class MechanicalResultObservation(val operation:WorkKey.Id,val operationGeneration:Long,val afterDigest:Digest,
+    val artifacts:List<WSnapshot>,val changes:WorkBodyReference)
+internal data class MechanicalSubmissionFacts(val base:WorkExternalFacts,val results:Set<MechanicalResultObservation>)
 
 /** Pure candidate reducer. The caller MUST authenticate the current
  * controller and TASK_DISPATCH at the same captured H, apply receipt/replay and publication rules,
@@ -343,6 +359,65 @@ internal class MechanicalReservationReducer {
             state=if(v.effect.writerCompleted)"completed" else "unknown"))))
         val after=h.derive(changed,emptyList())
         return WorkEffect(h,after,op,changed.map { after.records.getValue(it.identity) },emptyList())
+    }
+    private fun completed(h:WorkState,id:UUID,generation:Long,actor:WorkExecutionInput):MechanicalAssignment {
+        val a=(h.records[WorkRecordIdentity(WorkFamily.ASSIGNMENTS,WorkKey.Id(h.projectId,id))]?.payload as? WMechanicalAssignmentsPayload)?.value
+            ?: throw WorkFault(WorkProblem.WRONG_ASSIGNMENT)
+        workRequire(a.generation==generation,WorkProblem.STALE_GENERATION)
+        workRequire(actor.assignment==null && actor.execution==null && actor.controllerId==a.bindingData.producer.controllerId &&
+            actor.principalId==a.bindingData.authorship.declaredBy,WorkProblem.INVALID_BINDING)
+        workRequire(a.state=="completed",WorkProblem.INVALID_TRANSITION)
+        return a
+    }
+    fun retrospective(h:WorkState,original:MechanicalCommand,actor:WorkExecutionInput,facts:WorkExternalFacts):WorkEffect {
+        workRequire(h.modelVersion==3,WorkProblem.NOT_READY)
+        val command=MechanicalCommandCodec().decode(MechanicalCommandCodec().encode(original))
+        workRequire(command.projectId==h.projectId,WorkProblem.FOREIGN_REFERENCE)
+        val v=command.operation as? MechanicalCommandOperation.Retrospective ?: throw WorkFault(WorkProblem.INVALID_SUBJECT)
+        val a=completed(h,v.assignmentId,v.generation,actor)
+        workRequire(v.value.task==a.bindingData.task && v.value.assignment==WAssignmentSubject(v.assignmentId,0) && v.value.result==null,WorkProblem.INVALID_SUBJECT)
+        v.value.observations.forEach { observation ->
+            source(h,facts,observation.observed);observation.expectation?.let { source(h,facts,it) }
+            observation.normativeDecision?.let { workRequire(it in facts.approvedDecisions,WorkProblem.BLOCKED_INPUT) }
+            observation.effectEvidence.forEach { h.resolve(it) }
+        }
+        val row=WorkRecord(WorkRecordIdentity(WorkFamily.RETROSPECTIVES,v.key),WRetrospectivesPayload(v.value))
+        workRequire(row.identity !in h.records,WorkProblem.DUPLICATE_ID)
+        val after=h.derive(listOf(row),emptyList())
+        return WorkEffect(h,after,row.identity,listOf(after.records.getValue(row.identity)),emptyList())
+    }
+    fun submit(h:WorkState,original:MechanicalCommand,actor:WorkExecutionInput,facts:MechanicalSubmissionFacts):WorkEffect {
+        workRequire(h.modelVersion==3,WorkProblem.NOT_READY)
+        val command=MechanicalCommandCodec().decode(MechanicalCommandCodec().encode(original))
+        workRequire(command.projectId==h.projectId,WorkProblem.FOREIGN_REFERENCE)
+        val v=command.operation as? MechanicalCommandOperation.Submit ?: throw WorkFault(WorkProblem.INVALID_SUBJECT)
+        val a=completed(h,v.assignmentId,v.generation,actor);val b=a.bindingData
+        val operation=(h.record(WorkFamily.NATIVE_INTENTS,b.producer.operation).payload as? WMechanicalOperationsPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+        workRequire(operation.generation==v.operationGeneration,WorkProblem.STALE_GENERATION)
+        workRequire(operation.outcome=="applied" && operation.writerCompleted,WorkProblem.NATIVE_UNKNOWN)
+        val result=v.result.value
+        workRequire(result.task==b.task && result.assignment==WAssignmentSubject(v.assignmentId,0) && result.manifest==b.manifest &&
+            result.producer==b.producer && result.patch==operation.patch && result.authorship==b.authorship,WorkProblem.INVALID_SUBJECT)
+        val task=h.task(b.task)
+        workRequire(task.kind=="remediation" && task.state=="executable" && task.unresolved.isEmpty() && task.approvedDesign.isNotEmpty(),WorkProblem.NOT_READY)
+        workRequire(task.approvedDesign.all { it in facts.base.approvedDecisions } && b.manifest in facts.base.verifiedPackets,WorkProblem.BLOCKED_INPUT)
+        workRequire(result.artifacts.all { it in facts.base.retainedSnapshots } && WorkSubmittedDiff(result.task,result.artifacts,result.changes) in facts.base.submittedDiffs,WorkProblem.INVALID_SUBJECT)
+        workRequire(MechanicalResultObservation(b.producer.operation,operation.generation,operation.afterDigest,result.artifacts,result.changes) in facts.results,WorkProblem.NATIVE_UNKNOWN)
+        val predecessors=task.dependencies.map { dependency ->
+            val selected=dependency.selectedResult ?: throw WorkFault(WorkProblem.NOT_READY)
+            val row=h.resolve(selected)
+            when(val p=row.payload) {
+                is WResultsPayload -> NativeResultDescriptor(row.identity.key as WorkKey.Id,p.value)
+                is WMechanicalResultsPayload -> MechanicalResultDescriptor(row.identity.key as WorkKey.Id,p.value)
+                else -> throw WorkFault(WorkProblem.INVALID_REFERENCE)
+            }
+        }
+        requireMechanicalResultAuthorship(v.result,actor.principalId,predecessors)
+        val row=WorkRecord(WorkRecordIdentity(WorkFamily.RESULTS,v.result.key),WMechanicalResultsPayload(result))
+        workRequire(row.identity !in h.records,WorkProblem.DUPLICATE_ID)
+        workRequire(h.records.values.none { (it.payload as? WMechanicalResultsPayload)?.value?.assignment==result.assignment },WorkProblem.INVALID_TRANSITION)
+        val after=h.derive(listOf(row),emptyList())
+        return WorkEffect(h,after,row.identity,listOf(after.records.getValue(row.identity)),emptyList())
     }
 }
 

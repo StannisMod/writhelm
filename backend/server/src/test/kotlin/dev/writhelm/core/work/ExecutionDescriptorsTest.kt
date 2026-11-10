@@ -250,6 +250,34 @@ class ExecutionDescriptorsTest {
         assertEquals("held",(completed.after.record(WorkFamily.CLAIMS,f.data.resources.single()).payload as WClaimsPayload).value.state)
         assertEquals(completed.after.records,WorkState.restore(project,completed.after.records.values,completed.after.bodies.values,modelVersion=3).records)
         assertEquals(WorkProblem.STALE_GENERATION,assertFailsWith<WorkFault> { reducer.observe(completed.after,finish,actor,pendingFacts.copy(observations=setOf(fenced))) }.problem)
+        val retrospectiveKey=WorkKey.Id(project,uid(1134))
+        val retrospective=WRetrospectives(f.data.task,WAssignmentSubject(id,0),null,"no-significant-new-findings",emptyList())
+        val recordRetro=MechanicalCommand(uid(1135),project,MechanicalCommandOperation.Retrospective(id,4,retrospectiveKey,retrospective))
+        assertEquals(recordRetro,MechanicalCommandCodec().decode(MechanicalCommandCodec().encode(recordRetro)))
+        assertEquals(WorkProblem.INVALID_TRANSITION,assertFailsWith<WorkFault> { reducer.retrospective(held.after,recordRetro.copy(
+            operation=(recordRetro.operation as MechanicalCommandOperation.Retrospective).copy(generation=3)),actor,base) }.problem)
+        val retroResult=reducer.retrospective(completed.after,recordRetro,actor,base)
+        val retroRef=retroResult.after.reference(WorkFamily.RETROSPECTIVES,retrospectiveKey)
+        val native=(initial.resolve(f.data.authorship.sourceResults.single()).payload as WResultsPayload).value
+        val result=MechanicalResultDescriptor(WorkKey.Id(project,uid(1136)),MechanicalResult(f.data.task,WAssignmentSubject(id,0),f.data.producer,
+            f.data.manifest,native.artifacts,native.changes,emptyList(),emptyList(),retroRef,emptyList(),patch,f.data.authorship))
+        val submit=MechanicalCommand(uid(1137),project,MechanicalCommandOperation.Submit(id,4,2,result))
+        val capture=MechanicalResultObservation(f.data.producer.operation,2,effect.afterDigest,result.value.artifacts,result.value.changes)
+        val diff=WorkSubmittedDiff(result.value.task,result.value.artifacts,result.value.changes)
+        val submission=MechanicalSubmissionFacts(base.copy(submittedDiffs=setOf(diff)),setOf(capture))
+        assertEquals(WorkProblem.INVALID_SUBJECT,assertFailsWith<WorkFault> { reducer.submit(retroResult.after,submit,actor,submission.copy(base=base)) }.problem)
+        assertEquals(WorkProblem.NATIVE_UNKNOWN,assertFailsWith<WorkFault> { reducer.submit(retroResult.after,submit,actor,submission.copy(results=emptySet())) }.problem)
+        assertEquals(WorkProblem.INVALID_BINDING,assertFailsWith<WorkFault> { reducer.submit(retroResult.after,submit,actor.copy(principalId=uid(1138)),submission) }.problem)
+        val submitted=reducer.submit(retroResult.after,submit,actor,submission)
+        assertEquals(result.key,submitted.result.key)
+        assertEquals("held",(submitted.after.record(WorkFamily.CLAIMS,f.data.resources.single()).payload as WClaimsPayload).value.state)
+        assertEquals(submitted.after.records,WorkState.restore(project,submitted.after.records.values,submitted.after.bodies.values,modelVersion=3).records)
+        val second=result.copy(key=WorkKey.Id(project,uid(1139)))
+        assertEquals(WorkProblem.INVALID_TRANSITION,assertFailsWith<WorkFault> { reducer.submit(submitted.after,submit.copy(
+            operation=(submit.operation as MechanicalCommandOperation.Submit).copy(result=second)),actor,submission) }.problem)
+        val duplicate=WorkRecord(WorkRecordIdentity(WorkFamily.RESULTS,second.key),WMechanicalResultsPayload(second.value))
+        assertFailsWith<CodecFault> { submitted.after.derive(listOf(duplicate),emptyList()) }
+        assertFailsWith<CodecFault> { WorkState.restore(project,submitted.after.records.values+duplicate,submitted.after.bodies.values,modelVersion=3) }
         // All qualification, actor and snapshot inputs above are explicit synthetic facts, not actual admission.
     }
     @Test fun candidateCommand4ReservationAndBindingAreClosedDeterministicAndRefusedByLegacyReaders() {
