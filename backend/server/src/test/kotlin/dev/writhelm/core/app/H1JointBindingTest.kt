@@ -107,6 +107,27 @@ private class JointFixture {
 }
 
 class H1JointBindingTest {
+    @Test fun canonicalTaskDecisionFactsUseOnlyCurrentApprovedPinnedCoreInputs() {
+        val f=JointFixture();val work=f.base.work.getValue(project);val original=work.task(f.task)
+        val pinned=pinnedKnowledge(f.base.core.snapshot(8192),requireNotNull(original.base))
+        val decision=pinned.first { f.base.core.validationDecisionApproved(it) && f.base.core.validationSourceAvailable(it) }
+        val foreign=when(decision) {
+            is ClauseReference -> decision.copy(contentDigest=Digest.of("different".toByteArray()))
+            is ContextReference -> decision.copy(contextDigest=Digest.of("different".toByteArray()))
+        }
+        val task=original.copy(kind="implementation",approvedDesign=listOf(decision,foreign))
+        val command=WorkCommand(id(1800),project,CCreateTaskRevisionOperation(CCreateTaskRevision(f.task,task,null,emptyList())))
+        val facts=CanonicalTaskDecisionFacts(UnavailableH1RuntimeFacts).capture(f.base,command)
+        assertEquals(setOf(decision),facts.facts.approvedDecisions)
+        assertEquals(setOf(decision),facts.facts.knowledgeSources)
+        assertTrue(facts.qualifiedProfiles.isEmpty());assertTrue(facts.facts.verifiedPackets.isEmpty())
+        val noBase=command.copy(operation=CCreateTaskRevisionOperation(CCreateTaskRevision(f.task,task.copy(base=null),null,emptyList())))
+        assertTrue(CanonicalTaskDecisionFacts(UnavailableH1RuntimeFacts).capture(f.base,noBase).facts.approvedDecisions.isEmpty())
+        val badBase=requireNotNull(task.base).copy(knowledgeManifestDigest=Digest.of("different base".toByteArray()))
+        val changedBase=command.copy(operation=CCreateTaskRevisionOperation(CCreateTaskRevision(f.task,task.copy(base=badBase),null,emptyList())))
+        assertTrue(CanonicalTaskDecisionFacts(UnavailableH1RuntimeFacts).capture(f.base,changedBase).facts.approvedDecisions.isEmpty())
+        // Canonical approval is not native qualification, packet verification or an independent review.
+    }
     @Test fun reservationProofFactsRequireExactBasisCommandProfileAndPacketIndependently() {
         val f=JointFixture();val command=f.reserveCommand();val fingerprint=f.codec.fingerprint(command)
         val profile=f.base.work.getValue(project).reference(WorkFamily.PROFILES,f.profile)

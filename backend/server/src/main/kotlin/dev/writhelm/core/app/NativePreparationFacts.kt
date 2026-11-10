@@ -5,9 +5,36 @@ import dev.writhelm.core.auth.CredentialStatus
 import dev.writhelm.core.auth2.CredentialScope
 import dev.writhelm.core.codec.*
 import dev.writhelm.core.knowledge.Digest
+import dev.writhelm.core.knowledge.KnowledgeReference
 import dev.writhelm.core.store.GitOid
 import dev.writhelm.core.work.*
 import java.util.UUID
+
+/** Derive only exact approved-design facts from the current core and the task's pinned knowledge
+ * base. This proves neither native profile qualification nor packet completeness or possession. */
+internal class CanonicalTaskDecisionFacts(private val delegate: H1RuntimeFacts): H1RuntimeFacts {
+    override fun capture(state: H1BoundState,command: WorkCommand): H1ObservedFacts {
+        val original=delegate.capture(state,command)
+        if(original.basis!=state.basis)return original
+        val task=try {
+            when(val op=command.operation) {
+                is CCreateTaskRevisionOperation -> op.value.data
+                is CReserveAssignmentOperation -> state.work.getValue(command.projectId).task(op.value.task)
+                else -> return original
+            }
+        } catch(_: Exception) { return original }
+        val base=task.base ?: return original
+        val decisions: Set<KnowledgeReference> = try {
+            val snapshot=state.core.snapshot(8192)
+            if(snapshot.manifests[base.knowledgeManifestId]?.projectId!=command.projectId)return original
+            val pinned=pinnedKnowledge(snapshot,base)
+            task.approvedDesign.filter { it.revision.document.projectId==command.projectId && it in pinned &&
+                state.core.validationSourceAvailable(it) && state.core.validationDecisionApproved(it) }.toSet()
+        } catch(_: Exception) { return original }
+        return H1ObservedFacts(original.basis,original.facts.copy(
+            knowledgeSources=original.facts.knowledgeSources+decisions,approvedDecisions=original.facts.approvedDecisions+decisions),original.qualifiedProfiles)
+    }
+}
 
 /** Candidate verification seam for a single reservation at its captured Git basis. Implementations
  * must derive these proofs from trusted qualification and packet custody, never command fields.
