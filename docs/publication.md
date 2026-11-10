@@ -653,3 +653,10 @@ credential/controller/TASK_DISPATCH prerequisite for a future mechanical operati
 new permission, command, replay rule, endpoint, task/claim authorization or native effect. The
 expected controller must come from validated canonical bindings, not a body identity. No new
 publication path, external source, credential, real store data or private evidence is introduced.
+
+## Frozen H1 projection refusal scope P33 — local source checkpoint
+
+Extend the existing H1 state and namespace-binding test paths to refuse candidate model3 explicitly
+at the frozen model2 AUTH2 projection boundary. The old H1 writer cannot skip or reinterpret a
+mechanical assignment; this adds no model3 authority projection, writer, service route or permission.
+Only synthetic tests and existing project-authored source are included; no new path or private data.

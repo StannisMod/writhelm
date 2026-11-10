@@ -15,6 +15,10 @@ internal fun h1WorkProjection(basis: GitOid, projects: Map<UUID,WorkState>): Aut
     val facts=ArrayList<AssignmentAuthorityFacts>()
     projects.forEach { (project,work) ->
         integrity(work.projectId==project)
+        // H1 AUTH2 projection is frozen for native model2 assignments. Model3 mechanical
+        // controller authority/author closure is not a native delegation and cannot be silently
+        // skipped, cast, or published through this legacy projection.
+        integrity(work.modelVersion==2)
         work.records.values.filter { it.identity.family==WorkFamily.ASSIGNMENTS }.forEach { record ->
             val assignmentId=(record.identity.key as WorkKey.Id).id
             val current=work.assignmentProjection(assignmentId)

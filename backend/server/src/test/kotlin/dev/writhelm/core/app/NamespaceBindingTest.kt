@@ -4,10 +4,19 @@ package dev.writhelm.core.app
 import dev.writhelm.core.auth.*
 import dev.writhelm.core.codec.*
 import dev.writhelm.core.store.*
+import dev.writhelm.core.work.*
 import kotlin.test.*
 import org.junit.jupiter.api.Test
 
 class NamespaceBindingTest {
+    @Test fun `frozen H1 authority projection explicitly refuses candidate model3`() {
+        val oid=GitOid("sha1","0".repeat(40))
+        val project=id(90)
+        assertEquals(headBasis(oid),h1WorkProjection(oid,mapOf(project to WorkState.empty(project))).basis)
+        assertEquals(StoreProblem.INTEGRITY,assertFailsWith<StoreFault> {
+            h1WorkProjection(oid,mapOf(project to WorkState.empty(project,modelVersion=3)))
+        }.problem)
+    }
     @Test fun `actual namespace startup refuses shape valid credential with foreign enrollment`() {
         val dir=directory(); val g=genesis(); val codec=AuthRecordCodec()
         val invalid=AuthRecord.CredentialRecord(g.authority.credentials.getValue(plannerKey).copy(principalId=id(99)))
