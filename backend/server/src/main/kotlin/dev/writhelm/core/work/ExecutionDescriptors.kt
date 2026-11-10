@@ -3,6 +3,8 @@ package dev.writhelm.core.work
 
 import dev.writhelm.core.codec.*
 import dev.writhelm.core.knowledge.Digest
+import dev.writhelm.core.knowledge.framedDigest
+import dev.writhelm.core.knowledge.writeFramed
 import java.util.UUID
 
 /** Read alternatives, not an enabled writer/dispatch profile. Legacy bytes keep their old codec. */
@@ -44,6 +46,72 @@ internal data class MechanicalOperation(
 internal data class WMechanicalAssignmentsPayload(val value:MechanicalAssignment):WorkPayload
 internal data class WMechanicalBindingsPayload(val value:MechanicalBinding):WorkPayload
 internal data class WMechanicalOperationsPayload(val value:MechanicalOperation):WorkPayload
+
+internal data class MechanicalResourceExpectation(val resource:WorkKey.Resource,val generation:Long?)
+internal sealed interface MechanicalCommandOperation {
+    data class Reserve(val assignmentId:UUID,val binding:MechanicalBinding,val resources:List<MechanicalResourceExpectation>):MechanicalCommandOperation
+    data class Bind(val assignmentId:UUID,val generation:Long,val binding:WorkReference):MechanicalCommandOperation
+}
+internal data class MechanicalCommand(val requestKey:UUID,val projectId:UUID,val operation:MechanicalCommandOperation)
+
+/** Staged command4 reservation/binding codec, NOT a store catalogue, writer, service command or
+ * authority. Remaining effect/result operation schemas are deliberately unsupported. */
+internal class MechanicalCommandCodec {
+    private val mechanical=MechanicalWorkCodec()
+    private val limits=JsonLimits(bytes=262144,stringBytes=65536,depth=32,collection=1024,tokens=100000)
+    private fun json(k:WorkKey)=StrictJson.decode(identityCodec.encodeKey(k))
+    private fun json(r:WorkReference)=StrictJson.decode(identityCodec.encodeReference(r))
+    private fun generation(v:JsonValue)=v.long().also { shape(it>=0) }
+    fun decode(bytes:ByteArray):MechanicalCommand {
+        val f=StrictJson.decode(bytes,limits).fields("formatVersion","requestKey","projectId","operation","payload")
+        if(f.getValue("formatVersion").long()!=4L)refuse(CodecProblem.UNSUPPORTED_FORMAT)
+        val project=uuid(f.getValue("projectId"))
+        val payload=f.getValue("payload")
+        val operation=when(f.getValue("operation").string()) {
+            "reserve_mechanical" -> {
+                val p=payload.fields("assignmentId","binding","resources")
+                val binding=mechanical.decodeBinding(p.getValue("binding"),project)
+                val resources=workList(p.getValue("resources"),1,256,true) { item ->
+                    val fields=item.fields("resource","expectedGeneration")
+                    MechanicalResourceExpectation(identityCodec.decodeKey(WorkFamily.CLAIMS,StrictJson.encode(fields.getValue("resource"))) as WorkKey.Resource,
+                        fields.getValue("expectedGeneration").let { if(it===JNull)null else generation(it) })
+                }
+                shape(resources.map { it.resource }.distinct().size==resources.size && resources.map { it.resource }.toSet()==binding.resources.toSet())
+                MechanicalCommandOperation.Reserve(uuid(p.getValue("assignmentId")),binding,resources)
+            }
+            "bind_mechanical" -> {
+                val p=payload.fields("assignmentId","expectedGeneration","binding")
+                val assignment=uuid(p.getValue("assignmentId"))
+                val binding=identityCodec.decodeReference(StrictJson.encode(p.getValue("binding")))
+                shape(binding.identity.family==WorkFamily.ASSIGNMENT_BINDINGS && binding.identity.key==WorkKey.AssignmentBinding(project,assignment,0))
+                MechanicalCommandOperation.Bind(assignment,generation(p.getValue("expectedGeneration")),binding)
+            }
+            else -> refuse(CodecProblem.UNSUPPORTED_FORMAT)
+        }
+        val command=MechanicalCommand(uuid(f.getValue("requestKey")),project,operation)
+        sameProject(operationJSON(command.operation).second,project)
+        return command
+    }
+    private fun operationJSON(v:MechanicalCommandOperation):Pair<String,JsonValue> = when(v) {
+        is MechanicalCommandOperation.Reserve -> "reserve_mechanical" to obj("assignmentId" to uuid(v.assignmentId),"binding" to mechanical.encodeBinding(v.binding),
+            "resources" to workArray(v.resources,1,256,true) { obj("resource" to json(it.resource),"expectedGeneration" to (it.generation?.let(::JNumber) ?: JNull)) })
+        is MechanicalCommandOperation.Bind -> "bind_mechanical" to obj("assignmentId" to uuid(v.assignmentId),"expectedGeneration" to JNumber(v.generation),"binding" to json(v.binding))
+    }
+    private fun value(command:MechanicalCommand,includeKey:Boolean):JsonValue {
+        val (name,payload)=operationJSON(command.operation)
+        val fields=linkedMapOf<String,JsonValue>("formatVersion" to JNumber(4),"projectId" to uuid(command.projectId),"operation" to str(name),"payload" to payload)
+        if(includeKey)fields["requestKey"]=uuid(command.requestKey)
+        return JObject(fields)
+    }
+    fun encode(command:MechanicalCommand):ByteArray {
+        val bytes=JsonConstruction.bounded(limits,{ _,_-> },false) { StrictJson.encode(value(command,true),limits.bytes,maxDepth=limits.depth) }
+        decode(bytes);return bytes
+    }
+    fun fingerprint(command:MechanicalCommand):Digest {
+        val canonical=decode(encode(command))
+        return framedDigest("writhelm.command.v4") { writeFramed(StrictJson.encode(value(canonical,false),limits.bytes)) }
+    }
+}
 
 /** Candidate record2 shapes only. This codec has no authenticated command, writer or native effect. */
 internal class MechanicalWorkCodec {

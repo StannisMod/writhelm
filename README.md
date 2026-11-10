@@ -39,6 +39,8 @@ workspace exclusion with native work. These are structural consistency checks, n
 effect/writer facts. Candidate graph review bindings, reports and acceptance checks exclude declared
 authors; actual review and acceptance command admission remains deliberately unavailable.
 Legacy command/read/service writer selection remains unchanged and refuses it.
+An isolated candidate command4 codec currently covers only mechanical reservation and binding;
+it is not registered in the store, journal, service or tool, and other command4 operations are held.
 See [upstream provenance](docs/upstream.md).
 Writhelm is an independent project, not an official upstream distribution.
 

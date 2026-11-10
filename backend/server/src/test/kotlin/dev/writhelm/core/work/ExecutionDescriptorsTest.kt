@@ -156,6 +156,47 @@ class ExecutionDescriptorsTest {
         return MechanicalGraphFixture(state,state.records.getValue(assignment.identity),state.records.getValue(claim.identity),
             (state.records.getValue(assignment.identity).payload as WMechanicalAssignmentsPayload).value.bindingData,f.source)
     }
+    @Test fun candidateCommand4ReservationAndBindingAreClosedDeterministicAndRefusedByLegacyReaders() {
+        val f=mechanicalGraph();val id=(f.assignment.identity.key as WorkKey.Id).id
+        val codec=MechanicalCommandCodec()
+        val resource=f.data.resources.single()
+        val reserve=MechanicalCommand(uid(960),project,MechanicalCommandOperation.Reserve(id,f.data,listOf(MechanicalResourceExpectation(resource,null))))
+        val bytes=codec.encode(reserve);val decoded=codec.decode(bytes)
+        assertContentEquals(bytes,codec.encode(decoded))
+        assertEquals(codec.fingerprint(decoded),codec.fingerprint(decoded.copy(requestKey=uid(961))))
+        val second=WorkKey.Resource(project,uid(959))
+        val pair=(reserve.operation as MechanicalCommandOperation.Reserve).copy(binding=f.data.copy(resources=listOf(resource,second)),
+            resources=listOf(MechanicalResourceExpectation(resource,null),MechanicalResourceExpectation(second,3)))
+        val reordered=pair.copy(binding=pair.binding.copy(resources=pair.binding.resources.reversed()),resources=pair.resources.reversed())
+        assertContentEquals(codec.encode(reserve.copy(operation=pair)),codec.encode(reserve.copy(operation=reordered)))
+        assertEquals(codec.fingerprint(reserve.copy(operation=pair)),codec.fingerprint(reserve.copy(operation=reordered)))
+        assertNotEquals(codec.fingerprint(decoded),codec.fingerprint(decoded.copy(operation=(decoded.operation as MechanicalCommandOperation.Reserve).copy(
+            resources=listOf(MechanicalResourceExpectation(resource,0))))))
+        assertFailsWith<CodecFault> { WorkCodec().decodeCommand(bytes) }
+        assertFailsWith<CodecFault> { codec.decode(bytes.decodeToString().replace("\"formatVersion\":4","\"formatVersion\":3").toByteArray()) }
+        for(field in listOf("principalId","credentialId","actor","nativeSessionId","model")) {
+            val root=StrictJson.decode(bytes) as JObject;val payload=root.entries.getValue("payload") as JObject
+            val injected=StrictJson.encode(JObject(root.entries+("payload" to JObject(payload.entries+(field to str("injected"))))))
+            assertFailsWith<CodecFault>(field) { codec.decode(injected) }
+        }
+        val changed=decoded.copy(operation=(decoded.operation as MechanicalCommandOperation.Reserve).copy(resources=listOf(MechanicalResourceExpectation(WorkKey.Resource(project,uid(962)),null))))
+        assertFailsWith<CodecFault> { codec.encode(changed) }
+        val duplicate=decoded.copy(operation=(decoded.operation as MechanicalCommandOperation.Reserve).copy(resources=listOf(
+            MechanicalResourceExpectation(resource,null),MechanicalResourceExpectation(resource,0))))
+        assertFailsWith<CodecFault> { codec.encode(duplicate) }
+        assertFailsWith<CodecFault> { codec.decode(bytes.decodeToString().replace("\"formatVersion\":4","\"formatVersion\":4,\"formatVersion\":4").toByteArray()) }
+        assertFailsWith<CodecFault> { codec.decode(bytes.decodeToString().replace("\"formatVersion\":4","\"formatVersion\":4.0").toByteArray()) }
+        val foreign=decoded.copy(projectId=uid(999))
+        assertFailsWith<CodecFault> { codec.encode(foreign) }
+        val bindingKey=WorkKey.AssignmentBinding(project,id,0)
+        val ref=WorkReference(WorkRecordIdentity(WorkFamily.ASSIGNMENT_BINDINGS,bindingKey),Digest.of("binding".toByteArray()))
+        val bind=MechanicalCommand(uid(963),project,MechanicalCommandOperation.Bind(id,1,ref))
+        assertEquals(bind,codec.decode(codec.encode(bind)))
+        assertFailsWith<CodecFault> { codec.encode(bind.copy(operation=(bind.operation as MechanicalCommandOperation.Bind).copy(assignmentId=uid(964)))) }
+        assertFailsWith<CodecFault> { codec.encode(bind.copy(operation=(bind.operation as MechanicalCommandOperation.Bind).copy(generation=-1))) }
+        val root=StrictJson.decode(bytes) as JObject
+        assertFailsWith<CodecFault> { codec.decode(StrictJson.encode(JObject(root.entries+("operation" to str("prepare_mechanical_effect"))))) }
+    }
     @Test fun mechanicalAssignmentUsesRealSharedClaimsAndTaskSelectedPredecessorAuthorsWithoutNativeIdentity() {
         val f=mechanicalGraph();val a=(f.assignment.payload as WMechanicalAssignmentsPayload).value
         val bytes=WorkCodec(modelVersion=3).encodeRecord(f.assignment)

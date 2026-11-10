@@ -660,3 +660,12 @@ Extend the existing H1 state and namespace-binding test paths to refuse candidat
 at the frozen model2 AUTH2 projection boundary. The old H1 writer cannot skip or reinterpret a
 mechanical assignment; this adds no model3 authority projection, writer, service route or permission.
 Only synthetic tests and existing project-authored source are included; no new path or private data.
+
+## Candidate mechanical command codec scope P34 — local source checkpoint
+
+Extend the existing mechanical descriptor and synthetic test paths with a closed candidate command4
+codec for reservation/binding only, including separate framed fingerprint domain, exact resource
+expectations and project/identity checks. No store catalogue, journal, authenticated admission, new
+endpoint or tool is enabled. Effect/result command schemas, independently derived goldens, historical
+audit, complete authority matrix and writer compatibility remain held. Legacy command3 meaning is
+unchanged. No new path, external source, actual credentials, patch or private run material is added.
