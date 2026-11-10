@@ -82,6 +82,45 @@ Future delegated work uses fresh low-effort sessions and task-shaped continuatio
 accumulated worker histories. Implementation, evidence, acceptance, target integration and actual
 platform support remain distinct facts.
 
+### Proposed H1 automatic dispatcher design — owner decision required
+
+Status: **proposed, not approved or implemented**. H1-09's desired observable workflow is approved;
+the execution/authority and persistence mechanism below is a separate design decision. Current
+`NativeWorkerPreparation.run` and `NativeInitialStart.run` require a real tool context and individually
+supplied selections; task revisions alone do not encode a unique manifest/resource selection.
+Existing model2 task/receipt bytes must not be silently reinterpreted.
+
+Proposed minimum design:
+
+1. The planner submits one bounded, versioned dispatch plan through an authenticated service operation.
+   It identifies each exact task revision, intended executor role/profile, permitted manifest/base,
+   explicit resource/claim policy and dependency/result-selection rule. The accepted plan is canonical
+   and recoverable; native custody retains operational IDs but is not a second authority store. No
+   automatic dispatch follows an incomplete plan or an unapproved design. Existing assignments and
+   claims remain in the same canonical graph and continue to participate in exclusion.
+2. An engine-owned controller channel—not a fabricated model tool call—rechecks current authority,
+   task readiness, exact applicable dependency results, claims and capacity. It schedules compatible
+   ready tasks concurrently, attempts newly eligible work without a batch barrier, and reports holds
+   per task. The service's existing atomic reservation is the final arbiter; a stale/conflicting claim
+   is not bypassed. Ambiguous result selection holds the affected task rather than guessing.
+3. Reuse the existing passive preparation and initial-start mechanisms behind that channel. Persist
+   each original plan/task/attempt and exact prepare/start command identities before external effects;
+   recovery looks up the original receipt and native outcome, never launches a new ID merely because
+   a reply was lost. Unknown active work retains its affected capacity/claims until qualified recovery;
+   independent work may continue. Restart restores canonical frontier and protected originals, not a
+   fresh empty queue. No claim of exactly-once execution or rollback is inferred.
+4. The first implementation includes model-free tests of overlapping independent tasks, immediate
+   dependent readiness, claim conflict/capacity holds, revoked authority, loss/restart and no duplicate
+   wake, plus the real service/native integration needed to drive those paths. It does not replace
+   the required profile/packet/safe-access gates, create a new LLM runtime, perform a live model call,
+   claim cross-platform qualification, or mark worker output independently reviewed or accepted.
+
+Alternative considered: drive the existing two tools with synthetic tool-call IDs from a background
+loop. It would misrepresent the actual caller and make replay/cancellation depend on a fabricated
+conversation context; it is not an acceptable authority or recovery mechanism. A transient-only queue
+would lose the authorized plan across restart. Exact record/operation schema and version selection
+must be specified compatibly before implementation; this proposal does not itself approve new bytes.
+
 1. Ratify one knowledge revision; read it from two clients; prove failed publication leaves the accepted revision unchanged.
 2. Dispatch one bounded implementation task; independently verify the current code tree; accept the result with linked evidence.
 3. Interrupt and resume that workflow in a second harness without importing the whole conversation.
