@@ -683,3 +683,12 @@ transitions require separately supplied writer-fencing observations and do not r
 transitions require exact service-supplied capture facts and allow at most one result per completed
 mechanical assignment; they do not publish a result. Store publication, runtime integration and per-platform qualification remain held. No new path, external
 source, actual credentials, patch or private run material is introduced.
+
+## Candidate mechanical transition audit scope P36 — local source checkpoint
+
+Extend the existing mechanical descriptor and synthetic test paths with a candidate exact H-to-C
+row/body footprint validator for the six command4 operations. It checks original identities,
+generation edges, claimed actor/controller binding and unchanged unrelated records/bodies. This is
+not a Git journal auditor: actual receipts, historical/current authority, readiness and native
+capture/fencing facts still require separate original-H verification before model3 publication.
+No store writer, service route or primary applying tool is enabled; no new paths or private data.

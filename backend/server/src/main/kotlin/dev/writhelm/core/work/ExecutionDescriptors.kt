@@ -421,6 +421,92 @@ internal class MechanicalReservationReducer {
     }
 }
 
+/** Candidate original-H -> C audit of the exact mechanical row/body footprint and actor binding.
+ * Both snapshots must already be fully validated. This is NOT receipt authentication, original
+ * authority, task-readiness proof, native capture/fencing verification or a Git history auditor.
+ * Those separately required checks remain held until a selected model3 writer is integrated. */
+internal fun validateMechanicalTransition(h:WorkState,c:WorkState,original:MechanicalCommand,actor:WorkExecutionInput) {
+    workRequire(h.modelVersion==3 && c.modelVersion==3 && h.projectId==c.projectId,WorkProblem.INVALID_SUBJECT)
+    val command=MechanicalCommandCodec().decode(MechanicalCommandCodec().encode(original))
+    workRequire(command.projectId==h.projectId && actor.assignment==null && actor.execution==null,WorkProblem.INVALID_BINDING)
+    val changed=(h.records.keys+c.records.keys).filter { h.records[it]!=c.records[it] }.toSet()
+    val bodyChanges=(h.bodies.keys+c.bodies.keys).filter { h.bodies[it]!=c.bodies[it] }.toSet()
+    val project=h.projectId
+    fun assignment(id:UUID)=WorkRecordIdentity(WorkFamily.ASSIGNMENTS,WorkKey.Id(project,id))
+    fun oldAssignment(id:UUID):MechanicalAssignment=(h.records[assignment(id)]?.payload as? WMechanicalAssignmentsPayload)?.value ?: throw WorkFault(WorkProblem.WRONG_ASSIGNMENT)
+    fun newAssignment(id:UUID):MechanicalAssignment=(c.records[assignment(id)]?.payload as? WMechanicalAssignmentsPayload)?.value ?: throw WorkFault(WorkProblem.WRONG_ASSIGNMENT)
+    fun controller(b:MechanicalBinding,author:Boolean) {
+        workRequire(actor.controllerId==b.producer.controllerId && (!author || actor.principalId==b.authorship.declaredBy),WorkProblem.INVALID_BINDING)
+    }
+    fun sameBodyChanges(expected:Set<Digest>) { workRequire(bodyChanges==expected && bodyChanges.all { it !in h.bodies && it in c.bodies },WorkProblem.INVALID_SUBJECT) }
+    when(val v=command.operation) {
+        is MechanicalCommandOperation.Reserve -> {
+            controller(v.binding,true);val id=assignment(v.assignmentId);val a=newAssignment(v.assignmentId)
+            workRequire(id !in h.records && a==MechanicalAssignment(0,v.binding,null,"reserved"),WorkProblem.INVALID_TRANSITION)
+            validateMechanicalRecordEdge(null,c.records[id])
+            val holder=WClaimsHolderVariant0Value(WClaimsHolderVariant0("assignment",WAssignmentSubject(v.assignmentId,0)))
+            val basis=WSourceVariant2Value(WSourceVariant2("work",v.binding.manifest))
+            val ids=v.resources.map { e ->
+                val key=WorkRecordIdentity(WorkFamily.CLAIMS,e.resource)
+                val old=(h.records[key]?.payload as? WClaimsPayload)?.value
+                workRequire(old?.generation==e.generation && (old==null || old.state=="free"),WorkProblem.STALE_GENERATION)
+                val expected=WClaims(if(old==null)0 else nextGeneration(old.generation),holder,v.binding.producer.workspaceId,"held",old?.incompatible ?: emptyList(),basis)
+                workRequire((c.records[key]?.payload as? WClaimsPayload)?.value==expected,WorkProblem.INVALID_SUBJECT);key
+            }.toSet()
+            workRequire(changed==ids+id,WorkProblem.INVALID_SUBJECT);sameBodyChanges(emptySet())
+        }
+        is MechanicalCommandOperation.Bind -> {
+            val id=assignment(v.assignmentId);val old=oldAssignment(v.assignmentId);val next=newAssignment(v.assignmentId)
+            controller(old.bindingData,true);workRequire(old.generation==v.generation && old.state=="reserved",WorkProblem.STALE_GENERATION)
+            val key=WorkRecordIdentity(WorkFamily.ASSIGNMENT_BINDINGS,WorkKey.AssignmentBinding(project,v.assignmentId,0))
+            val row=c.records[key] ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+            workRequire(key !in h.records && row.payload==WMechanicalBindingsPayload(old.bindingData) &&
+                v.binding==WorkReference(key,WorkCodec(modelVersion=3).digest(row)) && next.binding==v.binding && next.state=="bound",WorkProblem.INVALID_BINDING)
+            validateMechanicalRecordEdge(h.records[id],c.records[id]);validateMechanicalRecordEdge(null,row)
+            workRequire(changed==setOf(id,key),WorkProblem.INVALID_SUBJECT);sameBodyChanges(emptySet())
+        }
+        is MechanicalCommandOperation.Prepare -> {
+            val id=assignment(v.assignmentId);val old=oldAssignment(v.assignmentId);val next=newAssignment(v.assignmentId)
+            controller(old.bindingData,true);val key=WorkRecordIdentity(WorkFamily.NATIVE_INTENTS,v.operation)
+            workRequire(old.generation==v.generation && old.state=="bound" && old.binding==v.effect.binding &&
+                v.operation==old.bindingData.producer.operation && next.state=="active" && key !in h.records &&
+                c.records[key]?.payload==WMechanicalOperationsPayload(v.effect),WorkProblem.INVALID_BINDING)
+            validateMechanicalRecordEdge(h.records[id],c.records[id]);validateMechanicalRecordEdge(null,c.records[key])
+            val supplied=v.bodies.map { Utf8Content.fromText(it.body) }
+            supplied.forEach { body -> workRequire(c.bodies[body.digest]==body && (h.bodies[body.digest]==null || h.bodies[body.digest]==body),WorkProblem.DIGEST_MISMATCH) }
+            val expected=supplied.filter { it.digest !in h.bodies }.map { it.digest }.toSet()
+            sameBodyChanges(expected);workRequire(changed==setOf(id,key),WorkProblem.INVALID_SUBJECT)
+        }
+        is MechanicalCommandOperation.Observe -> {
+            val id=assignment(v.assignmentId);val old=oldAssignment(v.assignmentId);val next=newAssignment(v.assignmentId)
+            controller(old.bindingData,false);val key=WorkRecordIdentity(WorkFamily.NATIVE_INTENTS,v.operation)
+            val prior=(h.records[key]?.payload as? WMechanicalOperationsPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+            workRequire(old.generation==v.generation && old.state in setOf("active","unknown") && v.operation==old.bindingData.producer.operation &&
+                prior.generation==v.expectedOperationGeneration && c.records[key]?.payload==WMechanicalOperationsPayload(v.effect) &&
+                next.state==(if(v.effect.writerCompleted)"completed" else "unknown"),WorkProblem.INVALID_BINDING)
+            validateMechanicalRecordEdge(h.records[id],c.records[id]);validateMechanicalRecordEdge(h.records[key],c.records[key])
+            workRequire(changed==setOf(id,key),WorkProblem.INVALID_SUBJECT);sameBodyChanges(emptySet())
+        }
+        is MechanicalCommandOperation.Retrospective -> {
+            val a=oldAssignment(v.assignmentId);controller(a.bindingData,true)
+            val key=WorkRecordIdentity(WorkFamily.RETROSPECTIVES,v.key)
+            workRequire(a.generation==v.generation && a.state=="completed" && v.value.task==a.bindingData.task && key !in h.records &&
+                c.records[key]?.payload==WRetrospectivesPayload(v.value),WorkProblem.INVALID_SUBJECT)
+            workRequire(changed==setOf(key),WorkProblem.INVALID_SUBJECT);sameBodyChanges(emptySet())
+        }
+        is MechanicalCommandOperation.Submit -> {
+            val a=oldAssignment(v.assignmentId);controller(a.bindingData,true)
+            val key=WorkRecordIdentity(WorkFamily.RESULTS,v.result.key)
+            val operation=(h.records[WorkRecordIdentity(WorkFamily.NATIVE_INTENTS,a.bindingData.producer.operation)]?.payload as? WMechanicalOperationsPayload)?.value
+                ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+            workRequire(a.generation==v.generation && a.state=="completed" && operation.generation==v.operationGeneration && operation.outcome=="applied" && operation.writerCompleted &&
+                key !in h.records && c.records[key]?.payload==WMechanicalResultsPayload(v.result.value),WorkProblem.INVALID_SUBJECT)
+            validateMechanicalRecordEdge(null,c.records[key])
+            workRequire(changed==setOf(key),WorkProblem.INVALID_SUBJECT);sameBodyChanges(emptySet())
+        }
+    }
+}
+
 /** Candidate record2 shapes only. This codec has no authenticated command, writer or native effect. */
 internal class MechanicalWorkCodec {
     private val execution=ExecutionDescriptorCodec()
