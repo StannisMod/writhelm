@@ -7,6 +7,7 @@ import dev.writhelm.core.knowledge.Utf8Content
 import dev.writhelm.core.knowledge.ContextReference
 import dev.writhelm.core.knowledge.DocumentKey
 import dev.writhelm.core.knowledge.RevisionKey
+import dev.writhelm.core.store.*
 import org.junit.jupiter.api.Test
 import kotlin.test.*
 
@@ -182,6 +183,20 @@ class ExecutionDescriptorsTest {
             val wire=MechanicalCommandCodec()
             assertContentEquals(wire.encode(original),wire.encode(recovered),name)
             assertEquals(wire.fingerprint(original),wire.fingerprint(recovered),name)
+            val workCodec=WorkCodec(modelVersion=3)
+            val writes=effect.changedRecords.map { row ->
+                val key=RecordKey("work",row.identity.family.tag,StrictJson.decode(WorkIdentityCodec().encodeKey(row.identity.key)))
+                WriteDescriptor(key,effect.before.records[row.identity]?.let { workCodec.digest(it).hex },workCodec.digest(row).hex)
+            }+effect.addedBodies.map { body -> WriteDescriptor(RecordKey("work","bodies",str(body.digest.hex)),null,body.digest.hex) }
+            val row=effect.after.records.getValue(effect.result)
+            val parent=GitOid("sha1","a".repeat(40))
+            val receipt=MechanicalReceipt(uid(1),MechanicalReceiptIdentity(actor.principalId,project,name,original.requestKey),wire.fingerprint(original),parent,actor.credentialId,
+                MechanicalReceiptOutcome.Success(MechanicalReceiptResult(effect.result,if(effect.result.family.mutable)recordGeneration(row.payload) else null,workCodec.digest(row))),writes.sortedBy { it.path })
+            assertContentEquals(wire.encode(original),wire.encode(validateMechanicalReceiptEdge(receipt,parent,effect.before,effect.after,actor)))
+            assertFailsWith<StoreFault> { validateMechanicalReceiptEdge(receipt,parent,effect.before,effect.after,actor.copy(credentialId=uid(1199))) }
+            val wrongFingerprint=MechanicalReceipt(receipt.storeId,receipt.identity,Digest.of("wrong".toByteArray()),parent,receipt.credentialId,receipt.outcome,receipt.writes)
+            assertFailsWith<StoreFault> { validateMechanicalReceiptEdge(wrongFingerprint,parent,effect.before,effect.after,actor) }
+            assertFailsWith<StoreFault> { validateMechanicalReceiptEdge(receipt,GitOid("sha1","b".repeat(40)),effect.before,effect.after,actor) }
         }
         assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> { reducer.reserve(initial,reserve,actor,facts.copy(qualifiedProfiles=emptySet())) }.problem)
         assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> { reducer.reserve(initial,reserve,actor,facts.copy(qualifiedWorkspaces=emptySet())) }.problem)

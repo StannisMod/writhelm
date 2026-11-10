@@ -150,3 +150,27 @@ internal object MechanicalReceiptCodec {
         return MechanicalReceipt(uuid(p.getValue("storeId")),identity,digest(p.getValue("fingerprint")),GitOid.parse(p.getValue("validatedAt")),uuid(p.getValue("authenticatedByCredentialId")),outcome,writes)
     }
 }
+
+/** Structural successful-edge check only. The caller must independently validate both snapshots,
+ * the original authority and native facts; neither receipt fields nor this function establish them. */
+internal fun validateMechanicalReceiptEdge(receipt:MechanicalReceipt,parent:GitOid,h:WorkState,c:WorkState,actor:WorkExecutionInput):MechanicalCommand {
+    integrity(receipt.validatedAt==parent && receipt.identity.principalId==actor.principalId && receipt.credentialId==actor.credentialId)
+    val result=(receipt.outcome as? MechanicalReceiptOutcome.Success)?.result ?: fail(StoreProblem.INTEGRITY)
+    val command=reconstructMechanicalTransition(h,c,receipt.identity.operation,receipt.identity.requestKey,result.identity,actor)
+    integrity(receipt.identity.projectId==h.projectId && MechanicalCommandCodec().fingerprint(command)==receipt.fingerprint)
+    val codec=WorkCodec(modelVersion=3)
+    val row=c.records[result.identity] ?: fail(StoreProblem.INTEGRITY)
+    integrity(codec.digest(row)==result.digest)
+    integrity(result.generation==if(result.identity.family.mutable)recordGeneration(row.payload) else null)
+    val expected=mutableListOf<WriteDescriptor>()
+    (h.records.keys+c.records.keys).filter { h.records[it]!=c.records[it] }.forEach { identity ->
+        val key=RecordKey("work",identity.family.tag,StrictJson.decode(WorkIdentityCodec().encodeKey(identity.key)))
+        expected.add(WriteDescriptor(key,h.records[identity]?.let { codec.digest(it).hex },c.records[identity]?.let { codec.digest(it).hex }))
+    }
+    (h.bodies.keys+c.bodies.keys).filter { h.bodies[it]!=c.bodies[it] }.forEach { digest ->
+        expected.add(WriteDescriptor(RecordKey("work","bodies",str(digest.hex)),h.bodies[digest]?.digest?.hex,c.bodies[digest]?.digest?.hex))
+    }
+    val actual=receipt.writes.map { StrictJson.encode(it.json()).toList() }
+    integrity(actual==expected.sortedBy { it.path }.map { StrictJson.encode(it.json()).toList() })
+    return command
+}
