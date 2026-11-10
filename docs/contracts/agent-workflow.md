@@ -140,6 +140,9 @@ parallelism, subject to its dependencies/readiness, resource claims, configured 
 runtime/authority constraints. It must not serialize unrelated ready tasks merely because they were
 listed sequentially, nor wait for an unrelated slow task to finish before starting newly eligible
 work. A capacity or safety hold is visible rather than silently presented as dependency ordering.
+Dependency selection must identify the exact applicable producer result under a previously authorized
+rule or planner decision; the harness must not guess among competing results or silently rewrite a
+bound task. If required selection or a safe binding is unavailable, only the affected task is held.
 Each worker executes in its own assigned worktree and returns its actual report and result through
 the harness, without manual transfer by the owner or planner copying a worker's conversation.
 
