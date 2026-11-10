@@ -309,10 +309,11 @@ internal class WorkState private constructor(
                     graph(e.executionId==i.executionId && e.nativeHostId==i.nativeHostId && e.nativeSessionId==i.nativeSessionId && e.workspaceId==v.workspaceId)
                     v.reviewSubjects.forEach { subject ->
                         graph(subject.identity.family==WorkFamily.RESULTS)
-                        // Mechanical-result review is held until every admission/history/acceptance
-                        // path enforces its complete contributor list, not merely execution IDs.
-                        val result=resolve(subject).payload as? WResultsPayload ?: refuse(CodecProblem.INVALID_GRAPH)
-                        graph(result.value.producer.executionId!=e.executionId)
+                        when(val result=resolve(subject).payload) {
+                            is WResultsPayload -> graph(result.value.producer.executionId!=e.executionId)
+                            is WMechanicalResultsPayload -> graph(e.executionId!=result.value.producer.executionId && e.principalId !in result.value.authorship.authors)
+                            else -> refuse(CodecProblem.INVALID_GRAPH)
+                        }
                     }
                 }
                 is WLoadedViewsPayload -> { val v=p.value;val b=(bind(v.assignment).payload as WAssignmentBindingsPayload).value
@@ -343,6 +344,10 @@ internal class WorkState private constructor(
                     graph(v.claimedCriteria.all { selected -> (task(v.task).payload as WTaskRevisionsPayload).value.criteria.any { it.id==selected } }) }
                 is WVerificationReportsPayload -> { val v=p.value;val b=(bind(v.assignment).payload as WAssignmentBindingsPayload).value
                     graph(v.task==b.task && v.reviewer==b.execution && b.intendedExecution.template=="reviewer-v1" && v.subjects==b.reviewSubjects)
+                    v.subjects.forEach { subject ->
+                        val result=resolve(subject).payload
+                        if(result is WMechanicalResultsPayload)graph(v.reviewer.executionId!=result.value.producer.executionId && v.reviewer.principalId !in result.value.authorship.authors)
+                    }
                     val plan=(required(WorkFamily.VERIFICATION_PLANS,v.plan).payload as WVerificationPlansPayload).value
                     graph(v.gateIds.all { gate ->plan.gates.any { it.id==gate } }) }
                 is WVerificationPlansPayload -> { val v=p.value;val t=(task(v.task).payload as WTaskRevisionsPayload).value

@@ -224,6 +224,30 @@ class ExecutionDescriptorsTest {
         val resultRef=state.reference(WorkFamily.RESULTS,resultRecord.identity.key)
         assertEquals(resultRecord,state.resolve(resultRef))
         assertEquals(result.task,recordTasks(resultRecord).single())
+        // Synthetic native review bindings exercise restore/derive independence, not admission,
+        // fresh-context, immutable input custody or actual report quality.
+        val originalBinding=state.records.values.mapNotNull { (it.payload as? WAssignmentBindingsPayload)?.value }.first()
+        val reviewKey=WorkKey.AssignmentBinding(project,uid(977),0)
+        fun reviewer(principal:java.util.UUID,executionId:java.util.UUID):WorkRecord {
+            val execution=originalBinding.execution.copy(principalId=principal,executionId=executionId)
+            val intent=originalBinding.intendedExecution.copy(executionId=executionId,template="reviewer-v1")
+            return WorkRecord(WorkRecordIdentity(WorkFamily.ASSIGNMENT_BINDINGS,reviewKey),WAssignmentBindingsPayload(
+                originalBinding.copy(execution=execution,intendedExecution=intent,reviewSubjects=listOf(resultRef))))
+        }
+        for(principal in result.authorship.authors)assertFailsWith<CodecFault> { state.derive(listOf(reviewer(principal,uid(978))),emptyList()) }
+        assertFailsWith<CodecFault> { state.derive(listOf(reviewer(uid(979),result.producer.executionId)),emptyList()) }
+        val candidateReview=state.derive(listOf(reviewer(uid(979),uid(978))),emptyList())
+        assertEquals(candidateReview.records,WorkState.restore(project,candidateReview.records.values,candidateReview.bodies.values,modelVersion=3).records)
+        val reviewerBinding=(candidateReview.record(WorkFamily.ASSIGNMENT_BINDINGS,reviewKey).payload as WAssignmentBindingsPayload).value
+        val reviewPlan=(candidateReview.task(reviewerBinding.task).verificationPlan)!!
+        val gate=(candidateReview.record(WorkFamily.VERIFICATION_PLANS,reviewPlan).payload as WVerificationPlansPayload).value.gates.single().id
+        val report=WorkRecord(WorkRecordIdentity(WorkFamily.VERIFICATION_REPORTS,WorkKey.Id(project,uid(991))),WVerificationReportsPayload(
+            WVerificationReports(reviewerBinding.task,WAssignmentSubject(reviewKey.assignmentId,0),reviewerBinding.execution,listOf(resultRef),reviewPlan,
+                listOf(gate),f.source,listOf(f.source),emptyList(),emptyList(),original.changes,emptyList())))
+        val withReport=candidateReview.derive(listOf(report),emptyList())
+        assertEquals(withReport.records,WorkState.restore(project,withReport.records.values,withReport.bodies.values,modelVersion=3).records)
+        val forged=(report.payload as WVerificationReportsPayload).value.copy(reviewer=reviewerBinding.execution.copy(principalId=result.authorship.authors.first()))
+        assertFailsWith<CodecFault> { candidateReview.derive(listOf(report.copy(payload=WVerificationReportsPayload(forged))),emptyList()) }
         // A subsequent correction must inherit every declared predecessor author, not only the
         // immediately preceding physical producer or the newest submitter.
         val nextTask=WorkKey.TaskRevision(project,uid(980),0);val nextPlan=WorkKey.Revision(project,uid(981),0)
