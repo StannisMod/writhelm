@@ -392,8 +392,7 @@ internal class WorkState private constructor(
                     v.frontier.forEach { item ->task(item.task);item.assignments.forEach { a ->required(WorkFamily.ASSIGNMENTS,WorkKey.Id(projectId,a.assignmentId)) } }
                     val frontier=v.frontier.map { it.task }.toSet();v.entries.forEach { graph(it.tasks.all(frontier::contains)) }
                 }
-                is WAcceptancesPayload -> { val v=p.value;val result=(resolve(v.result).payload as? WResultsPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
-                    graph(v.task==result.task && v.acceptedBy!=result.producer.principalId)
+                is WAcceptancesPayload -> { val v=p.value
                     try { val plan=rootedVerificationPlan(v.task,(task(v.task).payload as WTaskRevisionsPayload).value,v.verificationPlan,
                         { (required(WorkFamily.VERIFICATION_PLANS,it).payload as WVerificationPlansPayload).value },approvedPlanChanges,budget.depth)
                         acceptanceChecks(v,plan) }

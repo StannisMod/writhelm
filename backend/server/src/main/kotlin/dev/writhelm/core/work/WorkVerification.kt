@@ -45,9 +45,13 @@ internal fun rootedVerificationPlan(taskKey: WorkKey.TaskRevision,task: WTaskRev
 /** The acceptance's recorded checks must discharge its governing plan on restore too. This checks
  * intrinsic immutable evidence, not today's credential policy or reports written after acceptance. */
 internal fun WorkState.acceptanceChecks(v: WAcceptances,plan: WVerificationPlans=governingVerificationPlan(v.task,v.verificationPlan)) {
-    val result=(resolve(v.result).payload as? WResultsPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+    val result=resolve(v.result).payload
+    val resultTask=when(result) { is WResultsPayload -> result.value.task;is WMechanicalResultsPayload -> result.value.task;else -> throw WorkFault(WorkProblem.INVALID_REFERENCE) }
+    val artifacts=when(result) { is WResultsPayload -> result.value.artifacts;is WMechanicalResultsPayload -> result.value.artifacts;else -> throw WorkFault(WorkProblem.INVALID_REFERENCE) }
+    val producerExecution=when(result) { is WResultsPayload -> result.value.producer.executionId;is WMechanicalResultsPayload -> result.value.producer.executionId;else -> throw WorkFault(WorkProblem.INVALID_REFERENCE) }
+    val authors=when(result) { is WResultsPayload -> setOf(result.value.producer.principalId);is WMechanicalResultsPayload -> result.value.authorship.authors.toSet();else -> throw WorkFault(WorkProblem.INVALID_REFERENCE) }
     val terms=task(v.task)
-    workRequire(result.task==v.task && v.acceptedBy!=result.producer.principalId,WorkProblem.BLOCKED_INPUT)
+    workRequire(resultTask==v.task && v.acceptedBy !in authors,WorkProblem.BLOCKED_INPUT)
     workRequire(plan.task==v.task && v.criterionIds.toSet()==terms.criteria.map { it.id }.toSet(),WorkProblem.BLOCKED_INPUT)
     val applicable=(resolve(v.applicability).payload as? WEvidenceApplicabilityPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
     workRequire(applicable.result==v.result,WorkProblem.INVALID_SUBJECT)
@@ -57,14 +61,15 @@ internal fun WorkState.acceptanceChecks(v: WAcceptances,plan: WVerificationPlans
     }
     val reports=v.reports.map { reference ->
         val report=(resolve(reference).payload as? WVerificationReportsPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
-        workRequire(v.result in report.subjects && report.reviewer.executionId!=result.producer.executionId,WorkProblem.INVALID_SUBJECT)
+        workRequire(v.result in report.subjects && report.reviewer.executionId!=producerExecution &&
+            (result !is WMechanicalResultsPayload || report.reviewer.principalId !in authors && report.task==v.task && report.plan==v.verificationPlan),WorkProblem.INVALID_SUBJECT)
         reference to report
     }
     val dispositions=v.dispositions.map { (resolve(it).payload as? WDispositionsPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE) }
     workRequire(dispositions.all { it.result==v.result },WorkProblem.INVALID_SUBJECT)
     workRequire(evidence.all { e ->e.outcome=="passed" && e.subjects.any { s ->when(s) {
         is WSourceVariant2Value -> s.value.reference==v.result
-        is WSourceVariant1Value -> s.value.artifact in result.artifacts
+        is WSourceVariant1Value -> s.value.artifact in artifacts
         else -> false
     } } },WorkProblem.BLOCKED_INPUT)
     plan.gates.filter { it.stage=="acceptance" }.forEach { gate ->

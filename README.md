@@ -36,8 +36,8 @@ unconnected; read-only byte observations do not establish writer termination or 
 Mechanical profiles, assignments/bindings, retained original-effect and result records can be restored in
 the existing bounded canonical graph under explicit candidate model3 selection, sharing claims and
 workspace exclusion with native work. These are structural consistency checks, not authenticated
-effect/writer facts. Candidate graph review bindings and reports exclude declared authors; actual
-review admission and mechanical-result acceptance remain deliberately unavailable.
+effect/writer facts. Candidate graph review bindings, reports and acceptance checks exclude declared
+authors; actual review and acceptance command admission remains deliberately unavailable.
 Legacy command/read/service writer selection remains unchanged and refuses it.
 See [upstream provenance](docs/upstream.md).
 Writhelm is an independent project, not an official upstream distribution.

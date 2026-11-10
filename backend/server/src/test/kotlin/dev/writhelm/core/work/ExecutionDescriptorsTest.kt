@@ -232,7 +232,7 @@ class ExecutionDescriptorsTest {
             val execution=originalBinding.execution.copy(principalId=principal,executionId=executionId)
             val intent=originalBinding.intendedExecution.copy(executionId=executionId,template="reviewer-v1")
             return WorkRecord(WorkRecordIdentity(WorkFamily.ASSIGNMENT_BINDINGS,reviewKey),WAssignmentBindingsPayload(
-                originalBinding.copy(execution=execution,intendedExecution=intent,reviewSubjects=listOf(resultRef))))
+                originalBinding.copy(task=f.data.task,manifest=f.data.manifest,execution=execution,intendedExecution=intent,reviewSubjects=listOf(resultRef))))
         }
         for(principal in result.authorship.authors)assertFailsWith<CodecFault> { state.derive(listOf(reviewer(principal,uid(978))),emptyList()) }
         assertFailsWith<CodecFault> { state.derive(listOf(reviewer(uid(979),result.producer.executionId)),emptyList()) }
@@ -248,6 +248,23 @@ class ExecutionDescriptorsTest {
         assertEquals(withReport.records,WorkState.restore(project,withReport.records.values,withReport.bodies.values,modelVersion=3).records)
         val forged=(report.payload as WVerificationReportsPayload).value.copy(reviewer=reviewerBinding.execution.copy(principalId=result.authorship.authors.first()))
         assertFailsWith<CodecFault> { candidateReview.derive(listOf(report.copy(payload=WVerificationReportsPayload(forged))),emptyList()) }
+        val reportRef=withReport.reference(WorkFamily.VERIFICATION_REPORTS,report.identity.key)
+        val evidenceRecord=WorkRecord(WorkRecordIdentity(WorkFamily.EVIDENCE,WorkKey.Id(project,uid(992))),WEvidencePayload(
+            WEvidence(listOf(WSourceVariant2Value(WSourceVariant2("work",resultRef))),emptyList(),"synthetic check","pure",original.changes,
+                uid(993),"passed",emptyList(),listOf(WEvidenceClauseCasesItem(f.source,"case","test")),emptyList(),original.changes)))
+        val evidenceRef=WorkReference(evidenceRecord.identity,codec.digest(evidenceRecord))
+        val applicability=WorkRecord(WorkRecordIdentity(WorkFamily.EVIDENCE_APPLICABILITY,WorkKey.Id(project,uid(994))),WEvidenceApplicabilityPayload(
+            WEvidenceApplicability(resultRef,listOf(WEvidenceApplicabilityEvidenceItem(evidenceRef,"retained",emptyList(),"same result")),emptyList(),listOf(f.source),uid(995))))
+        val applicabilityRef=WorkReference(applicability.identity,codec.digest(applicability))
+        val mechanicalPlan=(state.task(result.task).verificationPlan)!!
+        val criterion=state.task(result.task).criteria.single().id
+        val acceptance=WAcceptances(resultRef,result.task,mechanicalPlan,listOf(evidenceRef),listOf(reportRef),emptyList(),applicabilityRef,listOf(criterion),emptyList(),original.changes,uid(996))
+        val acceptanceKey=WorkRecordIdentity(WorkFamily.ACCEPTANCES,WorkKey.Id(project,uid(997)))
+        val ready=withReport.derive(listOf(evidenceRecord,applicability),emptyList())
+        for(author in result.authorship.authors)assertFailsWith<CodecFault> { ready.derive(listOf(WorkRecord(acceptanceKey,WAcceptancesPayload(acceptance.copy(acceptedBy=author)))),emptyList()) }
+        val accepted=ready.derive(listOf(WorkRecord(acceptanceKey,WAcceptancesPayload(acceptance))),emptyList())
+        assertEquals(accepted.records,WorkState.restore(project,accepted.records.values,accepted.bodies.values,modelVersion=3).records)
+        // Synthetic structural gate only: no command route, current rights, actual checks or acceptance claim.
         // A subsequent correction must inherit every declared predecessor author, not only the
         // immediately preceding physical producer or the newest submitter.
         val nextTask=WorkKey.TaskRevision(project,uid(980),0);val nextPlan=WorkKey.Revision(project,uid(981),0)
