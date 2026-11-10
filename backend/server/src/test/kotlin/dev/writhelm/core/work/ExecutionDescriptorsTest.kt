@@ -207,6 +207,24 @@ class ExecutionDescriptorsTest {
         val effect=MechanicalOperation(0,WAssignmentSubject(id,0),binding,patch,witnesses,Digest.of(byteArrayOf(1)),Digest.of(byteArrayOf(2)),"pending",null,false,emptyList(),emptyList())
         val prepare=MechanicalCommand(uid(970),project,MechanicalCommandOperation.Prepare(id,1,f.data.producer.operation,effect))
         assertEquals(prepare,codec.decode(codec.encode(prepare)))
+        val withBodies=prepare.copy(operation=(prepare.operation as MechanicalCommandOperation.Prepare).copy(bodies=listOf(
+            MechanicalAttachment(patch.digest,"patch"),MechanicalAttachment(witnesses.digest,"witness"))))
+        val bodyBytes=codec.encode(withBodies)
+        assertContentEquals(bodyBytes,codec.encode(codec.decode(bodyBytes)))
+        assertEquals(codec.fingerprint(withBodies),codec.fingerprint(withBodies.copy(operation=(withBodies.operation as MechanicalCommandOperation.Prepare).copy(
+            bodies=(withBodies.operation as MechanicalCommandOperation.Prepare).bodies.reversed()))))
+        assertFailsWith<CodecFault> { codec.encode(prepare.copy(operation=(prepare.operation as MechanicalCommandOperation.Prepare).copy(bodies=listOf(MechanicalAttachment(patch.digest,"different"))))) }
+        assertFailsWith<CodecFault> { codec.encode(prepare.copy(operation=(prepare.operation as MechanicalCommandOperation.Prepare).copy(bodies=listOf(MechanicalAttachment(Digest.of("other".toByteArray()),"other"))))) }
+        assertFailsWith<CodecFault> { codec.encode(prepare.copy(operation=(prepare.operation as MechanicalCommandOperation.Prepare).copy(bodies=listOf(MechanicalAttachment(patch.digest,"patch"),MechanicalAttachment(patch.digest,"patch"))))) }
+        val longBody="a".repeat(70000);val longRef=WorkBodyReference(Digest.of(longBody.toByteArray()),longBody.length)
+        val large=prepare.copy(operation=(prepare.operation as MechanicalCommandOperation.Prepare).copy(effect=effect.copy(patch=longRef),bodies=listOf(MechanicalAttachment(longRef.digest,longBody))))
+        assertContentEquals(codec.encode(large),codec.encode(codec.decode(codec.encode(large))))
+        val oversized="b".repeat(1024*1024+1);val oversizedRef=WorkBodyReference(Digest.of(oversized.toByteArray()),oversized.length)
+        assertFailsWith<CodecFault> { codec.encode(prepare.copy(operation=(prepare.operation as MechanicalCommandOperation.Prepare).copy(
+            effect=effect.copy(patch=oversizedRef),bodies=listOf(MechanicalAttachment(oversizedRef.digest,oversized))))) }
+        val root=StrictJson.decode(codec.encode(prepare)) as JObject;val payload=root.entries.getValue("payload") as JObject
+        val malformed=JObject(root.entries+("payload" to JObject(payload.entries+("effect" to JObject((payload.entries.getValue("effect") as JObject).entries+("outcome" to str(longBody)))))))
+        assertFailsWith<CodecFault> { codec.decode(StrictJson.encode(malformed)) } // large exception applies only to payload.bodies[].body
         assertFailsWith<CodecFault> { codec.encode(prepare.copy(operation=(prepare.operation as MechanicalCommandOperation.Prepare).copy(effect=effect.copy(generation=1)))) }
         assertFailsWith<CodecFault> { codec.encode(prepare.copy(operation=(prepare.operation as MechanicalCommandOperation.Prepare).copy(effect=effect.copy(assignment=WAssignmentSubject(uid(971),0))))) }
         val observed=effect.copy(generation=1,outcome="unknown",observedDigest=effect.afterDigest)
@@ -219,6 +237,8 @@ class ExecutionDescriptorsTest {
             f.data.manifest,native.artifacts,native.changes,emptyList(),emptyList(),native.retrospective,emptyList(),patch,f.data.authorship))
         val submit=MechanicalCommand(uid(974),project,MechanicalCommandOperation.Submit(id,3,1,result))
         val decoded=codec.decode(codec.encode(submit));assertContentEquals(codec.encode(submit),codec.encode(decoded))
+        val oversizedMetadata=result.copy(value=result.value.copy(pending=(1..5).map { WPending(uid(1000+it),"obligation",null,"z".repeat(60000),result.value.task) }))
+        assertFailsWith<CodecFault> { codec.encode(submit.copy(operation=(submit.operation as MechanicalCommandOperation.Submit).copy(result=oversizedMetadata))) }
         assertFailsWith<CodecFault> { codec.encode(submit.copy(operation=(submit.operation as MechanicalCommandOperation.Submit).copy(assignmentId=uid(971)))) }
         assertFailsWith<CodecFault> { WorkCodec().decodeCommand(codec.encode(submit)) }
         // Codec shapes are NOT authenticated observations, retained bodies, result admission or a native effect.

@@ -664,8 +664,9 @@ Only synthetic tests and existing project-authored source are included; no new p
 ## Candidate mechanical command codec scope P34 — local source checkpoint
 
 Extend the existing mechanical descriptor and synthetic test paths with a closed candidate command4
-metadata codec for reservation, binding, prepare/observe effect and result, including separate framed
-fingerprint domain, exact resource expectations and project/identity checks. No attachments, store
-catalogue, journal, authenticated admission, new endpoint or tool is enabled. Independently derived
+codec for reservation, binding, prepare/observe effect and result, including bounded digest-checked
+prepare attachments, separate framed fingerprint domain, exact resource expectations and project/
+identity checks. No attachment publication, store catalogue, journal, authenticated admission, new
+endpoint or tool is enabled. Independently derived
 goldens, historical audit, complete authority matrix and writer compatibility remain held. Legacy command3 meaning is
 unchanged. No new path, external source, actual credentials, patch or private run material is added.
