@@ -232,7 +232,13 @@ internal class WorkState private constructor(
                         if(a.state=="active")graph(o.outcome=="pending")
                         if(a.state=="unknown")graph(o.outcome=="unknown")
                         if(a.state=="completed")graph(o.writerCompleted)
-                    } else graph(WorkRecordIdentity(WorkFamily.NATIVE_INTENTS,v.producer.operation) !in records)
+                    } else {
+                        // An absent operation is still a dependency: a later insertion must
+                        // revalidate this assignment rather than bypassing its state guard.
+                        val operation=WorkRecordIdentity(WorkFamily.NATIVE_INTENTS,v.producer.operation)
+                        dependency(operation)
+                        graph(operation !in records)
+                    }
                 }
                 is WMechanicalBindingsPayload -> {
                     mechanicalBinding(p.value)

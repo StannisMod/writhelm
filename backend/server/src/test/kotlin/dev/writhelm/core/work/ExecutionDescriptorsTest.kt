@@ -188,6 +188,7 @@ class ExecutionDescriptorsTest {
             Digest.of(byteArrayOf(1)),Digest.of(byteArrayOf(2)),"pending",null,false,emptyList(),emptyList())
         val opId=WorkRecordIdentity(WorkFamily.NATIVE_INTENTS,f.data.producer.operation)
         assignment=assignment.copy(generation=2,state="active")
+        assertFailsWith<CodecFault> { state.derive(listOf(WorkRecord(opId,WMechanicalOperationsPayload(operation))),listOf(patch,witnesses)) }
         assertFailsWith<CodecFault> { state.derive(listOf(f.assignment.copy(payload=WMechanicalAssignmentsPayload(assignment)),
             WorkRecord(opId,WMechanicalOperationsPayload(operation.copy(outcome="unknown")))),listOf(patch,witnesses)) }
         state=state.derive(listOf(f.assignment.copy(payload=WMechanicalAssignmentsPayload(assignment)),WorkRecord(opId,WMechanicalOperationsPayload(operation))),listOf(patch,witnesses))
