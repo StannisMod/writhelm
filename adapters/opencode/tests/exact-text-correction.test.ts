@@ -170,6 +170,18 @@ test("a partially retained original remains held instead of completing or dispat
   assert.equal(await readRetainedExactTextEffect(custody,operation),undefined) // partial chunks are not absence proof
   assert.equal(await fs.readFile(target,"utf8"),"old\n")
 })
+test("an incomplete or noncanonical manifest refuses instead of becoming absent or readable",{skip:process.platform!=="linux"},async()=>{
+  const configured=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(configured)
+  const area=await fs.mkdtemp(path.join(configured,"text-invalid-manifest-")),work=path.join(area,"work")
+  await fs.mkdir(work)
+  const missing=new LinuxNativeCustody(path.join(area,"missing"),[work]);await missing.initialize()
+  const manifest=JSON.stringify({version:1,operationId:operation,byteLength:1,digest:hash("x"),chunks:[hash("eA==")]})
+  assert.equal(await missing.retain("text-effect",operation,manifest),true)
+  await assert.rejects(readRetainedExactTextEffect(missing,operation))
+  const malformed=new LinuxNativeCustody(path.join(area,"malformed"),[work]);await malformed.initialize()
+  assert.equal(await malformed.retain("text-effect",operation,manifest.replace('"version":1','"version":1,"version":1')),true)
+  await assert.rejects(readRetainedExactTextEffect(malformed,operation))
+})
 test("protected effect custody round-trips bounded multichunk UTF-8 without weakening entry limits",{skip:process.platform!=="linux"},async()=>{
   const configured=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(configured)
   const area=await fs.mkdtemp(path.join(configured,"text-chunks-")),work=path.join(area,"work")
