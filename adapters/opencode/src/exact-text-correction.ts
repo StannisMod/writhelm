@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import * as fs from "node:fs/promises"
 import { constants } from "node:fs"
 import nodePath from "node:path"
+import type { LinuxNativeCustody } from "./native-runtime-custody.js"
 
 export type ExactTextCorrection=Readonly<{
   path:string;mode:"100644"|"100755";beforeDigest:string;beforeText:string;patch:string
@@ -114,6 +115,63 @@ export class PendingTextEffect extends Error {
     super("exact text effect remains pending reconciliation",{cause})
     this.name="PendingTextEffect"
   }
+}
+/** Retain the original effect before issuing a write. A manifest is published only after all
+ * immutable chunks are retained; pre-existing chunks without that manifest are an unresolved
+ * partial retention, not permission to retry. The result is NOT operation admission or proof
+ * of writer termination. Existing manifests never authorize a second dispatch. */
+export async function retainExactTextEffect(custody:LinuxNativeCustody,effect:RetainedTextEffect):Promise<"new"|"existing"> {
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(effect.operationId))refused()
+  const prepared=prepareExactTextCorrection({path:effect.correction.path,mode:effect.correction.mode,
+    beforeText:effect.beforeText,beforeDigest:effect.correction.beforeDigest,patch:effect.patch})
+  if(effect.before.path!==prepared.path||effect.before.digest!==prepared.beforeDigest||effect.patchDigest!==hash(effect.patch)||
+    effect.correction.afterDigest!==prepared.afterDigest||effect.correction.afterText!==prepared.afterText)refused()
+  const raw=JSON.stringify(effect)
+  const bytes=Buffer.from(raw,"utf8")
+  if(bytes.length>20*1024*1024)refused()
+  const chunks:string[]=[]
+  for(let offset=0;offset<bytes.length;offset+=512*1024)chunks.push(bytes.subarray(offset,offset+512*1024).toString("base64"))
+  if(!chunks.length||chunks.length>40)refused()
+  const manifest=JSON.stringify({version:1,operationId:effect.operationId,byteLength:bytes.length,digest:hash(raw),
+    chunks:chunks.map(hash)})
+  const existing=await custody.read("text-effect",effect.operationId)
+  if(existing!==undefined){if(existing!==manifest)refused();return "existing"}
+  for(let i=0;i<chunks.length;i++){
+    // An existing chunk could belong to an interrupted retention or a concurrent caller.
+    // Never fill the rest and then claim a fresh authorization to dispatch.
+    if(!await custody.retain("text-effect-part",`${effect.operationId}:${i}`,chunks[i]!))refused()
+  }
+  if(!await custody.retain("text-effect",effect.operationId,manifest))refused()
+  return "new"
+}
+/** Read the exact retained original bytes, not an authority grant or proof of no live writer.
+ * Unparseable/incomplete manifests and missing/changed chunks are refused, never treated as absence.
+ * The eventual controller must validate the decoded closed effect and current authority separately. */
+export async function readRetainedExactTextEffect(custody:LinuxNativeCustody,operationId:string):Promise<string|undefined> {
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(operationId))refused()
+  const raw=await custody.read("text-effect",operationId)
+  if(raw===undefined)return undefined // not proof that no partial chunks/effect exist
+  let manifest:unknown
+  try{manifest=JSON.parse(raw)}catch{refused()}
+  if(!manifest||typeof manifest!=="object"||Array.isArray(manifest))refused()
+  const m=manifest as Record<string,unknown>
+  if(Object.keys(m).join(",")!=="version,operationId,byteLength,digest,chunks"||m.version!==1||m.operationId!==operationId||
+    typeof m.byteLength!=="number"||!Number.isSafeInteger(m.byteLength)||m.byteLength<=0||m.byteLength>20*1024*1024||
+    typeof m.digest!=="string"||!/^[0-9a-f]{64}$/.test(m.digest)||!Array.isArray(m.chunks)||m.chunks.length<1||m.chunks.length>40||
+    m.chunks.some((x:unknown)=>typeof x!=="string"||!/^[0-9a-f]{64}$/.test(x))||JSON.stringify(m)!==raw)refused()
+  const parts:Buffer[]=[]
+  for(let i=0;i<m.chunks.length;i++){
+    const encoded=await custody.read("text-effect-part",`${operationId}:${i}`)
+    if(encoded===undefined||hash(encoded)!==m.chunks[i])refused()
+    const part=Buffer.from(encoded,"base64")
+    if(part.toString("base64")!==encoded||part.length===0||part.length>512*1024||i<m.chunks.length-1&&part.length!==512*1024)refused()
+    parts.push(part)
+  }
+  const bytes=Buffer.concat(parts)
+  if(bytes.length!==m.byteLength)refused()
+  const text=bytes.toString("utf8")
+  if(!Buffer.from(text,"utf8").equals(bytes)||hash(text)!==m.digest)refused()
+  return text
 }
 const identity=(s:import("node:fs").BigIntStats):FileIdentity=>Object.freeze({
   device:String(s.dev),inode:String(s.ino),mode:String(s.mode),links:String(s.nlink),size:String(s.size),

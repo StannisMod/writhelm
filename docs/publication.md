@@ -634,3 +634,13 @@ candidate mechanical record-edge validator for initial rows, original identity, 
 immutable operation/binding transitions. This is not a store-history auditor or authenticated receipt
 validator; model3 publication and physical-effect observation remain held. No new paths or private
 run artifacts are published.
+
+## Protected original-effect custody scope P31 — local source checkpoint
+
+Extend the existing exact-text primitive and synthetic test paths to retain bounded original-effect
+bytes in the existing protected Linux native custody as chunks plus an immutable manifest, and to
+read back verified exact bytes. Partial retention remains held; an existing or missing manifest is
+not an authorization for replay, proof of absence or writer fencing. The helper is not connected to
+an authenticated service/controller route; closed-effect validation, actual operation admission,
+recovery and per-platform qualification remain separate. No new paths, external source, actual
+patches, identities, worktrees or private custody contents are published.

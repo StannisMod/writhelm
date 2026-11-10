@@ -4,7 +4,8 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
-import { prepareExactTextCorrection,applyExactTextFile,observeExactTextEffect,PendingTextEffect,type ExactTextCorrection,type RetainedTextEffect } from "../src/exact-text-correction.js"
+import { prepareExactTextCorrection,applyExactTextFile,observeExactTextEffect,retainExactTextEffect,readRetainedExactTextEffect,PendingTextEffect,type ExactTextCorrection,type RetainedTextEffect } from "../src/exact-text-correction.js"
+import { LinuxNativeCustody } from "../src/native-runtime-custody.js"
 import * as fs from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
@@ -126,6 +127,61 @@ test("retention failure and revocation after retention perform no writes",{skip:
     })
     assert.ok(retained);assert.equal(await fs.readFile(path.join(root,input.path),"utf8"),"old\n")
   })
+})
+test("protected custody retains exact operation before writing and never reauthorizes an existing manifest",{skip:process.platform!=="linux"},async()=>{
+  const configured=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(configured)
+  const area=await fs.mkdtemp(path.join(configured,"text-effect-")),work=path.join(area,"work"),privateRoot=path.join(area,"private")
+  await fs.mkdir(work);await fs.mkdir(path.join(work,"src"))
+  const target=path.join(work,"src/counter.ts");await fs.writeFile(target,"old\n",{mode:0o644})
+  const input:ExactTextCorrection={path:"src/counter.ts",mode:"100644",beforeText:"old\n",beforeDigest:hash("old\n"),patch:header+"@@ -1 +1 @@\n-old\n+new\n"}
+  const custody=new LinuxNativeCustody(privateRoot,[work]);await custody.initialize()
+  const effect=await applyExactTextFile(work,input,operation,{admit:async()=>{},retain:async e=>{
+    assert.equal(await retainExactTextEffect(custody,e),"new")
+    assert.equal(await fs.readFile(target,"utf8"),"old\n")
+  }})
+  assert.equal(await retainExactTextEffect(custody,effect),"existing") // never issue another write from this outcome
+  const reopened=new LinuxNativeCustody(privateRoot,[work]);await reopened.initialize()
+  assert.equal(await retainExactTextEffect(reopened,effect),"existing")
+  assert.ok(await reopened.read("text-effect",operation))
+  assert.ok(await reopened.read("text-effect-part",`${operation}:0`))
+  assert.equal(await readRetainedExactTextEffect(reopened,operation),JSON.stringify(effect))
+  await assert.rejects(retainExactTextEffect(reopened,{...effect,correction:{...effect.correction,afterText:"not the prepared output"}}))
+  const chunkFile=path.join(privateRoot,`text-effect-part-${hash(`${operation}:0`)}.json`)
+  await fs.writeFile(chunkFile,"corrupt",{mode:0o600})
+  await assert.rejects(readRetainedExactTextEffect(reopened,operation))
+})
+test("a partially retained original remains held instead of completing or dispatching on retry",{skip:process.platform!=="linux"},async()=>{
+  const configured=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(configured)
+  const area=await fs.mkdtemp(path.join(configured,"text-partial-")),work=path.join(area,"work")
+  await fs.mkdir(work);await fs.mkdir(path.join(work,"src"))
+  const target=path.join(work,"src/counter.ts");await fs.writeFile(target,"old\n",{mode:0o644})
+  const input:ExactTextCorrection={path:"src/counter.ts",mode:"100644",beforeText:"old\n",beforeDigest:hash("old\n"),patch:header+"@@ -1 +1 @@\n-old\n+new\n"}
+  const custody=new LinuxNativeCustody(path.join(area,"private"),[work]);await custody.initialize()
+  let captured:RetainedTextEffect|undefined
+  await assert.rejects(applyExactTextFile(work,input,operation,{admit:async()=>{},retain:async e=>{
+    captured=e
+    const bytes=Buffer.from(JSON.stringify(e),"utf8")
+    assert.equal(await custody.retain("text-effect-part",`${operation}:0`,bytes.toString("base64")),true)
+    throw new Error("simulated interruption before manifest")
+  }}),PendingTextEffect)
+  assert.ok(captured)
+  await assert.rejects(retainExactTextEffect(custody,captured))
+  assert.equal(await custody.read("text-effect",operation),undefined)
+  assert.equal(await readRetainedExactTextEffect(custody,operation),undefined) // partial chunks are not absence proof
+  assert.equal(await fs.readFile(target,"utf8"),"old\n")
+})
+test("protected effect custody round-trips bounded multichunk UTF-8 without weakening entry limits",{skip:process.platform!=="linux"},async()=>{
+  const configured=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(configured)
+  const area=await fs.mkdtemp(path.join(configured,"text-chunks-")),work=path.join(area,"work")
+  await fs.mkdir(work);await fs.mkdir(path.join(work,"src"))
+  const before="я".repeat(150000)+"\n",after="x".repeat(300000)+"\n"
+  await fs.writeFile(path.join(work,"src/counter.ts"),before,{mode:0o644})
+  const input:ExactTextCorrection={path:"src/counter.ts",mode:"100644",beforeText:before,beforeDigest:hash(before),patch:header+`@@ -1 +1 @@\n-${before}+${after}`}
+  const custody=new LinuxNativeCustody(path.join(area,"private"),[work]);await custody.initialize()
+  const effect=await applyExactTextFile(work,input,operation,{admit:async()=>{},retain:async e=>{assert.equal(await retainExactTextEffect(custody,e),"new")}})
+  assert.ok(await custody.read("text-effect-part",`${operation}:1`))
+  assert.equal(await readRetainedExactTextEffect(custody,operation),JSON.stringify(effect))
+  assert.equal(await fs.readFile(path.join(work,input.path),"utf8"),after)
 })
 test("invalid operation refuses before admission and async callbacks cannot retarget a captured request",{skip:process.platform!=="linux"},async()=>{
   await fileFixture(async(root,input)=>{
