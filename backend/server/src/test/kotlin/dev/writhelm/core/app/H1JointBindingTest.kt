@@ -107,6 +107,19 @@ private class JointFixture {
 }
 
 class H1JointBindingTest {
+    @Test fun reservationNeedsBothQualifiedProfileAndVerifiedPacketWithoutCreatingClaimsOnRefusal() {
+        val f=JointFixture()
+        fun attempt(facts: H1ObservedFacts)=f.key(plannerKey) { f.bridge.work(f.base,f.reserveCommand(),it,facts) }
+        fun rejected(candidate: H1JointCandidate,code: String) {
+            assertEquals(code,assertIs<LogicalOutcome.Rejected>(candidate.evaluation.outcome).code)
+            assertTrue(candidate.evaluation.changes.isEmpty())
+            assertEquals(f.base.work.getValue(project).records,candidate.work.getValue(project).records)
+        }
+        rejected(attempt(H1ObservedFacts(f.head,f.observations.facts,emptySet())),"NOT_READY")
+        rejected(attempt(H1ObservedFacts(f.head,f.observations.facts.copy(verifiedPackets=emptySet()),f.observations.qualifiedProfiles)),"BLOCKED_INPUT")
+        assertIs<LogicalOutcome.Success>(attempt(f.observations).evaluation.outcome)
+        // Synthetic fixture facts establish only the fail-closed gate, not real host qualification.
+    }
     @Test fun capturedRuntimeFactsAreBoundedImmutableSnapshotsNotLiveAdapterCollections() {
         val f=JointFixture();val snapshots=mutableSetOf(f.snapshot);val native=linkedMapOf<java.util.UUID,WorkNativeObservation>()
         val sources=mutableListOf(f.source)
