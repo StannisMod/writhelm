@@ -107,6 +107,15 @@ private class JointFixture {
 }
 
 class H1JointBindingTest {
+    @Test fun nativePacketNeedsBoundAssignmentAndCannotVerifyPreReservationInput() {
+        val f=JointFixture();val subject=WAssignmentSubject(f.assignment,0)
+        assertFails { NativeAssignmentPacket.render(f.base,project,subject) }
+        f.reserve()
+        assertFails { NativeAssignmentPacket.render(f.base,project,subject) }
+        val active=JointFixture();active.activateWithAttributedFixtureObservations()
+        assertTrue(NativeAssignmentPacket.render(active.base,project,WAssignmentSubject(active.assignment,0)).isNotEmpty())
+        // This proves ordering in the component model, not that a native packet was delivered.
+    }
     @Test fun canonicalTaskDecisionFactsUseOnlyCurrentApprovedPinnedCoreInputs() {
         val f=JointFixture();val work=f.base.work.getValue(project);val original=work.task(f.task)
         val pinned=pinnedKnowledge(f.base.core.snapshot(8192),requireNotNull(original.base))
