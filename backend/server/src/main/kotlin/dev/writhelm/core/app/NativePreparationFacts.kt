@@ -29,8 +29,11 @@ internal class ReservationProofFacts(private val delegate: H1RuntimeFacts,privat
         if(original.basis!=state.basis)return original
         val expected=try {
             val work=state.work.getValue(command.projectId)
+            val task=work.task(op.task)
             val profile=work.reference(WorkFamily.PROFILES,op.profile)
-            work.resolve(op.manifest)
+            val manifest=(work.resolve(op.manifest).payload as? WInputManifestsPayload)?.value ?: return original
+            if(op.manifest.identity.family!=WorkFamily.INPUT_MANIFESTS || manifest.task!=op.task ||
+                task.base!=manifest.base || task.executionProfile!=op.profile || manifest.knownGaps.isNotEmpty())return original
             val fingerprint=WorkCodec().fingerprint(command)
             ReservationProfileProof(state.basis,command.projectId,fingerprint,profile) to
                 ReservationPacketProof(state.basis,command.projectId,fingerprint,op.task,op.manifest,profile)
