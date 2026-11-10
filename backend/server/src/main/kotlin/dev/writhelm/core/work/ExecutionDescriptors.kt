@@ -173,8 +173,17 @@ internal data class MechanicalProfileQualification(val profile:WorkReference,val
 internal data class MechanicalWorkspaceQualification(val workspaceId:UUID,val nativeHostId:UUID,val base:WBase,val manifest:WorkReference)
 internal data class MechanicalReservationFacts(val base:WorkExternalFacts,val qualifiedProfiles:Set<MechanicalProfileQualification>,
     val qualifiedWorkspaces:Set<MechanicalWorkspaceQualification>)
+/** Actual native effect observations are service-derived, never constructed from an operation body.
+ * Prepared means the exact original operation and witnesses are already durably retained in qualified
+ * custody, not merely captured or asserted. A production provider is not installed; independent
+ * writer fencing is mandatory for terminal data. */
+internal data class MechanicalPreparedObservation(val operation:WorkKey.Id,val effect:MechanicalOperation,val workspaceId:UUID,val nativeHostId:UUID)
+internal data class MechanicalEffectObservation(val operation:WorkKey.Id,val previousGeneration:Long,val effect:MechanicalOperation,
+    val workspaceId:UUID,val nativeHostId:UUID,val writersFenced:Boolean)
+internal data class MechanicalEffectFacts(val reservation:MechanicalReservationFacts,val prepared:Set<MechanicalPreparedObservation>,
+    val observations:Set<MechanicalEffectObservation>)
 
-/** Pure candidate reducer for reservation/binding only. The caller MUST authenticate the current
+/** Pure candidate reducer. The caller MUST authenticate the current
  * controller and TASK_DISPATCH at the same captured H, apply receipt/replay and publication rules,
  * and supply actual source/qualification facts. This class is not wired to any route or store. */
 internal class MechanicalReservationReducer {
@@ -285,6 +294,55 @@ internal class MechanicalReservationReducer {
         val changed=listOf(binding,WorkRecord(key,WMechanicalAssignmentsPayload(a.copy(generation=nextGeneration(a.generation),binding=v.binding,state="bound"))))
         val after=h.derive(changed,emptyList())
         return WorkEffect(h,after,key,changed.map { after.records.getValue(it.identity) },emptyList())
+    }
+    fun prepare(h:WorkState,original:MechanicalCommand,actor:WorkExecutionInput,facts:MechanicalEffectFacts):WorkEffect {
+        workRequire(h.modelVersion==3,WorkProblem.NOT_READY)
+        val command=MechanicalCommandCodec().decode(MechanicalCommandCodec().encode(original))
+        workRequire(command.projectId==h.projectId,WorkProblem.FOREIGN_REFERENCE)
+        val v=command.operation as? MechanicalCommandOperation.Prepare ?: throw WorkFault(WorkProblem.INVALID_SUBJECT)
+        val assignment=WorkRecordIdentity(WorkFamily.ASSIGNMENTS,WorkKey.Id(h.projectId,v.assignmentId))
+        val a=(h.records[assignment]?.payload as? WMechanicalAssignmentsPayload)?.value ?: throw WorkFault(WorkProblem.WRONG_ASSIGNMENT)
+        workRequire(a.generation==v.generation,WorkProblem.STALE_GENERATION)
+        workRequire(a.state=="bound" && a.binding==v.effect.binding && v.operation==a.bindingData.producer.operation,WorkProblem.INVALID_BINDING)
+        ready(h,a.bindingData,actor,facts.reservation)
+        val observation=MechanicalPreparedObservation(v.operation,v.effect,a.bindingData.producer.workspaceId,a.bindingData.producer.nativeHostId)
+        workRequire(observation in facts.prepared,WorkProblem.NATIVE_UNKNOWN)
+        val op=WorkRecordIdentity(WorkFamily.NATIVE_INTENTS,v.operation)
+        workRequire(op !in h.records,WorkProblem.DUPLICATE_ID)
+        val bodies=v.bodies.map { Utf8Content.fromText(it.body) }
+        val added=bodies.filter { body -> h.bodies[body.digest]?.let { workRequire(it==body,WorkProblem.DIGEST_MISMATCH);false } ?: true }
+        listOf(v.effect.patch,v.effect.witnesses).forEach { ref ->
+            val body=h.bodies[ref.digest] ?: added.singleOrNull { it.digest==ref.digest }
+            workRequire(body!=null && body.sizeBytes==ref.byteLength,WorkProblem.MISSING_BODY)
+        }
+        val changed=listOf(WorkRecord(op,WMechanicalOperationsPayload(v.effect)),
+            WorkRecord(assignment,WMechanicalAssignmentsPayload(a.copy(generation=nextGeneration(a.generation),state="active"))))
+        val after=h.derive(changed,added)
+        return WorkEffect(h,after,op,changed.map { after.records.getValue(it.identity) },added)
+    }
+    fun observe(h:WorkState,original:MechanicalCommand,actor:WorkExecutionInput,facts:MechanicalEffectFacts):WorkEffect {
+        workRequire(h.modelVersion==3,WorkProblem.NOT_READY)
+        val command=MechanicalCommandCodec().decode(MechanicalCommandCodec().encode(original))
+        workRequire(command.projectId==h.projectId,WorkProblem.FOREIGN_REFERENCE)
+        val v=command.operation as? MechanicalCommandOperation.Observe ?: throw WorkFault(WorkProblem.INVALID_SUBJECT)
+        val assignment=WorkRecordIdentity(WorkFamily.ASSIGNMENTS,WorkKey.Id(h.projectId,v.assignmentId))
+        val a=(h.records[assignment]?.payload as? WMechanicalAssignmentsPayload)?.value ?: throw WorkFault(WorkProblem.WRONG_ASSIGNMENT)
+        workRequire(a.generation==v.generation,WorkProblem.STALE_GENERATION)
+        workRequire(actor.assignment==null && actor.execution==null && actor.controllerId==a.bindingData.producer.controllerId,WorkProblem.INVALID_BINDING)
+        workRequire(a.state in setOf("active","unknown") && v.operation==a.bindingData.producer.operation && a.binding==v.effect.binding,WorkProblem.INVALID_BINDING)
+        val op=WorkRecordIdentity(WorkFamily.NATIVE_INTENTS,v.operation)
+        val previous=h.records[op] ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+        val old=(previous.payload as? WMechanicalOperationsPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+        workRequire(old.generation==v.expectedOperationGeneration,WorkProblem.STALE_GENERATION)
+        val next=WorkRecord(op,WMechanicalOperationsPayload(v.effect));validateMechanicalRecordEdge(previous,next)
+        val observation=MechanicalEffectObservation(v.operation,old.generation,v.effect,a.bindingData.producer.workspaceId,a.bindingData.producer.nativeHostId,v.effect.writerCompleted)
+        workRequire(observation in facts.observations,WorkProblem.NATIVE_UNKNOWN)
+        v.effect.observations.forEach { source(h,facts.reservation.base,it) }
+        v.effect.evidence.forEach { workRequire(it.identity.family==WorkFamily.EVIDENCE,WorkProblem.INVALID_REFERENCE);h.resolve(it) }
+        val changed=listOf(next,WorkRecord(assignment,WMechanicalAssignmentsPayload(a.copy(generation=nextGeneration(a.generation),
+            state=if(v.effect.writerCompleted)"completed" else "unknown"))))
+        val after=h.derive(changed,emptyList())
+        return WorkEffect(h,after,op,changed.map { after.records.getValue(it.identity) },emptyList())
     }
 }
 

@@ -673,11 +673,12 @@ unchanged. No new path, external source, actual credentials, patch or private ru
 
 ## Candidate mechanical reservation transition scope P35 — local source checkpoint
 
-Extend the existing mechanical descriptor and synthetic test paths with pure candidate reservation
-and binding transitions over model3 WorkState. They check exact remediation task/manifest, selected
+Extend the existing mechanical descriptor and synthetic test paths with pure candidate reservation,
+binding and original-effect prepare/observe transitions over model3 WorkState. They check exact remediation task/manifest, selected
 dependencies, known authors, shared claims and service-supplied profile/workspace/source facts. The caller must perform
 current same-H controller/dispatch authentication and receipt/publication; no route or writer is
-enabled and synthetic qualification facts are not host evidence. Nondeferred dispatch-stage gates
-remain held until exact earlier evidence mapping exists; grouping never moves them. Effect observation, result
+enabled and synthetic qualification/native observations are not host evidence. Nondeferred dispatch-stage gates
+remain held until exact earlier evidence mapping exists; grouping never moves them. Terminal effect
+transitions require separately supplied writer-fencing observations and do not release claims. Result
 publication, runtime integration and per-platform qualification remain held. No new path, external
 source, actual credentials, patch or private run material is introduced.
