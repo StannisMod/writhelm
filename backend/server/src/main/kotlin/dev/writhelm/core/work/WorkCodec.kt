@@ -120,6 +120,10 @@ internal class WorkCodec(
                 val p=ExecutionDescriptorCodec().decodeProfile(bytes,historical) as? MechanicalProfileDescriptor ?: refuse(CodecProblem.INVALID_SHAPE)
                 return WorkRecord(WorkRecordIdentity(WorkFamily.PROFILES,p.key),WMechanicalProfilesPayload(p.value))
             }
+            if(f.getValue("family").string()=="results") {
+                val p=ResultDescriptorCodec().decode(bytes,historical) as? MechanicalResultDescriptor ?: refuse(CodecProblem.INVALID_SHAPE)
+                return WorkRecord(WorkRecordIdentity(WorkFamily.RESULTS,p.key),WMechanicalResultsPayload(p.value))
+            }
             val family=WorkFamily.entries.firstOrNull { it.tag==f.getValue("family").string() } ?: refuse(CodecProblem.INVALID_SHAPE)
             val key=identityCodec.decodeKey(family,StrictJson.encode(f.getValue("key")))
             val payload=MechanicalWorkCodec().decode(family,f.getValue("payload"),key.projectId)
@@ -142,6 +146,11 @@ internal class WorkCodec(
             shape(modelVersion==3)
             val bytes=ExecutionDescriptorCodec().encodeProfile(MechanicalProfileDescriptor(v.identity.key as WorkKey.Profile,v.payload.value),historical)
             // Apply this selected reader's own limits as well as descriptor-specific constraints.
+            decodeRecord(bytes,historical);return bytes
+        }
+        if(v.payload is WMechanicalResultsPayload) {
+            shape(modelVersion==3)
+            val bytes=ResultDescriptorCodec().encode(MechanicalResultDescriptor(v.identity.key as WorkKey.Id,v.payload.value),historical)
             decodeRecord(bytes,historical);return bytes
         }
         if(v.payload is WMechanicalAssignmentsPayload || v.payload is WMechanicalBindingsPayload || v.payload is WMechanicalOperationsPayload) {

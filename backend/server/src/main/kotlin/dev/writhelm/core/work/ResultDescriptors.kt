@@ -8,6 +8,8 @@ import java.util.UUID
 internal sealed interface ExecutionResultDescriptor { val key:WorkKey.Id }
 internal data class NativeResultDescriptor(override val key:WorkKey.Id,val value:WResults):ExecutionResultDescriptor
 internal data class MechanicalResultDescriptor(override val key:WorkKey.Id,val value:MechanicalResult):ExecutionResultDescriptor
+/** Candidate model3 result; old command/review/acceptance paths remain closed until integrated. */
+internal data class WMechanicalResultsPayload(val value:MechanicalResult):WorkPayload
 internal data class MechanicalResult(
     val task:WorkKey.TaskRevision,val assignment:WAssignmentSubject,val producer:MechanicalProducerDescriptor,
     val manifest:WorkReference,val artifacts:List<WSnapshot>,val changes:WorkBodyReference,val claimedCriteria:List<UUID>,
@@ -56,7 +58,7 @@ internal class ResultDescriptorCodec {
             "key" to StrictJson.decode(identityCodec.encodeKey(value.key)),"payload" to encodePayload(value.value)),if(historical)4*1024*1024 else 262144)
         decode(bytes,historical);return bytes
     }
-    private fun encodePayload(p:MechanicalResult):JsonValue=obj("kind" to str("mechanical-v1"),
+    internal fun encodePayload(p:MechanicalResult):JsonValue=obj("kind" to str("mechanical-v1"),
         "task" to StrictJson.decode(identityCodec.encodeKey(p.task)),"assignment" to encodeWAssignmentSubject(p.assignment),
         "producer" to StrictJson.decode(execution.encodeProducer(p.producer,p.task.projectId)),
         "manifest" to StrictJson.decode(identityCodec.encodeReference(p.manifest)),"artifacts" to workArray(p.artifacts,1,128,false,::encodeWSnapshot),

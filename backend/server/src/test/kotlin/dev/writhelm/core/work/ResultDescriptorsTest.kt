@@ -44,6 +44,14 @@ class ResultDescriptorsTest {
         assertFailsWith<CodecFault> { codec.decode(change(bytes) { JObject(it.entries+("producer" to encodeWExecution(native.value.producer))) }) }
         assertFailsWith<CodecFault> { codec.encode(value.copy(value=value.value.copy(patch=WorkBodyReference(Digest.of(byteArrayOf()),0)))) }
     }
+    @Test fun candidateResultCodecPreservesBytesButWholeGraphRefusesUnintegratedResult() {
+        val value=result();val codec3=WorkCodec(modelVersion=3)
+        val bytes=codec.encode(value);val record=codec3.decodeRecord(bytes)
+        assertIs<WMechanicalResultsPayload>(record.payload)
+        assertContentEquals(bytes,codec3.encodeRecord(record))
+        assertEquals(CodecProblem.UNSUPPORTED_FORMAT,assertFailsWith<CodecFault> { WorkCodec().decodeRecord(bytes) }.problem)
+        assertFailsWith<CodecFault> { WorkState.restore(project,listOf(record),emptyList(),modelVersion=3) }
+    }
     @Test fun exactSourceClosureAndActualSubmitterCannotBeReplacedByAnApplierSuppliedAuthorList() {
         val value=result()
         requireMechanicalResultAuthorship(value,uid(30),listOf(native))

@@ -184,7 +184,9 @@ internal class Model2Inspector(private val h: WorkState) {
         }
     }
     fun checkConfirmation(c: WConditions,f: WConditionConfirmations) {
-        val result=(h.resolve(f.result).payload as WResultsPayload).value
+        // Mechanical-result condition confirmations remain held until their complete author and
+        // evidence policy is implemented; malformed mixed histories refuse rather than crash.
+        val result=(h.resolve(f.result).payload as? WResultsPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
         workRequire(result.task==c.responsibleTask,WorkProblem.INVALID_SUBJECT)
         when(val assessor=c.assessor) {
             is WConditionAssessorVariant0Value -> workRequire((f.assessedBy as? WConditionAssessorProvenanceVariant0Value)?.value?.controllerId==assessor.value.controllerId,WorkProblem.INVALID_SUBJECT)

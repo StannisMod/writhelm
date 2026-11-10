@@ -49,6 +49,7 @@ internal fun recordTasks(r: WorkRecord): List<WorkKey.TaskRevision> = when(val p
     is WCheckpointsPayload -> listOf(p.value.task)
     is WRetrospectivesPayload -> listOf(p.value.task)
     is WResultsPayload -> listOf(p.value.task)
+    is WMechanicalResultsPayload -> listOf(p.value.task)
     is WVerificationPlansPayload -> listOf(p.value.task)
     is WVerificationReportsPayload -> listOf(p.value.task)
     is WAcceptancesPayload -> listOf(p.value.task)

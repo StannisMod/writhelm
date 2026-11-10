@@ -212,6 +212,18 @@ class ExecutionDescriptorsTest {
         operation=operation.copy(generation=2,outcome="applied",writerCompleted=true,observations=listOf(f.source))
         assignment=assignment.copy(generation=4,state="completed")
         state=state.derive(listOf(f.assignment.copy(payload=WMechanicalAssignmentsPayload(assignment)),WorkRecord(opId,WMechanicalOperationsPayload(operation)),free),emptyList())
+        val retrospective=WorkRecord(WorkRecordIdentity(WorkFamily.RETROSPECTIVES,WorkKey.Id(project,uid(975))),
+            WRetrospectivesPayload(WRetrospectives(f.data.task,subject,null,"no-significant-new-findings",emptyList())))
+        val retro=WorkReference(retrospective.identity,codec.digest(retrospective))
+        val original=(state.resolve(f.data.authorship.sourceResults.single()).payload as WResultsPayload).value
+        val result=MechanicalResult(f.data.task,subject,f.data.producer,f.data.manifest,original.artifacts,original.changes,
+            emptyList(),emptyList(),retro,emptyList(),operation.patch,f.data.authorship)
+        val resultRecord=WorkRecord(WorkRecordIdentity(WorkFamily.RESULTS,WorkKey.Id(project,uid(976))),WMechanicalResultsPayload(result))
+        assertFailsWith<CodecFault> { state.derive(listOf(retrospective,resultRecord.copy(payload=WMechanicalResultsPayload(result.copy(patch=operation.witnesses)))),emptyList()) }
+        state=state.derive(listOf(retrospective,resultRecord),emptyList())
+        val resultRef=state.reference(WorkFamily.RESULTS,resultRecord.identity.key)
+        assertEquals(resultRecord,state.resolve(resultRef))
+        assertEquals(result.task,recordTasks(resultRecord).single())
         assertEquals(state.records,WorkState.restore(project,state.records.values,state.bodies.values,modelVersion=3).records)
         assertFailsWith<WorkFault> { state.derive(listOf(f.assignment.copy(payload=WMechanicalAssignmentsPayload(assignment.copy(generation=5,state="active")))),emptyList()) }
         // These are synthetic stored facts; no authenticated command or physical writer proof is asserted.

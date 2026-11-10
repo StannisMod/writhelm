@@ -189,8 +189,11 @@ internal class WorkState private constructor(
             val selected=t.dependencies.mapNotNull { it.selectedResult }.toSet()
             graph(selected.isNotEmpty() && v.authorship.sourceResults.toSet()==selected)
             val authors=selected.flatMap { ref ->
-                val source=resolve(ref).payload as? WResultsPayload ?: refuse(CodecProblem.INVALID_GRAPH)
-                listOf(source.value.producer.principalId)
+                when(val source=resolve(ref).payload) {
+                    is WResultsPayload -> listOf(source.value.producer.principalId)
+                    is WMechanicalResultsPayload -> source.value.authorship.authors
+                    else -> refuse(CodecProblem.INVALID_GRAPH)
+                }
             }.toSet()
             graph(v.authorship.declaredBy in v.authorship.authors && v.authorship.authors.containsAll(authors))
         }
@@ -214,6 +217,18 @@ internal class WorkState private constructor(
             links.records.forEach { ref -> edge();dependency(ref.identity);try { resolve(ref) }catch(_: WorkFault) { refuse(CodecProblem.INVALID_GRAPH) } }
             links.bodies.forEach { b -> edge();graph(bodies[b.digest]?.sizeBytes==b.byteLength) }
             when(val p=r.payload) {
+                is WMechanicalResultsPayload -> {
+                    val v=p.value
+                    val binding=(required(WorkFamily.ASSIGNMENT_BINDINGS,WorkKey.AssignmentBinding(projectId,v.assignment.assignmentId,v.assignment.generation)).payload as? WMechanicalBindingsPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
+                    val assignment=(required(WorkFamily.ASSIGNMENTS,WorkKey.Id(projectId,v.assignment.assignmentId)).payload as? WMechanicalAssignmentsPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
+                    val operation=(required(WorkFamily.NATIVE_INTENTS,binding.producer.operation).payload as? WMechanicalOperationsPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
+                    graph(assignment.state=="completed" && operation.outcome=="applied" && operation.writerCompleted)
+                    graph(v.task==binding.task && v.manifest==binding.manifest && v.producer==binding.producer && v.authorship==binding.authorship && v.patch==operation.patch)
+                    graph(v.retrospective.identity.family==WorkFamily.RETROSPECTIVES)
+                    val retro=(resolve(v.retrospective).payload as? WRetrospectivesPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
+                    graph(retro.task==v.task && retro.assignment==v.assignment && retro.result==null)
+                    graph(v.claimedCriteria.all { selected -> (task(v.task).payload as WTaskRevisionsPayload).value.criteria.any { it.id==selected } })
+                }
                 is WMechanicalAssignmentsPayload -> {
                     val a=p.value;val v=a.bindingData;mechanicalBinding(v)
                     val subject=WAssignmentSubject((r.identity.key as WorkKey.Id).id,0)
@@ -259,7 +274,10 @@ internal class WorkState private constructor(
                 is WTaskRevisionsPayload -> p.value.let { v ->
                     v.dependencies.forEach { task(it.producer); it.selectedResult?.let { selected ->
                         graph(selected.identity.family==WorkFamily.RESULTS)
-                        graph((resolve(selected).payload as WResultsPayload).value.task==it.producer)
+                        val result=resolve(selected).payload
+                        graph(when(result) { is WResultsPayload -> result.value.task==it.producer
+                            is WMechanicalResultsPayload -> result.value.task==it.producer
+                            else -> false })
                     } }
                     v.executionProfile?.let { required(WorkFamily.PROFILES,it) }
                     v.verificationPlan?.let { graph((required(WorkFamily.VERIFICATION_PLANS,it).payload as WVerificationPlansPayload).value.task==r.identity.key) }
@@ -291,7 +309,10 @@ internal class WorkState private constructor(
                     graph(e.executionId==i.executionId && e.nativeHostId==i.nativeHostId && e.nativeSessionId==i.nativeSessionId && e.workspaceId==v.workspaceId)
                     v.reviewSubjects.forEach { subject ->
                         graph(subject.identity.family==WorkFamily.RESULTS)
-                        graph((resolve(subject).payload as WResultsPayload).value.producer.executionId!=e.executionId)
+                        // Mechanical-result review is held until every admission/history/acceptance
+                        // path enforces its complete contributor list, not merely execution IDs.
+                        val result=resolve(subject).payload as? WResultsPayload ?: refuse(CodecProblem.INVALID_GRAPH)
+                        graph(result.value.producer.executionId!=e.executionId)
                     }
                 }
                 is WLoadedViewsPayload -> { val v=p.value;val b=(bind(v.assignment).payload as WAssignmentBindingsPayload).value
@@ -329,7 +350,10 @@ internal class WorkState private constructor(
                     try { rootedVerificationPlan(v.task,t,r.identity.key as WorkKey.Revision,
                         { (required(WorkFamily.VERIFICATION_PLANS,it).payload as WVerificationPlansPayload).value },approvedPlanChanges,budget.depth) }
                     catch(_: WorkFault) { refuse(CodecProblem.INVALID_GRAPH) } }
-                is WRetrospectivesPayload -> { graph((bind(p.value.assignment).payload as WAssignmentBindingsPayload).value.task==p.value.task)
+                is WRetrospectivesPayload -> { val b=required(WorkFamily.ASSIGNMENT_BINDINGS,WorkKey.AssignmentBinding(projectId,p.value.assignment.assignmentId,p.value.assignment.generation)).payload
+                    graph(when(b) { is WAssignmentBindingsPayload -> b.value.task==p.value.task
+                        is WMechanicalBindingsPayload -> b.value.task==p.value.task && p.value.result==null
+                        else -> false })
                     p.value.result?.let { try { ownHandoffOutcome(p.value.task,p.value.assignment,it) }catch(_: WorkFault) { refuse(CodecProblem.INVALID_GRAPH) } } }
                 is WRecoveriesPayload -> { graph(required(WorkFamily.ASSIGNMENTS,WorkKey.Id(projectId,p.value.assignment.assignmentId)).payload is WAssignmentsPayload) }
                 is WNativeIntentsPayload -> { graph(required(WorkFamily.ASSIGNMENTS,WorkKey.Id(projectId,p.value.assignment.assignmentId)).payload is WAssignmentsPayload) }
@@ -363,7 +387,7 @@ internal class WorkState private constructor(
                     v.frontier.forEach { item ->task(item.task);item.assignments.forEach { a ->required(WorkFamily.ASSIGNMENTS,WorkKey.Id(projectId,a.assignmentId)) } }
                     val frontier=v.frontier.map { it.task }.toSet();v.entries.forEach { graph(it.tasks.all(frontier::contains)) }
                 }
-                is WAcceptancesPayload -> { val v=p.value;val result=(resolve(v.result).payload as WResultsPayload).value
+                is WAcceptancesPayload -> { val v=p.value;val result=(resolve(v.result).payload as? WResultsPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
                     graph(v.task==result.task && v.acceptedBy!=result.producer.principalId)
                     try { val plan=rootedVerificationPlan(v.task,(task(v.task).payload as WTaskRevisionsPayload).value,v.verificationPlan,
                         { (required(WorkFamily.VERIFICATION_PLANS,it).payload as WVerificationPlansPayload).value },approvedPlanChanges,budget.depth)

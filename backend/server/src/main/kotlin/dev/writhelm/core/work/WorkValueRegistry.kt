@@ -58,6 +58,7 @@ internal fun encodeWorkPayload(v: WorkPayload): JsonValue = when(v) {
     is WMemoryPayload -> encodeWMemory(v.value)
     is WRetrospectivesPayload -> encodeWRetrospectives(v.value)
     is WResultsPayload -> encodeWResults(v.value)
+    is WMechanicalResultsPayload -> ResultDescriptorCodec().encodePayload(v.value)
     is WVerificationPlansPayload -> encodeWVerificationPlans(v.value)
     is WVerificationReportsPayload -> encodeWVerificationReports(v.value)
     is WEvidencePayload -> encodeWEvidence(v.value)
@@ -95,6 +96,7 @@ internal fun payloadFamily(v: WorkPayload): WorkFamily = when(v) {
     is WMemoryPayload -> WorkFamily.MEMORY
     is WRetrospectivesPayload -> WorkFamily.RETROSPECTIVES
     is WResultsPayload -> WorkFamily.RESULTS
+    is WMechanicalResultsPayload -> WorkFamily.RESULTS
     is WVerificationPlansPayload -> WorkFamily.VERIFICATION_PLANS
     is WVerificationReportsPayload -> WorkFamily.VERIFICATION_REPORTS
     is WEvidencePayload -> WorkFamily.EVIDENCE

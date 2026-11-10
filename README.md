@@ -33,10 +33,11 @@ explicit author attribution and legacy-byte compatibility checks. These are not 
 writer profile or operational patch tool; task/authority/claims/effect/history integration and
 independent qualification remain open. The native primitive's admission/retention ports remain
 unconnected; read-only byte observations do not establish writer termination or release claims.
-Mechanical profiles, assignments/bindings and retained original-effect records can be restored in
+Mechanical profiles, assignments/bindings, retained original-effect and result records can be restored in
 the existing bounded canonical graph under explicit candidate model3 selection, sharing claims and
 workspace exclusion with native work. These are structural consistency checks, not authenticated
-effect/writer facts. Legacy command/read/service writer selection remains unchanged and refuses it.
+effect/writer facts. Mechanical-result review and acceptance remain deliberately unavailable.
+Legacy command/read/service writer selection remains unchanged and refuses it.
 See [upstream provenance](docs/upstream.md).
 Writhelm is an independent project, not an official upstream distribution.
 

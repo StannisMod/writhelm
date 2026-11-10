@@ -613,3 +613,13 @@ actual patch/identity/witness, native store or private run artifact. Shared clai
 closure, cross-kind workspace exclusion and immutable original-effect edges are structural checks.
 Stored writerCompleted metadata is not verified physical termination; no command4/read3/journal4,
 store writer, authenticated admission, native port connection or primary tool is enabled here.
+
+## Mechanical result graph scope P29 — local source checkpoint
+
+Extend already admitted mechanical descriptor/codec/state/query/model2-semantics and synthetic test paths to decode
+record2 results under candidate model3 and validate their exact assignment, binding, retained applied
+operation, patch, declared authors, retrospective and criteria. A consistent graph is not proof of
+physical effects or authenticated current authority. Mechanical-result review and acceptance remain
+explicitly held until contributor exclusion is enforced through every relevant path. Legacy formats,
+store writer, service operation and current access selection remain unchanged. No new public path,
+external source, real patch, fixture, credential or local history is introduced.
