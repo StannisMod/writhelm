@@ -13,7 +13,56 @@ import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.BasicFileAttributes
+import java.security.MessageDigest
 import java.util.UUID
+
+internal data class PinnedNativeExecutable(val version: String,val digest: Digest)
+internal data class ObservedNativeProcess(val version: String,val digest: Digest,val epoch: String)
+
+/** Independently recapture the Linux peer process behind the protected transport. The executable
+ * pin is trusted deployment input, never a model/command field. This proves only this finite
+ * process identity, not profile qualification, a safe writer, or request-accounting behavior. */
+internal object LinuxNativeProcessObserver {
+    fun observe(pid: Long,nativeOrigin: String,claimedEpoch: String,pin: PinnedNativeExecutable): ObservedNativeProcess? { return try {
+        if(System.getProperty("os.name")!="Linux" || pid<=0 || pid>Int.MAX_VALUE ||
+            !claimedEpoch.matches(Regex("[0-9a-f]{64}")) || !pin.version.matches(Regex("[A-Za-z0-9._-]{1,64}")))return null
+        val origin=Regex("http://(?:127\\.0\\.0\\.1|\\[::1\\]):([1-9][0-9]{0,4})").matchEntire(nativeOrigin) ?: return null
+        val port=origin.groupValues[1].toInt()
+        if(port !in 1..65535 || port==80)return null
+        val process=ProcessHandle.of(pid).orElse(null) ?: return null
+        if(!process.isAlive)return null
+        val root=Path.of("/proc",pid.toString())
+        if(Files.getAttribute(root,"unix:uid")!=Files.getAttribute(Path.of("/proc/self"),"unix:uid"))return null
+        fun text(path: Path): String = Files.newInputStream(path).use {
+            val bytes=it.readNBytes(4097);if(bytes.size>4096)throw IllegalStateException("oversized process metadata")
+            bytes.toString(Charsets.UTF_8).trim()
+        }
+        fun start(): String {
+            val stat=text(root.resolve("stat"));val end=stat.lastIndexOf(')')
+            if(end<0)throw IllegalStateException("invalid process metadata")
+            val fields=stat.substring(end+1).trim().split(Regex("\\s+"))
+            return fields.getOrNull(19)?.takeIf { it.matches(Regex("[0-9]+")) } ?: throw IllegalStateException("missing process start")
+        }
+        val started=start();val executable=root.resolve("exe")
+        val before=Files.readAttributes(executable,BasicFileAttributes::class.java)
+        if(!before.isRegularFile || before.fileKey()==null || before.size() !in 1L..1073741824L)return null
+        val hash=MessageDigest.getInstance("SHA-256");var size=0L
+        Files.newInputStream(executable).use { input ->
+            val buffer=ByteArray(65536)
+            while(true) { val count=input.read(buffer);if(count<0)break;size+=count
+                if(size>before.size())throw IllegalStateException("changed executable")
+                hash.update(buffer,0,count) }
+        }
+        val actual=Digest.parse(hash.digest().joinToString("") { "%02x".format(it) })
+        val after=Files.readAttributes(executable,BasicFileAttributes::class.java)
+        if(actual!=pin.digest || size!=before.size() || before.fileKey()!=after.fileKey() || before.size()!=after.size() ||
+            before.lastModifiedTime()!=after.lastModifiedTime() || !process.isAlive || start()!=started)return null
+        val boot=text(Path.of("/proc/sys/kernel/random/boot_id"))
+        if(!boot.matches(Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")))return null
+        val epoch=Digest.of(StrictJson.encode(JArray(listOf(str("native-linux-process-v1"),digest(actual),str(boot),JNumber(pid),str(started),str(nativeOrigin))))).hex
+        if(epoch!=claimedEpoch)null else ObservedNativeProcess(pin.version,actual,epoch)
+    } catch(_: Exception) { null } }
+}
 
 /** Trusted local qualification registry entry. It is not decoded from a model, command or profile.
  * The registrar is responsible for independently verifying the named actual checks before pinning

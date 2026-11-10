@@ -107,6 +107,22 @@ private class JointFixture {
 }
 
 class H1JointBindingTest {
+    @Test fun linuxPeerProcessObservationChecksActualExecutableAndIncarnation() {
+        val pid=ProcessHandle.current().pid();val origin="http://127.0.0.1:43217"
+        val executable=Digest.of(java.nio.file.Files.readAllBytes(java.nio.file.Path.of("/proc/self/exe")))
+        val stat=java.nio.file.Files.readString(java.nio.file.Path.of("/proc/self/stat"))
+        val start=stat.substring(stat.lastIndexOf(')')+1).trim().split(Regex("\\s+"))[19]
+        val boot=java.nio.file.Files.readString(java.nio.file.Path.of("/proc/sys/kernel/random/boot_id")).trim()
+        // Independent compact JSON oracle matching the existing native host's JSON.stringify array.
+        val epoch=Digest.of("[\"native-linux-process-v1\",\"${executable.hex}\",\"$boot\",$pid,\"$start\",\"$origin\"]".toByteArray()).hex
+        val pin=PinnedNativeExecutable("test-jvm",executable)
+        assertEquals(ObservedNativeProcess("test-jvm",executable,epoch),LinuxNativeProcessObserver.observe(pid,origin,epoch,pin))
+        assertNull(LinuxNativeProcessObserver.observe(pid,origin,"0".repeat(64),pin))
+        assertNull(LinuxNativeProcessObserver.observe(pid,origin,epoch,pin.copy(digest=Digest.of("other".toByteArray()))))
+        assertNull(LinuxNativeProcessObserver.observe(pid,"http://localhost:43217",epoch,pin))
+        assertNull(LinuxNativeProcessObserver.observe(Int.MAX_VALUE.toLong(),origin,epoch,pin))
+        // This is the real test JVM, not the OpenCode process or evidence of native qualification.
+    }
     @Test fun registeredProfileRequiresLiveExactSubjectAndProtectedRetainedCheckArtifacts() {
         val f=JointFixture();val work=f.base.work.getValue(project)
         val root=java.nio.file.Files.createTempDirectory("writhelm-profile-evidence-")
