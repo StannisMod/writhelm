@@ -165,6 +165,129 @@ internal class MechanicalCommandCodec {
     }
 }
 
+/** Service-derived qualification, not a client-supplied profile label. No production provider is
+ * installed by this candidate reducer. The exact profile reference and host are checked at H. */
+internal data class MechanicalProfileQualification(val profile:WorkReference,val nativeHostId:UUID,val platform:String)
+/** A qualified adapter's actual exclusive work-area/base observation at the same H; not a body
+ * assertion, a profile label, or a substitute for current resource claims. */
+internal data class MechanicalWorkspaceQualification(val workspaceId:UUID,val nativeHostId:UUID,val base:WBase,val manifest:WorkReference)
+internal data class MechanicalReservationFacts(val base:WorkExternalFacts,val qualifiedProfiles:Set<MechanicalProfileQualification>,
+    val qualifiedWorkspaces:Set<MechanicalWorkspaceQualification>)
+
+/** Pure candidate reducer for reservation/binding only. The caller MUST authenticate the current
+ * controller and TASK_DISPATCH at the same captured H, apply receipt/replay and publication rules,
+ * and supply actual source/qualification facts. This class is not wired to any route or store. */
+internal class MechanicalReservationReducer {
+    private fun source(h:WorkState,facts:WorkExternalFacts,source:WSource) {
+        when(source) {
+            is WSourceVariant0Value -> workRequire(source.value.reference in facts.knowledgeSources,WorkProblem.BLOCKED_INPUT)
+            is WSourceVariant1Value -> workRequire(source.value.artifact in facts.retainedSnapshots,WorkProblem.INVALID_SUBJECT)
+            is WSourceVariant2Value -> h.resolve(source.value.reference)
+        }
+    }
+    private fun ready(h:WorkState,b:MechanicalBinding,actor:WorkExecutionInput,facts:MechanicalReservationFacts) {
+        val t=h.task(b.task);val external=facts.base
+        workRequire(actor.assignment==null && actor.execution==null && actor.controllerId==b.producer.controllerId,WorkProblem.INVALID_BINDING)
+        workRequire(t.kind=="remediation" && t.state=="executable" && t.unresolved.isEmpty() && t.executionProfile==b.profile,WorkProblem.NOT_READY)
+        val selectedPlan=t.verificationPlan ?: throw WorkFault(WorkProblem.NOT_READY)
+        h.governingVerificationPlan(b.task,selectedPlan)
+        // Until exact pre-dispatch evidence/report mapping is implemented, never let grouping or
+        // a local candidate silently postpone an earlier required gate. This is a held case.
+        workRequire(h.records.values.none { r -> (r.payload as? WVerificationPlansPayload)?.value?.let { plan ->
+            plan.task==b.task && plan.gates.any { it.stage=="dispatch" && !it.deferred } }==true },WorkProblem.NOT_READY)
+        workRequire(t.approvedDesign.isNotEmpty(),WorkProblem.BLOCKED_INPUT)
+        workRequire(t.approvedDesign.all { it in external.approvedDecisions },WorkProblem.BLOCKED_INPUT)
+        val profile=(h.record(WorkFamily.PROFILES,b.profile).payload as? WMechanicalProfilesPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+        val profileRef=h.reference(WorkFamily.PROFILES,b.profile)
+        workRequire(profile.qualification=="qualified" && profile.qualificationEvidence.isNotEmpty() &&
+            MechanicalProfileQualification(profileRef,b.producer.nativeHostId,profile.platform) in facts.qualifiedProfiles,WorkProblem.NOT_READY)
+        profile.qualificationEvidence.forEach { source(h,external,it) }
+        val manifest=(h.resolve(b.manifest).payload as? WInputManifestsPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+        workRequire(manifest.task==b.task && manifest.base==t.base && manifest.knownGaps.isEmpty() && b.manifest in external.verifiedPackets,WorkProblem.BLOCKED_INPUT)
+        val base=t.base ?: throw WorkFault(WorkProblem.NOT_READY)
+        workRequire(MechanicalWorkspaceQualification(b.producer.workspaceId,b.producer.nativeHostId,base,b.manifest) in facts.qualifiedWorkspaces,WorkProblem.NOT_READY)
+        manifest.items.forEach { source(h,external,it.source) };source(h,external,manifest.declaredClosureAssessment)
+        val applicability=(h.record(WorkFamily.APPLICABILITY,manifest.applicability).payload as? WApplicabilityPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+        workRequire(applicability.entries.none { it.state!="applicable" },WorkProblem.BLOCKED_INPUT)
+        var readinessScans=0
+        val predecessors=t.dependencies.map { dependency ->
+            val selected=dependency.selectedResult ?: throw WorkFault(WorkProblem.NOT_READY)
+            val row=h.resolve(selected)
+            val result=when(val p=row.payload) {
+                is WResultsPayload -> NativeResultDescriptor(row.identity.key as WorkKey.Id,p.value)
+                is WMechanicalResultsPayload -> MechanicalResultDescriptor(row.identity.key as WorkKey.Id,p.value)
+                else -> throw WorkFault(WorkProblem.INVALID_REFERENCE)
+            }
+            val resultTask=when(result) { is NativeResultDescriptor -> result.value.task;is MechanicalResultDescriptor -> result.value.task }
+            workRequire(resultTask==dependency.producer,WorkProblem.NOT_READY)
+            val evidence=when(result) { is NativeResultDescriptor -> result.value.evidence;is MechanicalResultDescriptor -> result.value.evidence }
+            val artifacts=when(result) { is NativeResultDescriptor -> result.value.artifacts;is MechanicalResultDescriptor -> result.value.artifacts }
+            fun has(family:WorkFamily,predicate:(WorkPayload)->Boolean)=h.records.values.any {
+                if(++readinessScans>h.budget.edges)refuse(CodecProblem.RESOURCE_UNAVAILABLE)
+                it.identity.family==family && predicate(it.payload)
+            }
+            val isReady=when(dependency.readiness) {
+                "implemented" -> true
+                "cheap-checked" -> evidence.any { ref -> (h.resolve(ref).payload as? WEvidencePayload)?.value?.let { e ->
+                    e.outcome=="passed" && e.boundary in setOf("pure","component","joint") && e.subjects.any { subject -> when(subject) {
+                        is WSourceVariant1Value -> subject.value.artifact in artifacts
+                        is WSourceVariant2Value -> subject.value.reference==selected
+                        else -> false
+                    } } }==true }
+                "reviewed" -> has(WorkFamily.VERIFICATION_REPORTS) { p -> (p as WVerificationReportsPayload).value.let { r ->
+                    r.task==dependency.producer && r.plan==h.task(dependency.producer).verificationPlan && selected in r.subjects &&
+                        r.findings.none { it.blocking && (it.affectedResultIds.isEmpty() || result.key.id in it.affectedResultIds) } &&
+                        nonAuthorResultCandidate(r.reviewer.principalId,r.reviewer.executionId,result,knownResultAuthors(result),false) } }
+                "accepted" -> has(WorkFamily.ACCEPTANCES) { (it as WAcceptancesPayload).value.result==selected }
+                "integrated" -> has(WorkFamily.INTEGRATIONS) { (it as WIntegrationsPayload).value.result==selected }
+                else -> false
+            }
+            workRequire(isReady,WorkProblem.NOT_READY);result
+        }
+        workRequire(predecessors.isNotEmpty() && b.authorship.sourceResults.toSet()==predecessors.map { ResultDescriptorCodec().reference(it) }.toSet(),WorkProblem.INVALID_SUBJECT)
+        requireDeclaredAuthorship(b.authorship,actor.principalId,predecessors.flatMap { knownResultAuthors(it) }.toSet())
+    }
+    fun reserve(h:WorkState,original:MechanicalCommand,actor:WorkExecutionInput,facts:MechanicalReservationFacts):WorkEffect {
+        workRequire(h.modelVersion==3,WorkProblem.NOT_READY)
+        val command=MechanicalCommandCodec().decode(MechanicalCommandCodec().encode(original))
+        workRequire(command.projectId==h.projectId,WorkProblem.FOREIGN_REFERENCE)
+        val v=command.operation as? MechanicalCommandOperation.Reserve ?: throw WorkFault(WorkProblem.INVALID_SUBJECT)
+        val b=v.binding;ready(h,b,actor,facts)
+        val assignment=WorkRecordIdentity(WorkFamily.ASSIGNMENTS,WorkKey.Id(h.projectId,v.assignmentId))
+        workRequire(assignment !in h.records,WorkProblem.DUPLICATE_ID)
+        val occupied=h.records.values.mapNotNull { r -> (r.payload as? WClaimsPayload)?.value?.let { r.identity.key as WorkKey.Resource to it } }
+        val holder=WClaimsHolderVariant0Value(WClaimsHolderVariant0("assignment",WAssignmentSubject(v.assignmentId,0)))
+        val basis=WSourceVariant2Value(WSourceVariant2("work",b.manifest))
+        val claims=v.resources.map { expectation ->
+            val identity=WorkRecordIdentity(WorkFamily.CLAIMS,expectation.resource)
+            val old=(h.records[identity]?.payload as? WClaimsPayload)?.value
+            workRequire(old?.generation==expectation.generation,WorkProblem.STALE_GENERATION)
+            workRequire(old==null || old.state=="free",WorkProblem.CLAIM_CONFLICT)
+            occupied.forEach { (other,c) -> if(c.state!="free")workRequire(other!=expectation.resource && expectation.resource !in c.incompatible && other !in (old?.incompatible ?: emptyList()),WorkProblem.CLAIM_CONFLICT) }
+            WorkRecord(identity,WClaimsPayload(WClaims(if(old==null)0 else nextGeneration(old.generation),holder,b.producer.workspaceId,"held",old?.incompatible ?: emptyList(),basis)))
+        }
+        val changed=claims+WorkRecord(assignment,WMechanicalAssignmentsPayload(MechanicalAssignment(0,b,null,"reserved")))
+        val after=h.derive(changed,emptyList())
+        return WorkEffect(h,after,assignment,changed.map { after.records.getValue(it.identity) },emptyList())
+    }
+    fun bind(h:WorkState,original:MechanicalCommand,actor:WorkExecutionInput,facts:MechanicalReservationFacts):WorkEffect {
+        workRequire(h.modelVersion==3,WorkProblem.NOT_READY)
+        val command=MechanicalCommandCodec().decode(MechanicalCommandCodec().encode(original))
+        workRequire(command.projectId==h.projectId,WorkProblem.FOREIGN_REFERENCE)
+        val v=command.operation as? MechanicalCommandOperation.Bind ?: throw WorkFault(WorkProblem.INVALID_SUBJECT)
+        val key=WorkRecordIdentity(WorkFamily.ASSIGNMENTS,WorkKey.Id(h.projectId,v.assignmentId))
+        val a=(h.records[key]?.payload as? WMechanicalAssignmentsPayload)?.value ?: throw WorkFault(WorkProblem.WRONG_ASSIGNMENT)
+        workRequire(a.generation==v.generation,WorkProblem.STALE_GENERATION)
+        workRequire(a.state=="reserved",WorkProblem.INVALID_TRANSITION);ready(h,a.bindingData,actor,facts)
+        val binding=WorkRecord(WorkRecordIdentity(WorkFamily.ASSIGNMENT_BINDINGS,WorkKey.AssignmentBinding(h.projectId,v.assignmentId,0)),WMechanicalBindingsPayload(a.bindingData))
+        workRequire(binding.identity !in h.records,WorkProblem.DUPLICATE_ID)
+        workRequire(v.binding==WorkReference(binding.identity,WorkCodec(modelVersion=3).digest(binding)),WorkProblem.DIGEST_MISMATCH)
+        val changed=listOf(binding,WorkRecord(key,WMechanicalAssignmentsPayload(a.copy(generation=nextGeneration(a.generation),binding=v.binding,state="bound"))))
+        val after=h.derive(changed,emptyList())
+        return WorkEffect(h,after,key,changed.map { after.records.getValue(it.identity) },emptyList())
+    }
+}
+
 /** Candidate record2 shapes only. This codec has no authenticated command, writer or native effect. */
 internal class MechanicalWorkCodec {
     private val execution=ExecutionDescriptorCodec()

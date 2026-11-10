@@ -4,6 +4,9 @@ package dev.writhelm.core.work
 import dev.writhelm.core.codec.*
 import dev.writhelm.core.knowledge.Digest
 import dev.writhelm.core.knowledge.Utf8Content
+import dev.writhelm.core.knowledge.ContextReference
+import dev.writhelm.core.knowledge.DocumentKey
+import dev.writhelm.core.knowledge.RevisionKey
 import org.junit.jupiter.api.Test
 import kotlin.test.*
 
@@ -155,6 +158,67 @@ class ExecutionDescriptorsTest {
         val state=WorkState.restore(project,rows,f.state.bodies.values,modelVersion=3)
         return MechanicalGraphFixture(state,state.records.getValue(assignment.identity),state.records.getValue(claim.identity),
             (state.records.getValue(assignment.identity).payload as WMechanicalAssignmentsPayload).value.bindingData,f.source)
+    }
+    @Test fun candidateReservationAndBindingRequireActualScopedFactsAndKeepClaimsInTheSameGraph() {
+        val f=mechanicalGraph();val codec=WorkCodec(modelVersion=3);val reducer=MechanicalReservationReducer()
+        val id=(f.assignment.identity.key as WorkKey.Id).id
+        val decision=ContextReference(RevisionKey(DocumentKey(project,uid(1120)),uid(1121)),Digest.of("revision".toByteArray()),Digest.of("context".toByteArray()))
+        val taskRecord=f.state.record(WorkFamily.TASK_REVISIONS,f.data.task)
+        val task=(taskRecord.payload as WTaskRevisionsPayload).value.copy(approvedDesign=listOf(decision))
+        val profileRecord=f.state.record(WorkFamily.PROFILES,f.data.profile)
+        val profile=(profileRecord.payload as WMechanicalProfilesPayload).value.copy(qualification="qualified",qualificationEvidence=listOf(f.source))
+        val initial=WorkState.restore(project,f.state.records.values.filter { it.identity !in setOf(f.assignment.identity,f.claim.identity,taskRecord.identity,profileRecord.identity) }+
+            listOf(taskRecord.copy(payload=WTaskRevisionsPayload(task)),profileRecord.copy(payload=WMechanicalProfilesPayload(profile))),f.state.bodies.values,modelVersion=3)
+        val reference=initial.reference(WorkFamily.PROFILES,f.data.profile)
+        val snapshot=(f.source as WSourceVariant1Value).value.artifact
+        val base=WorkExternalFacts(emptySet(),setOf(decision),setOf(snapshot),emptyMap(),emptyMap(),emptySet(),emptySet(),emptySet(),setOf(f.data.manifest),emptyMap(),emptyMap(),emptySet())
+        val qualification=MechanicalProfileQualification(reference,f.data.producer.nativeHostId,profile.platform)
+        val workspace=MechanicalWorkspaceQualification(f.data.producer.workspaceId,f.data.producer.nativeHostId,task.base!!,f.data.manifest)
+        val facts=MechanicalReservationFacts(base,setOf(qualification),setOf(workspace))
+        val actor=WorkExecutionInput(f.data.authorship.declaredBy,uid(1122),f.data.producer.controllerId,null,null)
+        val reserve=MechanicalCommand(uid(1123),project,MechanicalCommandOperation.Reserve(id,f.data,listOf(MechanicalResourceExpectation(f.data.resources.single(),null))))
+        assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> { reducer.reserve(initial,reserve,actor,facts.copy(qualifiedProfiles=emptySet())) }.problem)
+        assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> { reducer.reserve(initial,reserve,actor,facts.copy(qualifiedWorkspaces=emptySet())) }.problem)
+        assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> { reducer.reserve(initial,reserve,actor,facts.copy(base=base.copy(approvedDecisions=emptySet()))) }.problem)
+        assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> { reducer.reserve(initial,reserve,actor,facts.copy(base=base.copy(verifiedPackets=emptySet()))) }.problem)
+        assertEquals(WorkProblem.INVALID_BINDING,assertFailsWith<WorkFault> { reducer.reserve(initial,reserve,actor.copy(controllerId=uid(1124)),facts) }.problem)
+        assertEquals(WorkProblem.INVALID_SUBJECT,assertFailsWith<WorkFault> { reducer.reserve(initial,reserve,actor.copy(principalId=uid(1125)),facts) }.problem)
+        val wrongKind=WorkState.restore(project,initial.records.values.filter { it.identity!=taskRecord.identity }+
+            taskRecord.copy(payload=WTaskRevisionsPayload(task.copy(kind="research"))),initial.bodies.values,modelVersion=3)
+        assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> { reducer.reserve(wrongKind,reserve,actor,facts) }.problem)
+        for(readiness in listOf("cheap-checked","reviewed","accepted","integrated")) {
+            val stricter=task.copy(dependencies=task.dependencies.map { it.copy(readiness=readiness) })
+            val state=WorkState.restore(project,initial.records.values.filter { it.identity!=taskRecord.identity }+taskRecord.copy(payload=WTaskRevisionsPayload(stricter)),
+                initial.bodies.values,modelVersion=3)
+            assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> { reducer.reserve(state,reserve,actor,facts) }.problem,readiness)
+        }
+        val planIdentity=WorkRecordIdentity(WorkFamily.VERIFICATION_PLANS,task.verificationPlan!!)
+        val planRow=initial.records.getValue(planIdentity);val plan=(planRow.payload as WVerificationPlansPayload).value
+        val early=plan.copy(gates=plan.gates.map { it.copy(stage="dispatch",independent=true,groupId=uid(1128)) })
+        val earlyState=WorkState.restore(project,initial.records.values.filter { it.identity!=planIdentity }+planRow.copy(payload=WVerificationPlansPayload(early)),initial.bodies.values,modelVersion=3)
+        assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> { reducer.reserve(earlyState,reserve,actor,facts) }.problem)
+        val revisedKey=task.verificationPlan!!.copy(id=uid(1129))
+        val revised=plan.copy(previous=task.verificationPlan,gates=plan.gates+plan.gates.single().copy(id=uid(1130),stage="dispatch",independent=true))
+        val revisedRow=WorkRecord(WorkRecordIdentity(WorkFamily.VERIFICATION_PLANS,revisedKey),WVerificationPlansPayload(revised))
+        val revisedState=WorkState.restore(project,initial.records.values+revisedRow,initial.bodies.values,modelVersion=3)
+        assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> { reducer.reserve(revisedState,reserve,actor,facts) }.problem)
+        val reserved=reducer.reserve(initial,reserve,actor,facts)
+        assertSame(initial,reserved.before);assertEquals(f.assignment.identity,reserved.result)
+        assertEquals("held",(reserved.after.record(WorkFamily.CLAIMS,f.data.resources.single()).payload as WClaimsPayload).value.state)
+        val other=(reserve.operation as MechanicalCommandOperation.Reserve).copy(assignmentId=uid(1127))
+        assertEquals(WorkProblem.STALE_GENERATION,assertFailsWith<WorkFault> { reducer.reserve(reserved.after,reserve.copy(operation=other),actor,facts) }.problem)
+        assertEquals(WorkProblem.CLAIM_CONFLICT,assertFailsWith<WorkFault> { reducer.reserve(reserved.after,reserve.copy(operation=other.copy(
+            resources=listOf(MechanicalResourceExpectation(f.data.resources.single(),0)))),actor,facts) }.problem)
+        val bindingRow=WorkRecord(WorkRecordIdentity(WorkFamily.ASSIGNMENT_BINDINGS,WorkKey.AssignmentBinding(project,id,0)),WMechanicalBindingsPayload(f.data))
+        val bindingRef=WorkReference(bindingRow.identity,codec.digest(bindingRow))
+        val bind=MechanicalCommand(uid(1126),project,MechanicalCommandOperation.Bind(id,0,bindingRef))
+        assertEquals(WorkProblem.DIGEST_MISMATCH,assertFailsWith<WorkFault> { reducer.bind(reserved.after,bind.copy(operation=(bind.operation as MechanicalCommandOperation.Bind).copy(binding=bindingRef.copy(digest=Digest.of(byteArrayOf(9))))),actor,facts) }.problem)
+        assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> { reducer.bind(reserved.after,bind,actor,facts.copy(qualifiedProfiles=emptySet())) }.problem)
+        val bound=reducer.bind(reserved.after,bind,actor,facts)
+        assertEquals("bound",(bound.after.records.getValue(f.assignment.identity).payload as WMechanicalAssignmentsPayload).value.state)
+        assertEquals(bound.after.records,WorkState.restore(project,bound.after.records.values,bound.after.bodies.values,modelVersion=3).records)
+        assertEquals(WorkProblem.STALE_GENERATION,assertFailsWith<WorkFault> { reducer.bind(bound.after,bind,actor,facts) }.problem)
+        // All qualification, actor and snapshot inputs above are explicit synthetic facts, not actual admission.
     }
     @Test fun candidateCommand4ReservationAndBindingAreClosedDeterministicAndRefusedByLegacyReaders() {
         val f=mechanicalGraph();val id=(f.assignment.identity.key as WorkKey.Id).id
