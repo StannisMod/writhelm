@@ -48,6 +48,9 @@ An isolated original-state-to-candidate footprint validator and successful-comma
 exist; they are not yet a Git history auditor or receipt verifier.
 The Linux service composes a protected qualification-evidence reader, but has no registered
 qualification or independent live-environment observer configured; it therefore admits no profile.
+The owner-directed [H1 acceptance journey](docs/acceptance.md#h1-owner-acceptance--minimum-vertical-journey)
+requires dependency-limited parallel worktree execution and independent contract-based review; it
+is an outstanding requirement, not an implemented or passed workflow.
 See [upstream provenance](docs/upstream.md).
 Writhelm is an independent project, not an official upstream distribution.
 

@@ -1,6 +1,7 @@
 # Observable acceptance scenarios
 
-Revision: 1. Status: proposed; no scenarios below are claimed as passing Writhelm tests.
+Revision: 1 plus owner-directed H1 acceptance amendment. Other scenarios remain proposed;
+no scenarios below are claimed as passing Writhelm tests.
 Target: [specification revision 1](specification.md). Preparation task: [SPEC-001](tasks/SPEC-001.md).
 
 ## Test rules
@@ -140,6 +141,42 @@ This gate requires neither dispatched workers nor model calls. Pinned consumer m
 qualify executable task snapshots, general clause lineage, packet closure, withdrawal-safe execution,
 budget enforcement, second-harness portability, backup/upgrade or live economics. The remaining
 portions of AC-04/06 and later scenarios stay outstanding, not falsely satisfied by input fixtures.
+
+## H1 owner acceptance — minimum vertical journey
+
+Status: **owner-directed acceptance requirement; not implemented or passed**. Governing contract:
+[K-HARNESS H1-09](contracts/agent-workflow.md), with H1-03–08, TASK-01–07, DP-01–09,
+EX-01–07 and EV-01–07 remaining applicable. The owner will test this journey against the actual
+selected OpenCode/H1 profile after preparation; model-free doubles do not count as that owner test.
+
+Given an ordinary user task involving multiple related design and implementation units:
+
+1. The primary planner creates distinct, versioned design tasks, resolves the necessary approved
+   design decisions, and derives bounded implementation tasks with explicit inputs, acceptance and
+   dependency/readiness relations. It does not treat an unapproved proposal as an approved design.
+2. Without the owner manually launching or relaying each task, the harness starts all eligible
+   implementation work as soon as dependencies, claims, current rights, configured capacity and
+   runtime safety allow. The test includes at least two independent ready tasks whose execution
+   overlaps, a dependent task that starts only after its required readiness, and a newly eligible
+   task that starts without waiting for an unrelated still-running task. A genuinely unavailable
+   worker/capacity or conflicting claim is exposed as the reason for a hold, not hidden serialization.
+3. Each worker uses its own worktree and sends a task-bound report and exact result through the
+   harness. The planner checks bearing factual claims against the actual artifacts and evidence;
+   an incorrect consequential claim must not be accepted as proof.
+4. The planner assembles the applicable results in its own candidate branch, preserving unrelated
+   changes and surfacing conflicts. There is no manual copying of diffs or conversation transcripts.
+   The exact assembled candidate is distinguishable from a formally accepted or published result.
+5. All required implementation tasks finish and the applicable tests pass on that assembled
+   candidate. Only then does a fresh-context independent non-author review the complete relevant
+   change set against the formed contracts. Any requirement-linked blocking finding is handled;
+   changed subjects receive appropriate verification rather than inherited approval.
+
+Record exact task/contract, dependency, worker/worktree, candidate and check identities, plus
+observable scheduling, reports and review outcomes. Unknown external effects, unavailable runtime,
+failed tests, conflicting changes, missing evidence or a blocking finding cannot be reported as a
+completed journey. Existing earlier review, authority, recovery and platform gates are not postponed
+or waived by this scenario. Passing this journey does not itself prove untested OS/profile support,
+hostile-shell confinement, abnormal recovery, provider economics or every other acceptance scenario.
 
 ### M1 proposed test allocation
 

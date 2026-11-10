@@ -40,6 +40,12 @@ component contract design, beginning with K-TASK, not blanket behavioral impleme
 
 ### Current H1 boundary and approved completion order
 
+The owner's minimum end-to-end acceptance journey is specified in [H1 owner acceptance](acceptance.md#h1-owner-acceptance--minimum-vertical-journey)
+and [K-HARNESS H1-09](contracts/agent-workflow.md#h1-09--owner-directed-minimum-vertical-journey).
+It requires autonomous dependency-limited parallel worktree execution, planner factual control and
+candidate assembly, passing tests, then independent contract-based review. This is an acceptance
+requirement, not evidence that the current implementation already performs that journey.
+
 The approved connected-work amendment assigns blocker resolution, consistent environment preparation,
 minimal sufficient notification and eligible continuation to the engine. Exact identities remain
 technical evidence, not repeated chat payloads. The bounded portable implementation has completed

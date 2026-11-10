@@ -1,6 +1,6 @@
 # H1 — governed agent workflow inside OpenCode
 
-Contract K-HARNESS, revision 5. Status: H1 boundary, practical-control, connected-work coordination, deterministic correction and grouped delivery amendments approved,
+Contract K-HARNESS, revision 6. Status: H1 boundary, practical-control, connected-work coordination, deterministic correction, grouped delivery and owner-directed vertical-journey amendments approved,
 including initial cooperative execution. Component implementation/qualification still required. First user-pilot
 target, not a claim of implemented orchestration or acceptance of the whole draft specification.
 
@@ -127,6 +127,37 @@ component checks continue; native/combined/expensive qualification uses an agree
 Prior findings/held gates remain visible, not accepted by changing pilot scope. Live inference/paid
 pilot and spend limits require separate owner authorization before execution.
 
+## H1-09 — Owner-directed minimum vertical journey
+
+The owner supplies a task in the ordinary primary conversation. The planner decomposes it into
+separately scoped design tasks and, from their applicable approved outcomes, implementation tasks
+with explicit dependency/readiness relations and exact contracts. Required owner design decisions
+remain owner decisions; the harness must not treat a proposed design as approved merely because
+implementation is waiting.
+
+The harness itself schedules and launches every eligible implementation task with maximum available
+parallelism, subject to its dependencies/readiness, resource claims, configured capacity and actual
+runtime/authority constraints. It must not serialize unrelated ready tasks merely because they were
+listed sequentially, nor wait for an unrelated slow task to finish before starting newly eligible
+work. A capacity or safety hold is visible rather than silently presented as dependency ordering.
+Each worker executes in its own assigned worktree and returns its actual report and result through
+the harness, without manual transfer by the owner or planner copying a worker's conversation.
+
+The planner checks the bearing factual claims in those reports against the relevant actual artifacts,
+requirements and targeted evidence; a worker's success assertion alone is not proof. The planner
+brings the applicable results together in its own candidate branch, preserving unrelated work and
+surfacing conflicts. Candidate assembly is not formal acceptance or publication. Once all required
+implementation tasks are done and applicable tests pass on the assembled candidate, a fresh-context
+independent non-author reviews the complete relevant change set against the formed contracts.
+Blocking findings require remediation and appropriate verification of the changed subject. A prior
+required gate cannot be moved or waived merely to fit this sequence; final acceptance and integration
+remain separate exact-result decisions under H1-06/07 and the applicable verification plan.
+
+This is the owner's specified H1 acceptance journey, not a claim that autonomous scheduling, native
+execution, physical writer recovery, review or integration are implemented or qualified. A model-free
+check can test orchestration with explicit doubles; the owner test must exercise the real selected
+harness/profile and preserve the limitations and separate permissions in H1-08.
+
 ## Next component designs and approval scope
 
 Prepare K-TASK, dispatch/claims/external-effect binding, mandatory context/execution profiles,
@@ -142,6 +173,11 @@ The disclosed decision was full governed-agent pilot scope and separation of can
 control from native plugin execution, including the eight workflow steps and stated limits.
 This manual record does not fabricate a service approval event, passing pilot, commit/push permission
 or live-model authorization. Subsequent component decisions require their own disclosed scope.
+
+Revision 6 records the owner's explicit direction that the H1 acceptance journey is user task →
+planner-created design tasks → implementation tasks → harness-managed dependency-limited maximum
+parallel worktree execution → planner factual control and candidate assembly → passing tests →
+independent contract-based review. It does not waive earlier gates or attest implementation.
 
 K-TASK revision 1 was subsequently approved with explicit planner exact-result acceptance as an
 authorized state transition; see [canonical task contract](task-contract.md). Dispatch, execution,
