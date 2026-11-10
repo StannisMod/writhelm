@@ -107,6 +107,31 @@ private class JointFixture {
 }
 
 class H1JointBindingTest {
+    @Test fun pinnedDecisionSourceEnablesRealGitTaskPublicationWithoutQualifyingNativeProfile() {
+        val f=JointFixture();val work=f.base.work.getValue(project);val original=work.task(f.task)
+        val decision=pinnedKnowledge(f.base.core.snapshot(8192),requireNotNull(original.base)).first {
+            f.base.core.validationDecisionApproved(it) && f.base.core.validationSourceAvailable(it)
+        }
+        val task=f.task.copy(taskId=id(1810));val plan=f.plan.copy(id=id(1811))
+        val oldPlan=(work.record(WorkFamily.VERIFICATION_PLANS,f.plan).payload as WVerificationPlansPayload).value
+        val terms=original.copy(kind="implementation",approvedDesign=listOf(decision),verificationPlan=plan)
+        val create=WorkCommand(id(1812),project,CCreateTaskRevisionOperation(CCreateTaskRevision(task,terms,
+            CCreateTaskRevisionNewVerificationPlan(plan,oldPlan.copy(task=task,previous=null)),emptyList())))
+        val options=H1Options(CanonicalTaskDecisionFacts(UnavailableH1RuntimeFacts))
+        val root=directory()
+        H1Application.initialize(root,storeId,H1Genesis(f.base.core,f.base.authority.records(),f.base.work),options).use { app ->
+            val result=assertIs<CommandResult.Settled>(app.execute(plannerToken,f.codec.encodeCommand(create)))
+            assertIs<LogicalOutcome.Success>(result.receipt.outcome)
+            assertEquals(terms,app.coordinationCapture(plannerToken,project).work.task(task))
+            val reserve=assertIs<CommandResult.Settled>(app.execute(plannerToken,f.codec.encodeCommand(f.reserveCommand())))
+            assertEquals("NOT_READY",assertIs<LogicalOutcome.Rejected>(reserve.receipt.outcome).code)
+            assertTrue(reserve.receipt.writes.isEmpty())
+        }
+        H1Application.open(root,storeId,options).use { app ->
+            assertEquals(terms,app.coordinationCapture(plannerToken,project).work.task(task))
+        }
+        // Real local Git publication with synthetic project data; no native qualification is implied.
+    }
     @Test fun nativePacketNeedsBoundAssignmentAndCannotVerifyPreReservationInput() {
         val f=JointFixture();val subject=WAssignmentSubject(f.assignment,0)
         assertFails { NativeAssignmentPacket.render(f.base,project,subject) }
