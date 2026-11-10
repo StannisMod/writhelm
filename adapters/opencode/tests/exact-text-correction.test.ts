@@ -146,6 +146,9 @@ test("protected custody retains exact operation before writing and never reautho
   assert.ok(await reopened.read("text-effect-part",`${operation}:0`))
   assert.equal(await readRetainedExactTextEffect(reopened,operation),JSON.stringify(effect))
   await assert.rejects(retainExactTextEffect(reopened,{...effect,correction:{...effect.correction,afterText:"not the prepared output"}}))
+  await fs.chmod(work,0o700) // qualify the test-owned ancestor; containment must still refuse
+  const unsafeCustody=new LinuxNativeCustody(path.join(work,"unsafe-custody"),[privateRoot]);await unsafeCustody.initialize()
+  await assert.rejects(retainExactTextEffect(unsafeCustody,effect)) // never retain private effect inside the worktree
   const chunkFile=path.join(privateRoot,`text-effect-part-${hash(`${operation}:0`)}.json`)
   await fs.writeFile(chunkFile,"corrupt",{mode:0o600})
   await assert.rejects(readRetainedExactTextEffect(reopened,operation))

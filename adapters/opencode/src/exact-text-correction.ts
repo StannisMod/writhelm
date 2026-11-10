@@ -126,6 +126,9 @@ export async function retainExactTextEffect(custody:LinuxNativeCustody,effect:Re
     beforeText:effect.beforeText,beforeDigest:effect.correction.beforeDigest,patch:effect.patch})
   if(effect.before.path!==prepared.path||effect.before.digest!==prepared.beforeDigest||effect.patchDigest!==hash(effect.patch)||
     effect.correction.afterDigest!==prepared.afterDigest||effect.correction.afterText!==prepared.afterText)refused()
+  // Even a correctly initialized custody instance might predate this worktree. Recheck the
+  // actual selected work area, not only the locations known when custody was constructed.
+  await custody.requireOutside(effect.before.root)
   const raw=JSON.stringify(effect)
   const bytes=Buffer.from(raw,"utf8")
   if(bytes.length>20*1024*1024)refused()

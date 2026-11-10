@@ -78,7 +78,8 @@ The primitive has a separate protected-custody helper for the exact original eff
 are retained before an immutable manifest, and partial/conflicting retention refuses instead of
 retrying or authorizing a write. An existing manifest is not permission to dispatch again; a missing
 manifest is not proof that no partial effect or writer exists. A read verifies chunk and aggregate
-digests but leaves closed-effect decoding, current authority and writer fencing to the future
+digests; retention also rechecks that custody is outside the actual selected work area. This leaves
+closed-effect decoding, current authority and writer fencing to the future
 controller integration. Tests connect these pieces with synthetic inputs; no service route uses them.
 
 ### Reserved worker preparation and distinct initial start
