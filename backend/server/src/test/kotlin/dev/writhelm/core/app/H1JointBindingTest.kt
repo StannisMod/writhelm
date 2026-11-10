@@ -107,6 +107,46 @@ private class JointFixture {
 }
 
 class H1JointBindingTest {
+    @Test fun reservationProofFactsRequireExactBasisCommandProfileAndPacketIndependently() {
+        val f=JointFixture();val command=f.reserveCommand();val fingerprint=f.codec.fingerprint(command)
+        val profile=f.base.work.getValue(project).reference(WorkFamily.PROFILES,f.profile)
+        val expectedProfile=ReservationProfileProof(f.head,project,fingerprint,profile)
+        val expectedPacket=ReservationPacketProof(f.head,project,fingerprint,f.task,f.manifest,profile)
+        var profileProof: ReservationProfileProof?=expectedProfile
+        var packetProof: ReservationPacketProof?=expectedPacket
+        var error=false
+        val control=object: ReservationProofControl {
+            override fun profile(state: H1BoundState,command: WorkCommand): ReservationProfileProof? {
+                if(error)throw IllegalStateException("unavailable")
+                return profileProof
+            }
+            override fun packet(state: H1BoundState,command: WorkCommand): ReservationPacketProof? {
+                if(error)throw IllegalStateException("unavailable")
+                return packetProof
+            }
+        }
+        val empty=H1RuntimeFacts { state,_ -> H1ObservedFacts(state.basis,f.observations.facts.copy(verifiedPackets=emptySet()),emptySet()) }
+        val facts=ReservationProofFacts(empty,control)
+        fun capture()=facts.capture(f.base,command)
+        assertEquals(setOf(profile),capture().qualifiedProfiles)
+        assertEquals(setOf(f.manifest),capture().facts.verifiedPackets)
+        assertIs<LogicalOutcome.Success>(f.key(plannerKey) { f.bridge.work(f.base,command,it,capture()) }.evaluation.outcome)
+        profileProof=expectedProfile.copy(basis=GitOid("sha1","a".repeat(40)))
+        packetProof=expectedPacket.copy(command=Digest.of("other command".toByteArray()))
+        assertTrue(capture().qualifiedProfiles.isEmpty());assertTrue(capture().facts.verifiedPackets.isEmpty())
+        profileProof=expectedProfile;packetProof=null
+        assertEquals(setOf(profile),capture().qualifiedProfiles);assertTrue(capture().facts.verifiedPackets.isEmpty())
+        profileProof=null;packetProof=expectedPacket
+        assertTrue(capture().qualifiedProfiles.isEmpty());assertEquals(setOf(f.manifest),capture().facts.verifiedPackets)
+        val denied=f.key(plannerKey) { f.bridge.work(f.base,command,it,capture()) }
+        assertEquals("NOT_READY",assertIs<LogicalOutcome.Rejected>(denied.evaluation.outcome).code)
+        assertTrue(denied.evaluation.changes.isEmpty())
+        profileProof=expectedProfile.copy(project=id(777));packetProof=expectedPacket.copy(task=f.task.copy(taskId=id(778)))
+        assertTrue(capture().qualifiedProfiles.isEmpty());assertTrue(capture().facts.verifiedPackets.isEmpty())
+        error=true
+        assertTrue(capture().qualifiedProfiles.isEmpty());assertTrue(capture().facts.verifiedPackets.isEmpty())
+        // Synthetic proof control is not an installed native qualification or packet provider.
+    }
     @Test fun reservationNeedsBothQualifiedProfileAndVerifiedPacketWithoutCreatingClaimsOnRefusal() {
         val f=JointFixture()
         fun attempt(facts: H1ObservedFacts)=f.key(plannerKey) { f.bridge.work(f.base,f.reserveCommand(),it,facts) }

@@ -4,8 +4,43 @@ package dev.writhelm.core.app
 import dev.writhelm.core.auth.CredentialStatus
 import dev.writhelm.core.auth2.CredentialScope
 import dev.writhelm.core.codec.*
+import dev.writhelm.core.knowledge.Digest
+import dev.writhelm.core.store.GitOid
 import dev.writhelm.core.work.*
 import java.util.UUID
+
+/** Candidate verification seam for a single reservation at its captured Git basis. Implementations
+ * must derive these proofs from trusted qualification and packet custody, never command fields.
+ * No production implementation is installed: missing proofs leave existing admission unchanged. */
+internal data class ReservationProfileProof(val basis: GitOid,val project: UUID,val command: Digest,val profile: WorkReference)
+internal data class ReservationPacketProof(val basis: GitOid,val project: UUID,val command: Digest,val task: WorkKey.TaskRevision,
+    val manifest: WorkReference,val profile: WorkReference)
+internal interface ReservationProofControl {
+    fun profile(state: H1BoundState,command: WorkCommand): ReservationProfileProof?
+    fun packet(state: H1BoundState,command: WorkCommand): ReservationPacketProof?
+}
+
+/** Narrow candidate adapter; not a qualification provider or authority decision. It admits only
+ * exact proofs tied to H and this canonical command and never turns an exception into success. */
+internal class ReservationProofFacts(private val delegate: H1RuntimeFacts,private val proofs: ReservationProofControl): H1RuntimeFacts {
+    override fun capture(state: H1BoundState,command: WorkCommand): H1ObservedFacts {
+        val original=delegate.capture(state,command)
+        val op=(command.operation as? CReserveAssignmentOperation)?.value ?: return original
+        if(original.basis!=state.basis)return original
+        val expected=try {
+            val work=state.work.getValue(command.projectId)
+            val profile=work.reference(WorkFamily.PROFILES,op.profile)
+            work.resolve(op.manifest)
+            val fingerprint=WorkCodec().fingerprint(command)
+            ReservationProfileProof(state.basis,command.projectId,fingerprint,profile) to
+                ReservationPacketProof(state.basis,command.projectId,fingerprint,op.task,op.manifest,profile)
+        } catch(_: Exception) { return original }
+        val profile=try { proofs.profile(state,command)==expected.first } catch(_: Exception) { false }
+        val packet=try { proofs.packet(state,command)==expected.second } catch(_: Exception) { false }
+        return H1ObservedFacts(original.basis,if(packet)original.facts.copy(verifiedPackets=original.facts.verifiedPackets+op.manifest) else original.facts,
+            if(profile)original.qualifiedProfiles+expected.first.profile else original.qualifiedProfiles)
+    }
+}
 
 internal fun interface NativePreparationProofControl { fun preparationProof(assignment:UUID,generation:Long):JsonValue? }
 
