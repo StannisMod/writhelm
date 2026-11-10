@@ -12,7 +12,7 @@ internal fun WorkState.readExact(selector: WorkRead.Exact): WorkRecord {
     val r=record(selector.identity.family,selector.identity.key)
     if(selector.identity.family.mutable) {
         workRequire(selector.digest==null && selector.generation==recordGeneration(r.payload),WorkProblem.STALE_GENERATION)
-    } else workRequire(selector.generation==null && selector.digest==WorkCodec().digest(r),WorkProblem.DIGEST_MISMATCH)
+    } else workRequire(selector.generation==null && selector.digest==WorkCodec(modelVersion=modelVersion).digest(r),WorkProblem.DIGEST_MISMATCH)
     return r
 }
 internal fun WorkState.readBody(selector: WorkRead.Body): Utf8Content {
@@ -33,7 +33,7 @@ internal fun WorkState.listSelectors(family: WorkFamily,taskId: UUID?): List<Wor
             listOf((resolve(it.payload.value.result).payload as WResultsPayload).value.task) else recordTasks(it)).any { task->task.taskId==taskId } ||
             (it.identity.key as? WorkKey.Task)?.taskId==taskId }
         .sortedBy { identityCodec.recordPath(it.identity) }
-        .map { r -> WorkRead.Exact(projectId,r.identity,if(family.mutable)null else WorkCodec().digest(r),recordGeneration(r.payload)) }.toList()
+        .map { r -> WorkRead.Exact(projectId,r.identity,if(family.mutable)null else WorkCodec(modelVersion=modelVersion).digest(r),recordGeneration(r.payload)) }.toList()
 }
 
 internal fun recordTasks(r: WorkRecord): List<WorkKey.TaskRevision> = when(val p=r.payload) {
@@ -59,7 +59,8 @@ internal fun recordTasks(r: WorkRecord): List<WorkKey.TaskRevision> = when(val p
 internal data class WorkRecordFacts(val identity: WorkRecordIdentity,val tasks: List<WorkKey.TaskRevision>,
     val digest: Digest,val generation: Long?,val references: List<WorkReference>,val directBodies: List<WorkBodyReference>,
     val knowledge: List<KnowledgeReference>,val artifacts: List<WSnapshot>)
-internal fun workRecordFacts(r: WorkRecord): WorkRecordFacts {
+internal fun workRecordFacts(r: WorkRecord): WorkRecordFacts = workRecordFacts(r,2)
+internal fun workRecordFacts(r: WorkRecord,modelVersion:Int): WorkRecordFacts {
     val knowledge=ArrayList<KnowledgeReference>();val artifacts=ArrayList<WSnapshot>()
     fun visit(v: JsonValue) {
         when(v) {
@@ -73,7 +74,7 @@ internal fun workRecordFacts(r: WorkRecord): WorkRecordFacts {
         }
     }
     visit(encodeWorkPayload(r.payload));val links=workLinks(r.payload)
-    return WorkRecordFacts(r.identity,recordTasks(r),WorkCodec().digest(r),recordGeneration(r.payload),links.records,links.bodies,knowledge,artifacts)
+    return WorkRecordFacts(r.identity,recordTasks(r),WorkCodec(modelVersion=modelVersion).digest(r),recordGeneration(r.payload),links.records,links.bodies,knowledge,artifacts)
 }
 internal data class WorkSubjectProjection(val assignment: WorkAssignmentProjection,val subject: WAssignmentSubject,
     val binding: WAssignmentBindings,val base: WBase,val task: WorkRecordFacts,val manifest: WorkRecordFacts,

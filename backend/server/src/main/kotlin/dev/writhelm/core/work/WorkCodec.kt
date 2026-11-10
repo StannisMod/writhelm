@@ -66,12 +66,14 @@ internal class WorkCodec(
     private val historicalLimits: JsonLimits=JsonLimits(bytes=4*1024*1024,stringBytes=262144,depth=128,collection=4096,tokens=500000),
     private val ordinaryStringBytes: Int=minOf(commandLimits.stringBytes,65536),
     private val bodyBytes: Int=1024*1024,
+    internal val modelVersion:Int=2,
 ) {
-    init { require(ordinaryStringBytes>0 && bodyBytes in 1..1024*1024) }
+    init { require(ordinaryStringBytes>0 && bodyBytes in 1..1024*1024 && modelVersion in setOf(2,3)) }
     // Parser/construction ceilings must accommodate either class. The field-sensitive pass below
     // applies the ordinary cap separately; a custom ordinary cap cannot preempt a legal body.
     private val commandParsingLimits=commandLimits.copy(stringBytes=maxOf(ordinaryStringBytes,bodyBytes))
     fun decodeCommand(bytes: ByteArray): WorkCommand {
+        shape(modelVersion==2) // command4 admission is not implemented by this candidate record reader
         val parsed=StrictJson.decode(bytes,commandParsingLimits)
         fun strings(v: JsonValue,attachment: Boolean=false) {
             when(v) {
@@ -111,6 +113,14 @@ internal class WorkCodec(
     fun decodeRecord(bytes: ByteArray, historical: Boolean=false): WorkRecord {
         val f=StrictJson.decode(bytes,if(historical)historicalLimits else metadataLimits,unavailable=historical)
             .fields("formatVersion","family","key","payload")
+        if(modelVersion==3 && f.getValue("formatVersion").long()==2L) {
+            // Candidate model3 currently admits mechanical profiles only. No arbitrary record2
+            // passthrough, descriptor map overlay or implicit upgrade of a legacy selected reader.
+            shape(f.getValue("family").string()=="profiles")
+            val p=ExecutionDescriptorCodec().decodeProfile(bytes,historical) as? MechanicalProfileDescriptor
+                ?: refuse(CodecProblem.INVALID_SHAPE)
+            return WorkRecord(WorkRecordIdentity(WorkFamily.PROFILES,p.key),WMechanicalProfilesPayload(p.value))
+        }
         version(f.getValue("formatVersion"))
         val family=WorkFamily.entries.firstOrNull { it.tag==f.getValue("family").string() } ?: refuse(CodecProblem.INVALID_SHAPE)
         val id=WorkRecordIdentity(family,identityCodec.decodeKey(family,StrictJson.encode(f.getValue("key"))))
@@ -123,6 +133,12 @@ internal class WorkCodec(
         return WorkRecord(id,p)
     }
     fun encodeRecord(v: WorkRecord, historical: Boolean=false): ByteArray {
+        if(v.payload is WMechanicalProfilesPayload) {
+            shape(modelVersion==3)
+            val bytes=ExecutionDescriptorCodec().encodeProfile(MechanicalProfileDescriptor(v.identity.key as WorkKey.Profile,v.payload.value),historical)
+            // Apply this selected reader's own limits as well as descriptor-specific constraints.
+            decodeRecord(bytes,historical);return bytes
+        }
         val lim=if(historical)historicalLimits else metadataLimits
         val bytes=JsonConstruction.bounded(lim,{ _,_-> },historical) { StrictJson.encode(obj("formatVersion" to JNumber(1),"family" to str(v.identity.family.tag),
             "key" to StrictJson.decode(identityCodec.encodeKey(v.identity.key)),"payload" to encodeWorkPayload(v.payload)),
@@ -131,6 +147,7 @@ internal class WorkCodec(
     }
     fun digest(v: WorkRecord): Digest=Digest.of(encodeRecord(v,true))
     fun decodeRead(bytes: ByteArray): WorkRead {
+        shape(modelVersion==2) // read3 service envelope remains held; exact state lookup is internal
         val f=StrictJson.decode(bytes,JsonLimits(bytes=16384,depth=16,collection=64,tokens=2048))
             .fields("formatVersion","projectId","operation","subject")
         shape(f.getValue("formatVersion").long()==2L)
@@ -147,6 +164,7 @@ internal class WorkCodec(
         return exact(project,family,s,withFamily=false)
     }
     fun encodeRead(v: WorkRead): ByteArray {
+        shape(modelVersion==2)
         fun selector(s: WorkRead.Exact,family: Boolean): JsonValue {
             val f=linkedMapOf("key" to StrictJson.decode(identityCodec.encodeKey(s.identity.key)))
             if(s.identity.family.mutable) {

@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Pure deterministic kernel only: no filesystem writes, model, host/session, process or service.
+// Pure kernel and actual Linux filesystem primitive. Admission/retention ports are explicit mocks;
+// no actual service authority, model, host lifecycle or process-fault qualification.
 import test from "node:test"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
-import { prepareExactTextCorrection } from "../src/exact-text-correction.js"
+import { prepareExactTextCorrection,applyExactTextFile,observeExactTextEffect,PendingTextEffect,type ExactTextCorrection,type RetainedTextEffect } from "../src/exact-text-correction.js"
+import * as fs from "node:fs/promises"
+import path from "node:path"
+import os from "node:os"
 
 const hash=(text:string)=>createHash("sha256").update(text).digest("hex")
 const apply=(beforeText:string,patch:string,path="src/counter.ts")=>prepareExactTextCorrection({path,mode:"100644",beforeText,beforeDigest:hash(beforeText),patch})
@@ -54,4 +58,116 @@ test("portable path subset rejects aliases/control areas; patch body is never in
   assert.equal(result.afterText,"$(this is literal text, not a command)\n")
   assert.throws(()=>apply("\ud800",header+"@@ -1 +1 @@\n-x\n+y\n"))
   assert.throws(()=>apply("\n".repeat(131073),header+"@@ -1 +1 @@\n-\n+x\n"))
+})
+
+async function fileFixture(run:(root:string,input:ExactTextCorrection)=>Promise<void>){
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),"writhelm-exact-file-"))
+  try{
+    await fs.mkdir(path.join(root,"src"))
+    await fs.writeFile(path.join(root,"src/counter.ts"),"old\n",{mode:0o644})
+    await run(root,{path:"src/counter.ts",mode:"100644",beforeText:"old\n",beforeDigest:hash("old\n"),patch:header+"@@ -1 +1 @@\n-old\n+new\n"})
+  }finally{await fs.rm(root,{recursive:true,force:true})}
+}
+const operation="00000000-0000-0000-0000-000000000001"
+test("Linux primitive retains exact witnesses before writing and rechecks admission without a model",{skip:process.platform!=="linux"},async()=>{
+  await fileFixture(async(root,input)=>{
+    const target=path.join(root,input.path),original=await fs.stat(target)
+    let admissions=0,retained:RetainedTextEffect|undefined
+    const result=await applyExactTextFile(root,input,operation,{
+      admit:async intent=>{
+        admissions++;assert.equal(intent.root,root);assert.equal(intent.operationId,operation)
+        assert.equal(intent.patchDigest,hash(input.patch));assert.equal(intent.correction.beforeDigest,input.beforeDigest)
+        assert.equal(intent.correction.afterDigest,hash("new\n"));assert.ok(Object.isFrozen(intent))
+      },retain:async effect=>{
+        assert.equal(await fs.readFile(target,"utf8"),"old\n")
+        assert.equal(effect.operationId,operation);assert.equal(effect.before.digest,input.beforeDigest)
+        assert.equal(effect.before.file.inode,String(original.ino));assert.equal(effect.beforeText,"old\n")
+        assert.equal(effect.patch,input.patch);assert.equal(effect.patchDigest,hash(input.patch))
+        assert.equal(await observeExactTextEffect(effect),"before")
+        retained=effect
+      },
+    })
+    assert.equal(result,retained);assert.equal(admissions,2)
+    assert.equal(await fs.readFile(target,"utf8"),"new\n")
+    assert.equal((await fs.stat(target)).ino,original.ino)
+    assert.equal(await observeExactTextEffect(result),"after")
+    // Lost caller acknowledgement cannot justify blindly applying the old preimage again.
+    await assert.rejects(applyExactTextFile(root,input,operation,{admit:async()=>{},retain:async()=>assert.fail("must not retain a replacement effect")}))
+    assert.equal(await fs.readFile(target,"utf8"),"new\n")
+    await fs.writeFile(target,"other\n")
+    assert.equal(await observeExactTextEffect(result),"unknown")
+    await fs.writeFile(target,"old\n")
+    assert.equal(await observeExactTextEffect(result),"unknown") // restored bytes do not erase effects
+  })
+})
+test("shorter empty executable and BOM CRLF files retain exact bytes and mode",{skip:process.platform!=="linux"},async()=>{
+  for(const [before,after,patchBody] of [
+    ["old\n","x\n","@@ -1 +1 @@\n-old\n+x\n"],
+    ["old\n","","@@ -1 +0,0 @@\n-old\n"],
+    ["\ufeffold\r\n","\ufeffnew\r\n","@@ -1 +1 @@\n-\ufeffold\r\n+\ufeffnew\r\n"],
+  ])await fileFixture(async(root,input)=>{
+    const target=path.join(root,input.path)
+    await fs.writeFile(target,before!);await fs.chmod(target,0o755)
+    const effect=await applyExactTextFile(root,{...input,mode:"100755",beforeText:before!,beforeDigest:hash(before!),patch:header+patchBody},operation,{admit:async()=>{},retain:async()=>{}})
+    assert.equal(await fs.readFile(target,"utf8"),after)
+    assert.equal((await fs.stat(target)).mode&0o7777,0o755)
+    assert.equal(await observeExactTextEffect(effect),"after")
+  })
+})
+test("retention failure and revocation after retention perform no writes",{skip:process.platform!=="linux"},async()=>{
+  for(const reason of ["retention","revocation"])await fileFixture(async(root,input)=>{
+    let admitted=0,retained=false
+    await assert.rejects(applyExactTextFile(root,input,operation,{
+      admit:async()=>{if(++admitted===2&&reason==="revocation")throw new Error("revoked")},
+      retain:async()=>{retained=true;if(reason==="retention")throw new Error("lost retention acknowledgement")},
+    }),error=>{
+      assert.ok(error instanceof PendingTextEffect);assert.equal(error.effect.operationId,operation)
+      assert.equal(error.effect.beforeText,"old\n");return true
+    })
+    assert.ok(retained);assert.equal(await fs.readFile(path.join(root,input.path),"utf8"),"old\n")
+  })
+})
+test("invalid operation refuses before admission and async callbacks cannot retarget a captured request",{skip:process.platform!=="linux"},async()=>{
+  await fileFixture(async(root,input)=>{
+    await assert.rejects(applyExactTextFile(root,input,"not-an-operation",{admit:async()=>assert.fail("invalid identity admitted"),retain:async()=>{}}))
+    const mutable={...input}
+    const effect=await applyExactTextFile(root,mutable,operation,{admit:async()=>{
+      mutable.path="other";mutable.patch="different payload"
+    },retain:async()=>{}})
+    assert.equal(effect.before.path,input.path);assert.equal(effect.patch,input.patch)
+    assert.equal(await fs.readFile(path.join(root,input.path),"utf8"),"new\n")
+    assert.equal(await observeExactTextEffect({...effect,patchDigest:"0".repeat(64)}),"unknown")
+    assert.equal(await observeExactTextEffect({...effect,correction:{...effect.correction,afterText:"fake"}}),"unknown")
+    assert.equal(await observeExactTextEffect({...effect,before:{...effect.before,path:"../other"}}),"unknown")
+    // Simulated partial bytes, not a process-fault test or permission to retry/release.
+    await fs.writeFile(path.join(root,input.path),"ne")
+    assert.equal(await observeExactTextEffect(effect),"unknown")
+  })
+})
+test("changed file or directory identity after retention refuses without overwriting intervening work",{skip:process.platform!=="linux"},async()=>{
+  for(const change of ["content","replacement","directory"])await fileFixture(async(root,input)=>{
+    const target=path.join(root,input.path)
+    await assert.rejects(applyExactTextFile(root,input,operation,{admit:async()=>{},retain:async()=>{
+      if(change==="directory"){
+        await fs.rename(path.join(root,"src"),path.join(root,"saved"))
+        await fs.mkdir(path.join(root,"src"));await fs.writeFile(target,"old\n",{mode:0o644})
+      }else if(change==="replacement"){
+        await fs.rename(target,target+".saved");await fs.writeFile(target,"old\n",{mode:0o644})
+      }else await fs.writeFile(target,"user work\n")
+    }}))
+    assert.equal(await fs.readFile(target,"utf8"),change==="content"?"user work\n":"old\n")
+  })
+})
+test("symlinks hardlinks special modes and malformed bytes refuse before retention",{skip:process.platform!=="linux"},async()=>{
+  for(const kind of ["symlink","directory-symlink","hardlink","mode","utf8"])await fileFixture(async(root,input)=>{
+    const target=path.join(root,input.path)
+    if(kind==="symlink"){
+      await fs.rename(target,target+".saved");await fs.symlink(target+".saved",target)
+    }else if(kind==="directory-symlink"){
+      await fs.rename(path.join(root,"src"),path.join(root,"saved"));await fs.symlink(path.join(root,"saved"),path.join(root,"src"))
+    }else if(kind==="hardlink")await fs.link(target,target+".alias")
+    else if(kind==="mode")await fs.chmod(target,0o4644)
+    else await fs.writeFile(target,Buffer.from([0xff]))
+    await assert.rejects(applyExactTextFile(root,input,operation,{admit:async()=>{},retain:async()=>assert.fail("unsafe input retained")}))
+  })
 })

@@ -8,6 +8,8 @@ import java.util.UUID
 internal sealed interface ExecutionProfileDescriptor { val key:WorkKey.Profile }
 internal data class NativeProfileDescriptor(override val key:WorkKey.Profile,val value:WProfile):ExecutionProfileDescriptor
 internal data class MechanicalProfileDescriptor(override val key:WorkKey.Profile,val value:MechanicalProfile):ExecutionProfileDescriptor
+/** Same canonical graph, only under explicit candidate model3 selection. No enabled writer. */
+internal data class WMechanicalProfilesPayload(val value:MechanicalProfile):WorkPayload
 internal data class MechanicalProfile(
     val nativeProfileId:String,val qualificationEvidence:List<WSource>,val checkProfileId:String,
     val maximumPatchBytes:Long,val maximumFileBytes:Long,val maximumCheckOutputBytes:Long,val maximumCheckMillis:Long,
@@ -93,7 +95,7 @@ internal class ExecutionDescriptorCodec {
             bounded("maximumCheckOutputBytes",1024*1024),bounded("maximumCheckMillis",3600000),assurance,
             workList(f.getValue("permissions"),0,256,false,::decodeWProfilePermissionsItem),platform,qualification)
     }
-    private fun encodeMechanicalProfile(p:MechanicalProfile):JsonValue = obj("kind" to str("mechanical-v1"),
+    internal fun encodeMechanicalProfile(p:MechanicalProfile):JsonValue = obj("kind" to str("mechanical-v1"),
         "nativeProfileId" to str(p.nativeProfileId),"qualificationEvidence" to workArray(p.qualificationEvidence,0,256,false,::encodeWSource),
         "checkProfileId" to str(p.checkProfileId),"maximumPatchBytes" to JNumber(p.maximumPatchBytes),"maximumFileBytes" to JNumber(p.maximumFileBytes),
         "maximumCheckOutputBytes" to JNumber(p.maximumCheckOutputBytes),"maximumCheckMillis" to JNumber(p.maximumCheckMillis),

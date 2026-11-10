@@ -579,3 +579,27 @@ legacy producer identity is not represented as complete contributor knowledge. R
 whole-state/history, rights/claims/effect, review/acceptance and per-platform gates remain separate.
 Private designs/tasks/evidence, logs, stores and generated outputs stay excluded. No push/live call,
 stand restart, migration/history rewrite or operational qualification follows from this checkpoint.
+
+## Exact-file native primitive scope P26 — local source checkpoint
+
+The owner's instruction to continue the approved deterministic applicator extends the two already
+admitted paths `adapters/opencode/src/exact-text-correction.ts` and its existing test file, with
+corresponding README/status updates. No new publication path or imported code is introduced.
+Newly authored AGPL-3.0-only Linux exact-file application/read-only observation primitive and
+synthetic temporary-filesystem tests; no actual patches, project files, paths, keys or run evidence.
+
+The pure preparation export remains effect-free. The new primitive is not wired to an admission
+route/tool and supplies no authority itself. Retention/admission ports are unconnected; component
+tests mock them explicitly. Pending effects, non-atomic writes, cooperative path checks and held
+Windows/macOS qualification are explicit. Service state/history/authorship/claims, permitted check
+execution and operational tool integration remain unfinished. No push, install, stand restart,
+live model call or process-fault qualification follows from this local source checkpoint.
+
+## Candidate profile graph scope P27 — local source checkpoint
+
+Extend existing admitted work codec/state/registry/query/reducer, execution descriptor and descriptor
+test paths for explicit candidate model3 profile restoration in the same bounded graph. No new path,
+external source, private fixtures or generated output is introduced. Legacy model2 bytes/readers stay
+unchanged; the legacy command3 reducer/registration and read2 codecs do not become model3 writers.
+Mechanical profiles cannot masquerade as native assignment/binding/controller profiles. Record2
+result/operation admission and new store/journal/service selection remain held, not silently enabled.

@@ -34,6 +34,7 @@ internal data class WorkEffect(val before: WorkState,val after: WorkState,val re
 
 internal class WorkReducer {
     fun reduce(h: WorkState,original: WorkCommand,actor: WorkExecutionInput,facts: WorkExternalFacts): WorkEffect {
+        workRequire(h.modelVersion==2,WorkProblem.NOT_READY) // legacy command3 is not a model3 writer
         val codec=WorkCodec();val command=codec.decodeCommand(codec.encodeCommand(original))
         workRequire(command.projectId==h.projectId,WorkProblem.FOREIGN_REFERENCE)
         val tx=WorkTransaction(h,actor,facts,command.requestKey,codec.fingerprint(command))
@@ -51,6 +52,7 @@ internal class WorkReducer {
     /** Internal enrollment effect, composed atomically with AUTH's six records and one receipt by APP.
      * AUTH must validate its candidate first; this checks exact reserved-work equality independently. */
     fun bindRegistration(h: WorkState,registration: WorkRegistrationBinding): WorkEffect {
+        workRequire(h.modelVersion==2,WorkProblem.NOT_READY)
         val a=h.assignment(registration.assignmentId)
         workRequire(a.generation==registration.expectedGeneration,WorkProblem.STALE_GENERATION)
         workRequire(a.state=="reserved" && a.delegationId==null && a.execution==null && a.binding==null,WorkProblem.INVALID_BINDING)

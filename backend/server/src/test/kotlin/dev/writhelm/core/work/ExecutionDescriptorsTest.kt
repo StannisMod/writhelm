@@ -84,4 +84,54 @@ class ExecutionDescriptorsTest {
         assertFalse(nonAuthorCandidate(uid(30),uid(102),mechanical,declared.copy(authors=listOf(uid(20))),true,known))
         assertTrue(nonAuthorCandidate(uid(30),uid(102),mechanical,declared,true,known)) // candidate only, no rights/freshness/evidence proved
     }
+    @Test fun candidateModel3ProfilesUseTheSameCanonicalGraphAndPreserveDescriptorAndLegacyBytes() {
+        val selected=WorkCodec(modelVersion=3)
+        val row=WorkRecord(WorkRecordIdentity(WorkFamily.PROFILES,key),WMechanicalProfilesPayload(profile().value))
+        val bytes=codec.encodeProfile(profile())
+        assertContentEquals(bytes,selected.encodeRecord(row))
+        assertEquals(row,selected.decodeRecord(bytes))
+        assertEquals(CodecProblem.UNSUPPORTED_FORMAT,assertFailsWith<CodecFault> { WorkCodec().decodeRecord(bytes,true) }.problem)
+        assertFailsWith<CodecFault> { WorkState.restore(project,listOf(row),emptyList()) }
+        val f=ReviewProbeFixture()
+        val legacyRow=f.state.record(WorkFamily.PROFILES,f.profileKey)
+        assertContentEquals(WorkCodec().encodeRecord(legacyRow,true),selected.encodeRecord(legacyRow,true))
+        val state=WorkState.restore(project,listOf(row,legacyRow),emptyList(),modelVersion=3)
+        assertEquals(3,state.modelVersion)
+        val ref=state.reference(WorkFamily.PROFILES,key)
+        assertEquals(Digest.of(bytes),ref.digest);assertEquals(row,state.resolve(ref))
+        assertEquals(row,state.readExact(WorkRead.Exact(project,row.identity,ref.digest,null)))
+        assertEquals(ref.digest,workRecordFacts(row,3).digest)
+        val next=WorkRecord(WorkRecordIdentity(WorkFamily.PROFILES,WorkKey.Profile(project,uid(900),0)),row.payload)
+        val derived=state.derive(listOf(next),emptyList())
+        assertEquals(3,derived.modelVersion)
+        assertEquals(state.encodedByteCount+selected.encodeRecord(next).size,derived.encodedByteCount)
+        assertEquals(derived.records,WorkState.restore(project,derived.records.values,derived.bodies.values,modelVersion=3).records)
+        assertFailsWith<CodecFault> { WorkState.restore(project,listOf(row),emptyList(),WorkGraphBudget(aggregateBytes=bytes.size.toLong()-1),modelVersion=3) }
+    }
+    @Test fun candidateProfileEvidenceUsesExistingReferenceAndEdgeBudgetsRatherThanAnOverlay() {
+        val f=ReviewProbeFixture();val nativeRow=f.state.record(WorkFamily.PROFILES,f.profileKey)
+        val source=WSourceVariant2Value(WSourceVariant2("work",f.state.reference(WorkFamily.PROFILES,f.profileKey)))
+        val row=WorkRecord(WorkRecordIdentity(WorkFamily.PROFILES,key),WMechanicalProfilesPayload(profile().value.copy(qualificationEvidence=listOf(source,source))))
+        val restored=WorkState.restore(project,listOf(row,nativeRow),emptyList(),modelVersion=3)
+        assertEquals(4L,restored.fullRestoreEdges) // reference checks plus immutable-cycle traversal
+        assertFailsWith<CodecFault> { WorkState.restore(project,listOf(row),emptyList(),modelVersion=3) }
+        assertFailsWith<CodecFault> { WorkState.restore(project,listOf(row,nativeRow),emptyList(),WorkGraphBudget(edges=1),modelVersion=3) }
+        assertFailsWith<CodecFault> { WorkState.empty(project,WorkGraphBudget(edges=1),3).derive(listOf(row,nativeRow),emptyList()) }
+    }
+    @Test fun candidateReaderDoesNotEnableLegacyCommandsReadsOrFakeNativeAssignments() {
+        val f=ReviewProbeFixture();val selected=WorkCodec(modelVersion=3)
+        val operation=CCreateProfileOperation(CCreateProfile(f.profileKey,(f.state.record(WorkFamily.PROFILES,f.profileKey).payload as WProfilesPayload).value,emptyList()))
+        val command=WorkCommand(uid(902),project,operation)
+        assertFailsWith<CodecFault> { selected.decodeCommand(WorkCodec().encodeCommand(command)) }
+        val ref=f.state.reference(WorkFamily.PROFILES,f.profileKey)
+        val read=WorkRead.Exact(project,ref.identity,ref.digest,null)
+        assertFailsWith<CodecFault> { selected.decodeRead(WorkCodec().encodeRead(read)) }
+        assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> {
+            f.reducer.reduce(WorkState.empty(project,modelVersion=3),command,f.actor,f.facts)
+        }.problem)
+        f.active()
+        val mechanicalRow=WorkRecord(WorkRecordIdentity(WorkFamily.PROFILES,f.profileKey),WMechanicalProfilesPayload(profile().value))
+        assertFailsWith<CodecFault> { WorkState.restore(project,f.state.records.values.filter { it.identity!=mechanicalRow.identity }+mechanicalRow,
+            f.state.bodies.values,modelVersion=3) }
+    }
 }

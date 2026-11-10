@@ -64,6 +64,16 @@ not acceptance; grouping cannot waive existing earlier gates or establish covera
 After findings/fixes, retain justified unaffected evidence and assess affected deltas under exact
 new-subject bindings. This policy does not enable the unfinished operational patch applicator.
 
+`exact-text-correction.ts` also contains a non-exposed Linux filesystem primitive. It checks actual
+single-link regular-file identity and exact preimage, retains an original effect with patch and
+before/after witnesses before writing, and rechecks the same admission intent. Writes are non-atomic;
+retention/later failures preserve a pending original operation, not permission for another attempt.
+Read-only reconciliation reports observed before/after/unknown bytes only, never canonical completion,
+writer termination or claim release. Admission/retention are trusted integration ports, currently
+unconnected and mocked in tests. No check runner or primary tool is exposed. This is E-COOP-1
+cooperative path checking, not hostile same-user path-race confinement. Windows/macOS native effects
+explicitly refuse; their adapters and all operational qualification remain outstanding.
+
 ### Reserved worker preparation and distinct initial start
 
 `writhelm_prepare_worker` is controller-only orchestration over the existing canonical reserve,

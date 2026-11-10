@@ -27,10 +27,14 @@ and portable acceptance. Its real OpenCode bridge and installed execution remain
 the [completion plan](docs/roadmap.md) and [portable test inputs](backend/server/src/test/resources/h1/README.md).
 Linux, Windows and macOS are target service platforms. The current native store is Linux-specific;
 other platform adapters and cross-platform operational qualification are not implemented or verified.
-The owner-approved non-LLM correction route has a pure exact-text preparation kernel and staged
-mechanical profile/producer/result descriptors with explicit author attribution and legacy-byte
-compatibility checks. These descriptors are not yet an enabled writer profile or operational patch
-tool; task/authority/claims/effect/history integration and independent qualification remain open.
+The owner-approved non-LLM correction route has a pure exact-text preparation kernel, a non-exposed
+Linux exact-file effect primitive and staged mechanical profile/producer/result descriptors with
+explicit author attribution and legacy-byte compatibility checks. These are not yet an enabled
+writer profile or operational patch tool; task/authority/claims/effect/history integration and
+independent qualification remain open. The native primitive's admission/retention ports remain
+unconnected; read-only byte observations do not establish writer termination or release claims.
+Mechanical profiles can be restored in the existing bounded canonical graph under explicit candidate
+model3 selection; legacy command/read/service writer selection remains unchanged and refuses it.
 See [upstream provenance](docs/upstream.md).
 Writhelm is an independent project, not an official upstream distribution.
 

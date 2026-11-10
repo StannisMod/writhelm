@@ -57,7 +57,9 @@ internal class WorkState private constructor(
     private val encodedSizes: Map<WorkRecordIdentity,Int>,
     private val totalBytes: Long,
     private val approvedPlanChanges: Set<KnowledgeReference>,
+    val modelVersion:Int,
 ) {
+    private val codec get()=WorkCodec(modelVersion=modelVersion)
     val encodedByteCount: Long get()=totalBytes
     private var dependencies: Map<WorkRecordIdentity,Set<WorkRecordIdentity>> = emptyMap()
     private var reverseDependencies: Map<WorkRecordIdentity,Set<WorkRecordIdentity>> = emptyMap()
@@ -71,24 +73,24 @@ internal class WorkState private constructor(
     fun resolve(ref: WorkReference): WorkRecord {
         workRequire(ref.identity.key.projectId==projectId,WorkProblem.FOREIGN_REFERENCE)
         val r=records[ref.identity] ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
-        workRequire(WorkCodec().digest(r)==ref.digest,WorkProblem.DIGEST_MISMATCH);return r
+        workRequire(codec.digest(r)==ref.digest,WorkProblem.DIGEST_MISMATCH);return r
     }
     fun assignment(id: UUID): WAssignments = (record(WorkFamily.ASSIGNMENTS,WorkKey.Id(projectId,id)).payload as WAssignmentsPayload).value
     fun task(key: WorkKey.TaskRevision): WTaskRevisions = (record(WorkFamily.TASK_REVISIONS,key).payload as WTaskRevisionsPayload).value
     fun binding(subject: WAssignmentSubject): WAssignmentBindings = (record(WorkFamily.ASSIGNMENT_BINDINGS,
         WorkKey.AssignmentBinding(projectId,subject.assignmentId,subject.generation)).payload as WAssignmentBindingsPayload).value
     fun reference(f: WorkFamily,k: WorkKey): WorkReference {
-        val r=record(f,k);return WorkReference(r.identity,WorkCodec().digest(r))
+        val r=record(f,k);return WorkReference(r.identity,codec.digest(r))
     }
     fun governingVerificationPlan(taskKey: WorkKey.TaskRevision,key: WorkKey.Revision): WVerificationPlans =
         rootedVerificationPlan(taskKey,task(taskKey),key,{ (record(WorkFamily.VERIFICATION_PLANS,it).payload as WVerificationPlansPayload).value },approvedPlanChanges,budget.depth)
     companion object {
-        fun empty(project: UUID,budget: WorkGraphBudget=WorkGraphBudget()): WorkState = restore(project,emptyList(),emptyList(),budget)
+        fun empty(project: UUID,budget: WorkGraphBudget=WorkGraphBudget(),modelVersion:Int=2): WorkState = restore(project,emptyList(),emptyList(),budget,modelVersion=modelVersion)
         fun restore(project: UUID,records: Collection<WorkRecord>,bodies: Collection<Utf8Content>,budget: WorkGraphBudget=WorkGraphBudget(),
-            approvedPlanChanges: Set<KnowledgeReference> = emptySet()): WorkState {
+            approvedPlanChanges: Set<KnowledgeReference> = emptySet(),modelVersion:Int=2): WorkState {
             if(records.size>budget.records || bodies.size>budget.bodies)refuse(CodecProblem.RESOURCE_UNAVAILABLE)
             if(approvedPlanChanges.size>budget.edges)refuse(CodecProblem.RESOURCE_UNAVAILABLE)
-            var bytes=0L; val codec=WorkCodec()
+            var bytes=0L; val codec=WorkCodec(modelVersion=modelVersion)
             val copied=LinkedHashMap<WorkRecordIdentity,WorkRecord>();val sizes=LinkedHashMap<WorkRecordIdentity,Int>()
             records.forEach { r ->
                 graph(r.identity.key.projectId==project)
@@ -105,7 +107,7 @@ internal class WorkState private constructor(
                 if(bodyMap.put(b.digest,b)!=null)refuse(CodecProblem.DUPLICATE_IDENTITY)
             }
             val state=WorkState(project,Collections.unmodifiableMap(copied),Collections.unmodifiableMap(bodyMap),budget,Collections.unmodifiableMap(sizes),bytes,
-                Collections.unmodifiableSet(HashSet(approvedPlanChanges)))
+                Collections.unmodifiableSet(HashSet(approvedPlanChanges)),modelVersion)
             state.validate();return state
         }
     }
@@ -120,7 +122,7 @@ internal class WorkState private constructor(
         graph(changedMap.size==changed.size)
         if(changed.size>4096)refuse(CodecProblem.RESOURCE_UNAVAILABLE)
         val copied=LinkedHashMap(records);val sizes=LinkedHashMap(encodedSizes);val bodyMap=LinkedHashMap(bodies)
-        var bytes=totalBytes;val codec=WorkCodec()
+        var bytes=totalBytes;val codec=this.codec
         changed.forEach { r ->
             graph(r.identity.key.projectId==projectId)
             val old=records[r.identity]
@@ -149,7 +151,7 @@ internal class WorkState private constructor(
             } }
         }
         val state=WorkState(projectId,Collections.unmodifiableMap(copied),Collections.unmodifiableMap(bodyMap),budget,Collections.unmodifiableMap(sizes),bytes,
-            Collections.unmodifiableSet(approvals))
+            Collections.unmodifiableSet(approvals),modelVersion)
         state.dependencies=dependencies
         state.reverseDependencies=reverseDependencies
         state.intrinsicEdgeCosts=intrinsicEdgeCosts
@@ -204,7 +206,7 @@ internal class WorkState private constructor(
                 is WPlansPayload -> { task(p.value.task);p.value.assignment?.let { graph((bind(it).payload as WAssignmentBindingsPayload).value.task==p.value.task) } }
                 is WInputManifestsPayload -> { graph((task(p.value.task).payload as WTaskRevisionsPayload).value.base==p.value.base);required(WorkFamily.APPLICABILITY,p.value.applicability) }
                 is WAssignmentsPayload -> p.value.let { v ->
-                    task(v.task);required(WorkFamily.PROFILES,v.profile)
+                    task(v.task);graph(required(WorkFamily.PROFILES,v.profile).payload is WProfilesPayload)
                     graph(v.manifest.identity.family==WorkFamily.INPUT_MANIFESTS)
                     graph((resolve(v.manifest).payload as WInputManifestsPayload).value.task==v.task)
                     v.currentIntent?.let { graph((required(WorkFamily.NATIVE_INTENTS,it).payload as WNativeIntentsPayload).value.assignment==WAssignmentSubject((r.identity.key as WorkKey.Id).id,v.executionGeneration)) }
@@ -219,7 +221,7 @@ internal class WorkState private constructor(
                     }
                 }
                 is WAssignmentBindingsPayload -> p.value.let { v ->
-                    task(v.task);required(WorkFamily.PROFILES,v.profile)
+                    task(v.task);graph(required(WorkFamily.PROFILES,v.profile).payload is WProfilesPayload)
                     val e=v.execution;val i=v.intendedExecution
                     graph(e.executionId==i.executionId && e.nativeHostId==i.nativeHostId && e.nativeSessionId==i.nativeSessionId && e.workspaceId==v.workspaceId)
                     v.reviewSubjects.forEach { subject ->
@@ -286,7 +288,7 @@ internal class WorkState private constructor(
                 }
                 is WDeliveriesPayload -> { bind(p.value.assignment);graph((required(WorkFamily.SOURCE_CUTS,WorkKey.Id(projectId,p.value.sourceCutId)).payload as WSourceCutsPayload).value.assignment==p.value.assignment);task(p.value.destinationTask) }
                 is WApplicabilityPayload -> p.value.previous?.let { required(WorkFamily.APPLICABILITY,it) }
-                is WControllerContinuationsPayload -> { val v=p.value;required(WorkFamily.PROFILES,v.profile)
+                is WControllerContinuationsPayload -> { val v=p.value;graph(required(WorkFamily.PROFILES,v.profile).payload is WProfilesPayload)
                     val key=r.identity.key as WorkKey.ControllerContinuation
                     v.previous?.let { graph(it.key.controllerId==key.controllerId);val old=required(WorkFamily.CONTROLLER_CONTINUATIONS,it.key);graph(WorkCodec().digest(old)==it.digest) }
                     v.frontier.forEach { item ->task(item.task);item.assignments.forEach { a ->required(WorkFamily.ASSIGNMENTS,WorkKey.Id(projectId,a.assignmentId)) } }
