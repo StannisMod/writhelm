@@ -133,11 +133,15 @@ internal class WorkState private constructor(
                 graph(recordGeneration(r.payload)==nextGeneration(recordGeneration(old.payload)!!))
                 if(old.payload is WContinuationsPayload && r.payload is WContinuationsPayload)
                     validateContinuationEdge(old.payload.value,r.payload.value)
-                validateMechanicalEdge(old.payload,r.payload)
+                if(old.payload is WMechanicalAssignmentsPayload || old.payload is WMechanicalOperationsPayload ||
+                    r.payload is WMechanicalAssignmentsPayload || r.payload is WMechanicalOperationsPayload)
+                    validateMechanicalRecordEdge(old,r)
             } else if(r.identity.family.mutable) {
                 graph(recordGeneration(r.payload)==0L)
                 if(r.payload is WMechanicalAssignmentsPayload)graph(r.payload.value.state=="reserved")
                 if(r.payload is WMechanicalOperationsPayload)graph(r.payload.value.outcome=="pending")
+                if(r.payload is WMechanicalAssignmentsPayload || r.payload is WMechanicalOperationsPayload)
+                    validateMechanicalRecordEdge(null,r)
             }
             val encoded=codec.encodeRecord(r)
             bytes-=sizes[r.identity] ?: 0

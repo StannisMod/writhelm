@@ -626,3 +626,11 @@ acceptance conservatively requires the same exact task and verification plan for
 result's report; cross-task grouped coverage remains held pending explicit applicability proof. Legacy formats,
 store writer, service operation and current access selection remain unchanged. No new public path,
 external source, real patch, fixture, credential or local history is introduced.
+
+## Mechanical row-edge validation scope P30 — local source checkpoint
+
+Extend the already admitted execution-descriptor, state and synthetic descriptor-test paths with a
+candidate mechanical record-edge validator for initial rows, original identity, generation and
+immutable operation/binding transitions. This is not a store-history auditor or authenticated receipt
+validator; model3 publication and physical-effect observation remain held. No new paths or private
+run artifacts are published.

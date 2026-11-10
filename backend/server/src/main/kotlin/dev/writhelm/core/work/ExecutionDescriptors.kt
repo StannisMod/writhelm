@@ -119,6 +119,7 @@ internal fun validateMechanicalEdge(old:WorkPayload,next:WorkPayload) {
         workRequire(old is WMechanicalAssignmentsPayload && next is WMechanicalAssignmentsPayload,WorkProblem.INVALID_TRANSITION)
         old as WMechanicalAssignmentsPayload;next as WMechanicalAssignmentsPayload
         val a=old.value;val b=next.value
+        workRequire(b.generation==nextGeneration(a.generation),WorkProblem.STALE_GENERATION)
         workRequire(a.bindingData==b.bindingData && (a.binding==null || a.binding==b.binding),WorkProblem.INVALID_BINDING)
         val allowed=when(a.state) {
             "reserved" -> setOf("bound")
@@ -133,10 +134,32 @@ internal fun validateMechanicalEdge(old:WorkPayload,next:WorkPayload) {
         workRequire(old is WMechanicalOperationsPayload && next is WMechanicalOperationsPayload,WorkProblem.INVALID_TRANSITION)
         old as WMechanicalOperationsPayload;next as WMechanicalOperationsPayload
         val a=old.value;val b=next.value
+        workRequire(b.generation==nextGeneration(a.generation),WorkProblem.STALE_GENERATION)
         workRequire(a.copy(generation=b.generation,outcome=b.outcome,observedDigest=b.observedDigest,writerCompleted=b.writerCompleted,
             evidence=b.evidence,observations=b.observations)==b,WorkProblem.INVALID_SUBJECT)
         workRequire(!a.writerCompleted && b.outcome!="pending" && b.observations.containsAll(a.observations) && b.evidence.containsAll(a.evidence),WorkProblem.INVALID_TRANSITION)
     }
+}
+
+/** Candidate mechanical row edge, suitable for later historical audit integration. Callers must
+ * independently validate receipt/actor/current authority, both complete snapshots, exact changed
+ * paths, and actual native observations. Absence or matching snapshots alone are not that proof. */
+internal fun validateMechanicalRecordEdge(before:WorkRecord?,after:WorkRecord?) {
+    val next=after ?: throw WorkFault(WorkProblem.INVALID_TRANSITION)
+    val p=next.payload
+    workRequire(p is WMechanicalAssignmentsPayload || p is WMechanicalBindingsPayload ||
+        p is WMechanicalOperationsPayload || p is WMechanicalProfilesPayload || p is WMechanicalResultsPayload,WorkProblem.INVALID_SUBJECT)
+    if(before==null) {
+        when(p) {
+            is WMechanicalAssignmentsPayload -> workRequire(p.value.generation==0L && p.value.state=="reserved" && p.value.binding==null,WorkProblem.INVALID_TRANSITION)
+            is WMechanicalOperationsPayload -> workRequire(p.value.generation==0L && p.value.outcome=="pending" && !p.value.writerCompleted,WorkProblem.INVALID_TRANSITION)
+            else -> Unit
+        }
+        return
+    }
+    workRequire(before.identity==next.identity,WorkProblem.INVALID_SUBJECT)
+    if(!next.identity.family.mutable)throw WorkFault(WorkProblem.INVALID_TRANSITION)
+    validateMechanicalEdge(before.payload,p)
 }
 
 internal sealed interface ResultAuthorship

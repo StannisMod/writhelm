@@ -182,11 +182,25 @@ class ExecutionDescriptorsTest {
         val bindingRow=WorkRecord(WorkRecordIdentity(WorkFamily.ASSIGNMENT_BINDINGS,WorkKey.AssignmentBinding(project,id,0)),WMechanicalBindingsPayload(f.data))
         val binding=WorkReference(bindingRow.identity,codec.digest(bindingRow))
         var assignment=(f.assignment.payload as WMechanicalAssignmentsPayload).value.copy(generation=1,binding=binding,state="bound")
+        validateMechanicalRecordEdge(null,f.assignment)
+        validateMechanicalRecordEdge(null,bindingRow)
+        validateMechanicalRecordEdge(f.assignment,f.assignment.copy(payload=WMechanicalAssignmentsPayload(assignment)))
+        assertFailsWith<WorkFault> { validateMechanicalRecordEdge(bindingRow,bindingRow) }
+        assertFailsWith<WorkFault> { validateMechanicalRecordEdge(f.assignment,f.assignment.copy(payload=WMechanicalAssignmentsPayload(assignment.copy(generation=2)))) }
+        assertFailsWith<WorkFault> { validateMechanicalRecordEdge(f.assignment,f.assignment.copy(payload=WMechanicalAssignmentsPayload(assignment.copy(bindingData=assignment.bindingData.copy(producer=assignment.bindingData.producer.copy(controllerId=uid(964))))))) }
         var state=f.state.derive(listOf(f.assignment.copy(payload=WMechanicalAssignmentsPayload(assignment)),bindingRow),emptyList())
         val patch=Utf8Content.fromText("synthetic exact patch\n");val witnesses=Utf8Content.fromText("synthetic retained original witnesses\n")
         var operation=MechanicalOperation(0,subject,binding,WorkBodyReference(patch.digest,patch.sizeBytes),WorkBodyReference(witnesses.digest,witnesses.sizeBytes),
             Digest.of(byteArrayOf(1)),Digest.of(byteArrayOf(2)),"pending",null,false,emptyList(),emptyList())
         val opId=WorkRecordIdentity(WorkFamily.NATIVE_INTENTS,f.data.producer.operation)
+        val originalRow=WorkRecord(opId,WMechanicalOperationsPayload(operation))
+        validateMechanicalRecordEdge(null,originalRow)
+        assertFailsWith<WorkFault> { validateMechanicalRecordEdge(null,originalRow.copy(payload=WMechanicalOperationsPayload(operation.copy(outcome="unknown")))) }
+        assertFailsWith<WorkFault> { validateMechanicalRecordEdge(originalRow,null) }
+        assertFailsWith<WorkFault> { validateMechanicalRecordEdge(originalRow,originalRow.copy(identity=WorkRecordIdentity(WorkFamily.NATIVE_INTENTS,WorkKey.Id(project,uid(965))))) }
+        assertFailsWith<WorkFault> { validateMechanicalRecordEdge(originalRow,originalRow.copy(payload=WMechanicalOperationsPayload(operation.copy(outcome="unknown")))) }
+        validateMechanicalRecordEdge(originalRow,originalRow.copy(payload=WMechanicalOperationsPayload(operation.copy(generation=1,outcome="unknown"))))
+        assertFailsWith<WorkFault> { validateMechanicalRecordEdge(originalRow,originalRow.copy(payload=WMechanicalOperationsPayload(operation.copy(generation=1,outcome="unknown",patch=operation.witnesses)))) }
         assignment=assignment.copy(generation=2,state="active")
         assertFailsWith<CodecFault> { state.derive(listOf(WorkRecord(opId,WMechanicalOperationsPayload(operation))),listOf(patch,witnesses)) }
         assertFailsWith<CodecFault> { state.derive(listOf(f.assignment.copy(payload=WMechanicalAssignmentsPayload(assignment)),
