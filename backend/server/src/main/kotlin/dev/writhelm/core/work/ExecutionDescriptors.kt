@@ -51,13 +51,17 @@ internal data class MechanicalResourceExpectation(val resource:WorkKey.Resource,
 internal sealed interface MechanicalCommandOperation {
     data class Reserve(val assignmentId:UUID,val binding:MechanicalBinding,val resources:List<MechanicalResourceExpectation>):MechanicalCommandOperation
     data class Bind(val assignmentId:UUID,val generation:Long,val binding:WorkReference):MechanicalCommandOperation
+    data class Prepare(val assignmentId:UUID,val generation:Long,val operation:WorkKey.Id,val effect:MechanicalOperation):MechanicalCommandOperation
+    data class Observe(val assignmentId:UUID,val generation:Long,val operation:WorkKey.Id,val expectedOperationGeneration:Long,val effect:MechanicalOperation):MechanicalCommandOperation
+    data class Submit(val assignmentId:UUID,val generation:Long,val operationGeneration:Long,val result:MechanicalResultDescriptor):MechanicalCommandOperation
 }
 internal data class MechanicalCommand(val requestKey:UUID,val projectId:UUID,val operation:MechanicalCommandOperation)
 
-/** Staged command4 reservation/binding codec, NOT a store catalogue, writer, service command or
- * authority. Remaining effect/result operation schemas are deliberately unsupported. */
+/** Staged command4 metadata codec, NOT a store catalogue, writer, service command, authority,
+ * admitted attachment or trusted native observation. Body refs need separately admitted bytes. */
 internal class MechanicalCommandCodec {
     private val mechanical=MechanicalWorkCodec()
+    private val results=ResultDescriptorCodec()
     private val limits=JsonLimits(bytes=262144,stringBytes=65536,depth=32,collection=1024,tokens=100000)
     private fun json(k:WorkKey)=StrictJson.decode(identityCodec.encodeKey(k))
     private fun json(r:WorkReference)=StrictJson.decode(identityCodec.encodeReference(r))
@@ -86,6 +90,30 @@ internal class MechanicalCommandCodec {
                 shape(binding.identity.family==WorkFamily.ASSIGNMENT_BINDINGS && binding.identity.key==WorkKey.AssignmentBinding(project,assignment,0))
                 MechanicalCommandOperation.Bind(assignment,generation(p.getValue("expectedGeneration")),binding)
             }
+            "prepare_mechanical_effect","observe_mechanical_effect" -> {
+                val observe=f.getValue("operation").string()=="observe_mechanical_effect"
+                val p=if(observe)payload.fields("assignmentId","expectedGeneration","operation","expectedOperationGeneration","effect")
+                    else payload.fields("assignmentId","expectedGeneration","operation","effect")
+                val assignment=uuid(p.getValue("assignmentId"));val expected=generation(p.getValue("expectedGeneration"))
+                val operation=identityCodec.decodeKey(WorkFamily.NATIVE_INTENTS,StrictJson.encode(p.getValue("operation"))) as WorkKey.Id
+                val effect=(mechanical.decode(WorkFamily.NATIVE_INTENTS,p.getValue("effect"),project) as WMechanicalOperationsPayload).value
+                shape(operation.projectId==project && effect.assignment==WAssignmentSubject(assignment,0) &&
+                    effect.binding.identity.key==WorkKey.AssignmentBinding(project,assignment,0))
+                if(!observe) {
+                    shape(effect.generation==0L && effect.outcome=="pending" && !effect.writerCompleted && effect.evidence.isEmpty() && effect.observations.isEmpty())
+                    MechanicalCommandOperation.Prepare(assignment,expected,operation,effect)
+                } else {
+                    val previous=generation(p.getValue("expectedOperationGeneration"));shape(previous<Long.MAX_VALUE && effect.generation==previous+1 && effect.outcome!="pending")
+                    MechanicalCommandOperation.Observe(assignment,expected,operation,previous,effect)
+                }
+            }
+            "submit_mechanical_result" -> {
+                val p=payload.fields("assignmentId","expectedGeneration","expectedOperationGeneration","result")
+                val assignment=uuid(p.getValue("assignmentId"))
+                val result=results.decode(StrictJson.encode(p.getValue("result"))) as? MechanicalResultDescriptor ?: refuse(CodecProblem.INVALID_SHAPE)
+                shape(result.key.projectId==project && result.value.assignment==WAssignmentSubject(assignment,0))
+                MechanicalCommandOperation.Submit(assignment,generation(p.getValue("expectedGeneration")),generation(p.getValue("expectedOperationGeneration")),result)
+            }
             else -> refuse(CodecProblem.UNSUPPORTED_FORMAT)
         }
         val command=MechanicalCommand(uuid(f.getValue("requestKey")),project,operation)
@@ -96,6 +124,12 @@ internal class MechanicalCommandCodec {
         is MechanicalCommandOperation.Reserve -> "reserve_mechanical" to obj("assignmentId" to uuid(v.assignmentId),"binding" to mechanical.encodeBinding(v.binding),
             "resources" to workArray(v.resources,1,256,true) { obj("resource" to json(it.resource),"expectedGeneration" to (it.generation?.let(::JNumber) ?: JNull)) })
         is MechanicalCommandOperation.Bind -> "bind_mechanical" to obj("assignmentId" to uuid(v.assignmentId),"expectedGeneration" to JNumber(v.generation),"binding" to json(v.binding))
+        is MechanicalCommandOperation.Prepare -> "prepare_mechanical_effect" to obj("assignmentId" to uuid(v.assignmentId),"expectedGeneration" to JNumber(v.generation),
+            "operation" to json(v.operation),"effect" to mechanical.encode(WMechanicalOperationsPayload(v.effect)))
+        is MechanicalCommandOperation.Observe -> "observe_mechanical_effect" to obj("assignmentId" to uuid(v.assignmentId),"expectedGeneration" to JNumber(v.generation),
+            "operation" to json(v.operation),"expectedOperationGeneration" to JNumber(v.expectedOperationGeneration),"effect" to mechanical.encode(WMechanicalOperationsPayload(v.effect)))
+        is MechanicalCommandOperation.Submit -> "submit_mechanical_result" to obj("assignmentId" to uuid(v.assignmentId),"expectedGeneration" to JNumber(v.generation),
+            "expectedOperationGeneration" to JNumber(v.operationGeneration),"result" to StrictJson.decode(results.encode(v.result)))
     }
     private fun value(command:MechanicalCommand,includeKey:Boolean):JsonValue {
         val (name,payload)=operationJSON(command.operation)

@@ -195,7 +195,30 @@ class ExecutionDescriptorsTest {
         assertFailsWith<CodecFault> { codec.encode(bind.copy(operation=(bind.operation as MechanicalCommandOperation.Bind).copy(assignmentId=uid(964)))) }
         assertFailsWith<CodecFault> { codec.encode(bind.copy(operation=(bind.operation as MechanicalCommandOperation.Bind).copy(generation=-1))) }
         val root=StrictJson.decode(bytes) as JObject
-        assertFailsWith<CodecFault> { codec.decode(StrictJson.encode(JObject(root.entries+("operation" to str("prepare_mechanical_effect"))))) }
+        assertFailsWith<CodecFault> { codec.decode(StrictJson.encode(JObject(root.entries+("operation" to str("unknown_mechanical_effect"))))) }
+    }
+    @Test fun candidateCommand4EffectAndResultMetadataCannotSubstituteForOriginalGuardsOrNativeFacts() {
+        val f=mechanicalGraph();val id=(f.assignment.identity.key as WorkKey.Id).id;val codec=MechanicalCommandCodec()
+        val binding=WorkReference(WorkRecordIdentity(WorkFamily.ASSIGNMENT_BINDINGS,WorkKey.AssignmentBinding(project,id,0)),Digest.of("binding".toByteArray()))
+        val patch=WorkBodyReference(Digest.of("patch".toByteArray()),5);val witnesses=WorkBodyReference(Digest.of("witness".toByteArray()),7)
+        val effect=MechanicalOperation(0,WAssignmentSubject(id,0),binding,patch,witnesses,Digest.of(byteArrayOf(1)),Digest.of(byteArrayOf(2)),"pending",null,false,emptyList(),emptyList())
+        val prepare=MechanicalCommand(uid(970),project,MechanicalCommandOperation.Prepare(id,1,f.data.producer.operation,effect))
+        assertEquals(prepare,codec.decode(codec.encode(prepare)))
+        assertFailsWith<CodecFault> { codec.encode(prepare.copy(operation=(prepare.operation as MechanicalCommandOperation.Prepare).copy(effect=effect.copy(generation=1)))) }
+        assertFailsWith<CodecFault> { codec.encode(prepare.copy(operation=(prepare.operation as MechanicalCommandOperation.Prepare).copy(effect=effect.copy(assignment=WAssignmentSubject(uid(971),0))))) }
+        val observed=effect.copy(generation=1,outcome="unknown",observedDigest=effect.afterDigest)
+        val observe=MechanicalCommand(uid(972),project,MechanicalCommandOperation.Observe(id,2,f.data.producer.operation,0,observed))
+        assertEquals(observe,codec.decode(codec.encode(observe)))
+        assertFailsWith<CodecFault> { codec.encode(observe.copy(operation=(observe.operation as MechanicalCommandOperation.Observe).copy(expectedOperationGeneration=1))) }
+        assertFailsWith<CodecFault> { codec.encode(observe.copy(operation=(observe.operation as MechanicalCommandOperation.Observe).copy(effect=observed.copy(writerCompleted=true)))) }
+        val native=(f.state.resolve(f.data.authorship.sourceResults.single()).payload as WResultsPayload).value
+        val result=MechanicalResultDescriptor(WorkKey.Id(project,uid(973)),MechanicalResult(f.data.task,WAssignmentSubject(id,0),f.data.producer,
+            f.data.manifest,native.artifacts,native.changes,emptyList(),emptyList(),native.retrospective,emptyList(),patch,f.data.authorship))
+        val submit=MechanicalCommand(uid(974),project,MechanicalCommandOperation.Submit(id,3,1,result))
+        val decoded=codec.decode(codec.encode(submit));assertContentEquals(codec.encode(submit),codec.encode(decoded))
+        assertFailsWith<CodecFault> { codec.encode(submit.copy(operation=(submit.operation as MechanicalCommandOperation.Submit).copy(assignmentId=uid(971)))) }
+        assertFailsWith<CodecFault> { WorkCodec().decodeCommand(codec.encode(submit)) }
+        // Codec shapes are NOT authenticated observations, retained bodies, result admission or a native effect.
     }
     @Test fun mechanicalAssignmentUsesRealSharedClaimsAndTaskSelectedPredecessorAuthorsWithoutNativeIdentity() {
         val f=mechanicalGraph();val a=(f.assignment.payload as WMechanicalAssignmentsPayload).value
