@@ -46,6 +46,8 @@ Candidate pure reservation, binding, effect-observation and result transitions u
 and claims, but depend on service-derived current authority, qualification and native facts not yet wired.
 An isolated original-state-to-candidate footprint validator and successful-command reconstruction
 exist; they are not yet a Git history auditor or receipt verifier.
+The Linux service composes a protected qualification-evidence reader, but has no registered
+qualification or independent live-environment observer configured; it therefore admits no profile.
 See [upstream provenance](docs/upstream.md).
 Writhelm is an independent project, not an official upstream distribution.
 

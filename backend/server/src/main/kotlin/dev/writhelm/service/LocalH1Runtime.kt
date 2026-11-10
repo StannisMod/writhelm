@@ -44,7 +44,11 @@ internal class LocalH1Runtime private constructor(val app: H1Application,private
         areas.forEach { outside(root,Path.of(it.string()).toRealPath()) }
         val execution=UUID.nameUUIDFromBytes("writhelm-native-controller:$controller:$host:$session:$epoch".toByteArray(Charsets.UTF_8))
         val provenance=Model2ControllerExecution(controller,execution,host,session)
-        installFacts(ConnectedRuntimeFacts(NativeInitialFacts(NativePreparationFacts(NativeContextFacts(CanonicalTaskDecisionFacts(UnavailableH1RuntimeFacts),native,epoch,provenance),native,epoch),native,epoch),preparation,native,
+        // No qualified registry or independent live-environment observer is installed yet. The
+        // real reader is composed, but cannot turn profile/configuration labels into authority.
+        val profileFacts=LinuxRegisteredProfileFacts(CanonicalTaskDecisionFacts(UnavailableH1RuntimeFacts),
+            root.resolve("profile-qualification"),emptyList(),CurrentProfileEnvironment { _,_->null })
+        installFacts(ConnectedRuntimeFacts(NativeInitialFacts(NativePreparationFacts(NativeContextFacts(profileFacts,native,epoch,provenance),native,epoch),native,epoch),preparation,native,
             provenance,checks::observed))
         engine=ConnectedWorkEngine(app,project,{token},preparation,native,LinuxConnectedCustody(root.resolve("engine")))
     }

@@ -107,6 +107,48 @@ private class JointFixture {
 }
 
 class H1JointBindingTest {
+    @Test fun registeredProfileRequiresLiveExactSubjectAndProtectedRetainedCheckArtifacts() {
+        val f=JointFixture();val work=f.base.work.getValue(project)
+        val root=java.nio.file.Files.createTempDirectory("writhelm-profile-evidence-")
+        val checks=LinuxRegisteredProfileFacts.requiredChecks.associateWith { Digest.of("actual fixture check: $it".toByteArray()) }
+        checks.forEach { (name,digest) ->
+            val path=root.resolve("${digest.hex}.evidence")
+            java.nio.file.Files.createFile(path,java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
+                java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")))
+            java.nio.file.Files.writeString(path,"actual fixture check: $name")
+        }
+        val profile=work.reference(WorkFamily.PROFILES,f.profile)
+        val subject=ProfileQualificationSubject(project,f.intended.nativeHostId,"a".repeat(64),"2.2.5",
+            Digest.of("runtime fixture".toByteArray()),Digest.of("configuration fixture".toByteArray()),profile)
+        val registration=RegisteredProfileQualification(subject,checks)
+        var current: ProfileQualificationSubject?=subject
+        val unregistered=LinuxRegisteredProfileFacts(UnavailableH1RuntimeFacts,root,emptyList(),CurrentProfileEnvironment { _,_->subject })
+        assertTrue(unregistered.capture(f.base,f.reserveCommand()).qualifiedProfiles.isEmpty())
+        val facts=LinuxRegisteredProfileFacts(UnavailableH1RuntimeFacts,root,listOf(registration),CurrentProfileEnvironment { _,_->current })
+        fun capture()=facts.capture(f.base,f.reserveCommand())
+        assertEquals(setOf(profile),capture().qualifiedProfiles)
+        assertTrue(capture().facts.verifiedPackets.isEmpty())
+        current=subject.copy(runtimeEpoch="b".repeat(64));assertTrue(capture().qualifiedProfiles.isEmpty())
+        current=subject.copy(configurationDigest=Digest.of("changed".toByteArray()));assertTrue(capture().qualifiedProfiles.isEmpty())
+        current=subject.copy(runtimeDigest=Digest.of("different runtime".toByteArray()));assertTrue(capture().qualifiedProfiles.isEmpty())
+        current=subject.copy(host=id(1899));assertTrue(capture().qualifiedProfiles.isEmpty())
+        current=null;assertTrue(capture().qualifiedProfiles.isEmpty())
+        current=subject
+        val first=checks.entries.first();val damaged=root.resolve("${first.value.hex}.evidence")
+        java.nio.file.Files.writeString(damaged,"modified")
+        assertTrue(capture().qualifiedProfiles.isEmpty())
+        java.nio.file.Files.writeString(damaged,"actual fixture check: ${first.key}")
+        java.nio.file.Files.setPosixFilePermissions(damaged,java.nio.file.attribute.PosixFilePermissions.fromString("rw-r--r--"))
+        assertTrue(capture().qualifiedProfiles.isEmpty())
+        java.nio.file.Files.setPosixFilePermissions(damaged,java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"))
+        assertEquals(setOf(profile),capture().qualifiedProfiles)
+        java.nio.file.Files.delete(damaged)
+        java.nio.file.Files.createSymbolicLink(damaged,root.resolve("${checks.values.last().hex}.evidence"))
+        assertTrue(capture().qualifiedProfiles.isEmpty())
+        assertFailsWith<IllegalArgumentException> { LinuxRegisteredProfileFacts(UnavailableH1RuntimeFacts,root,
+            listOf(registration.copy(artifacts=checks-"compaction")),CurrentProfileEnvironment { _,_->subject }) }
+        // Registry and observed runtime are synthetic here; only filesystem reads are real.
+    }
     @Test fun pinnedDecisionSourceEnablesRealGitTaskPublicationWithoutQualifyingNativeProfile() {
         val f=JointFixture();val work=f.base.work.getValue(project);val original=work.task(f.task)
         val decision=pinnedKnowledge(f.base.core.snapshot(8192),requireNotNull(original.base)).first {

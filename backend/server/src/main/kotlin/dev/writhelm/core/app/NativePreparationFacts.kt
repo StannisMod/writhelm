@@ -8,7 +8,76 @@ import dev.writhelm.core.knowledge.Digest
 import dev.writhelm.core.knowledge.KnowledgeReference
 import dev.writhelm.core.store.GitOid
 import dev.writhelm.core.work.*
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
+import java.nio.file.StandardOpenOption
+import java.nio.file.attribute.BasicFileAttributes
 import java.util.UUID
+
+/** Trusted local qualification registry entry. It is not decoded from a model, command or profile.
+ * The registrar is responsible for independently verifying the named actual checks before pinning
+ * their exact artifact digests. A label, file presence or reported pass is not such verification. */
+internal data class ProfileQualificationSubject(val project: UUID,val host: UUID,val runtimeEpoch: String,
+    val runtimeVersion: String,val runtimeDigest: Digest,val configurationDigest: Digest,val profile: WorkReference)
+internal data class RegisteredProfileQualification(val subject: ProfileQualificationSubject,val artifacts: Map<String,Digest>)
+internal fun interface CurrentProfileEnvironment { fun observe(state: H1BoundState,command: WorkCommand): ProfileQualificationSubject? }
+
+/** Real protected-file reader for independently registered qualification artifacts. The current
+ * native environment must be separately observed; stored metadata cannot observe itself. No default
+ * registration or environment provider is installed. Linux only, cooperative same-user assurance. */
+internal class LinuxRegisteredProfileFacts(private val delegate: H1RuntimeFacts,private val root: Path,
+    registrations: Collection<RegisteredProfileQualification>,private val environment: CurrentProfileEnvironment): H1RuntimeFacts {
+    private val registered=registrations.map { it.copy(artifacts=it.artifacts.toMap()) }
+    companion object {
+        internal val requiredChecks=setOf("native-permissions","mandatory-inputs","source-custody",
+            "request-accounting","compaction","recovery")
+    }
+    init {
+        require(System.getProperty("os.name")=="Linux" && root.isAbsolute && root.normalize()==root)
+        require(registered.size<=256 && registered.map { it.subject }.distinct().size==registered.size)
+        require(registered.all { it.artifacts.keys==requiredChecks && it.artifacts.values.toSet().size==requiredChecks.size &&
+            it.subject.runtimeEpoch.matches(Regex("[0-9a-f]{64}")) &&
+            it.subject.runtimeVersion.matches(Regex("[A-Za-z0-9._-]{1,64}")) && it.subject.profile.identity.family==WorkFamily.PROFILES &&
+            it.subject.profile.identity.key.projectId==it.subject.project })
+    }
+    private fun retained(digest: Digest): Boolean {
+        val uid=Files.getAttribute(Path.of("/proc/self"),"unix:uid")
+        if(Files.isSymbolicLink(root) || !Files.isDirectory(root,LinkOption.NOFOLLOW_LINKS) || root.toRealPath()!=root ||
+            Files.getAttribute(root,"unix:uid",LinkOption.NOFOLLOW_LINKS)!=uid ||
+            (Files.getAttribute(root,"unix:mode",LinkOption.NOFOLLOW_LINKS) as Int) and 0x3f!=0)return false
+        val file=root.resolve("${digest.hex}.evidence")
+        if(Files.isSymbolicLink(file) || !Files.isRegularFile(file,LinkOption.NOFOLLOW_LINKS) ||
+            Files.getAttribute(file,"unix:uid",LinkOption.NOFOLLOW_LINKS)!=uid ||
+            Files.getAttribute(file,"unix:nlink",LinkOption.NOFOLLOW_LINKS)!=1 ||
+            (Files.getAttribute(file,"unix:mode",LinkOption.NOFOLLOW_LINKS) as Int) and 0x3f!=0)return false
+        val before=Files.readAttributes(file,BasicFileAttributes::class.java,LinkOption.NOFOLLOW_LINKS)
+        if(before.size() !in 1L..1048576L)return false
+        val bytes=Files.newByteChannel(file,setOf(StandardOpenOption.READ,LinkOption.NOFOLLOW_LINKS)).use {
+            java.nio.channels.Channels.newInputStream(it).readNBytes(1048577)
+        }
+        val after=Files.readAttributes(file,BasicFileAttributes::class.java,LinkOption.NOFOLLOW_LINKS)
+        return before.fileKey()!=null && before.fileKey()==after.fileKey() && before.size()==after.size() &&
+            before.lastModifiedTime()==after.lastModifiedTime() && bytes.size.toLong()==before.size() && Digest.of(bytes)==digest
+    }
+    override fun capture(state: H1BoundState,command: WorkCommand): H1ObservedFacts {
+        val original=delegate.capture(state,command)
+        if(original.basis!=state.basis)return original
+        val reserve=(command.operation as? CReserveAssignmentOperation)?.value ?: return original
+        return try {
+            val work=state.work.getValue(command.projectId)
+            val record=work.record(WorkFamily.PROFILES,reserve.profile)
+            val profile=(record.payload as? WProfilesPayload)?.value ?: return original
+            val observed=environment.observe(state,command) ?: return original
+            if(profile.platform!="linux" || profile.qualification!="qualified" || profile.qualificationEvidence.isEmpty() ||
+                observed.project!=command.projectId || observed.host!=reserve.intendedExecution.nativeHostId ||
+                observed.profile!=work.reference(WorkFamily.PROFILES,reserve.profile))return original
+            val registration=registered.singleOrNull { it.subject==observed } ?: return original
+            if(!registration.artifacts.values.all(::retained))return original
+            H1ObservedFacts(original.basis,original.facts,original.qualifiedProfiles+observed.profile)
+        } catch(_: Exception) { original }
+    }
+}
 
 /** Derive only exact approved-design facts from the current core and the task's pinned knowledge
  * base. This proves neither native profile qualification nor packet completeness or possession. */
