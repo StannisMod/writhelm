@@ -12,8 +12,9 @@ import { listenNativeTransport } from "./native-transport.js"
 import { prepareNativePeerProofs } from "./native-bootstrap-secrets.js"
 import { NativeContextSources } from "./native-context-source.js"
 import { NativePassiveWorkers } from "./native-passive-worker.js"
-import { NativeWorkerPreparation } from "./native-worker-preparation.js"
+import { NativeWorkerPreparation, NativeDispatchFrontier } from "./native-worker-preparation.js"
 import { LinuxGitWitness } from "./linux-git-witness.js"
+import { NativeResultRetention, type RetentionRequest } from "./native-result-retention.js"
 import { closedObject } from "./native-runtime-client.js"
 import { exactJSON } from "./strict-json.js"
 import { contextJSON } from "./native-context-codec.js"
@@ -23,6 +24,34 @@ import { NativeInitialStart } from "./native-initial-start.js"
 import type { SessionContext,SessionModelRequest,SessionPrompt } from "@opencode/plugin/promise/session"
 import { nativeContextAdmission } from "./native-context-reference.js"
 import { NativeContextPolicy } from "./native-context-policy.js"
+import type { ToolContext } from "@opencode/plugin/promise/tool"
+
+/** Shared by installed runtime and isolated native-tool fixture. No model fields select a session,
+ * execution or filesystem path; missing/unknown original custody never dispatches another effect. */
+export function resultSubmissionPreflight(registry:NativeCredentialRegistry,custody:LinuxNativeCustody,sourceRoot:string,
+  getWorker:()=>NativePassiveWorkers|undefined,getWitness:()=>LinuxGitWitness|undefined) {
+  return async(raw:string,fresh:boolean,actual:ToolContext)=>{
+    const outcome=await registry.originalResultReceipt(actual.sessionID,raw,actual.signal)
+    if(outcome==="match")return
+    const worker=getWorker(),witness=getWitness()
+    if(outcome!=="missing"||!fresh||!worker||!witness)nativeUnavailable()
+    const command=exactJSON(raw,nativeUnavailable),data=command.payload?.data
+    const binding=await registry.inspect(actual.sessionID)
+    if(command.operation!=="submit_result"||binding?.scope!=="assignment"||
+      data?.assignment?.assignmentId!==binding.assignmentId||data.assignment.generation?.value!==binding.executionGeneration||
+      !Array.isArray(data.artifacts)||data.artifacts.length!==1)nativeUnavailable()
+    const snapshot=data.artifacts[0] as RetentionRequest["snapshot"]
+    const observation=await worker.resultDiffProof(binding.assignmentId!,binding.executionGeneration!,contextJSON(snapshot),actual.signal)
+    if(!observation)nativeUnavailable()
+    const job=exactJSON(observation.preparationJSON,nativeUnavailable)
+    if(job.intendedExecution?.nativeSessionId!==actual.sessionID||typeof job.intendedExecution?.executionId!=="string")nativeUnavailable()
+    const request:RetentionRequest={assignmentId:binding.assignmentId!,generation:binding.executionGeneration!,executionId:job.intendedExecution.executionId,snapshot}
+    const effect=new NativeResultRetention(sourceRoot,custody,witness,
+      (r,s)=>registry.retentionPermit(actual.sessionID,r,s),
+      (r,s)=>worker.resultRetentionWorktree(r.assignmentId,r.generation,r.executionId,contextJSON(r.snapshot),s))
+    await effect.retain(request,actual.signal)
+  }
+}
 
 export type RuntimeReference=Readonly<{hostId:string;pid:number;registry:NativeCredentialRegistry;
   sources:NativeContextSources;custody:LinuxNativeCustody;deployment:LinuxNativeCustody;controllerSessionID:string;
@@ -90,7 +119,10 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
   const initialStart=new NativeInitialStart(registry,initial,custody,deployment,config.controllerSessionID,config.projectId)
   await adapter.register(sid=>adapter.owns(sid)||!initial.managed(sid))
   await initial.register()
-  let workers:NativePassiveWorkers|undefined,preparations:NativeWorkerPreparation|undefined
+  let workers:NativePassiveWorkers|undefined,preparations:NativeWorkerPreparation|undefined,dispatch:NativeDispatchFrontier|undefined
+  let retentionProof:NativeResultRetention|undefined
+  let retentionWitness:LinuxGitWitness|undefined
+  let reference:RuntimeReference|undefined
   let transport: Awaited<ReturnType<typeof listenNativeTransport>> | undefined
   let preparationTool:{dispose():Promise<void>}|undefined,tools:{dispose():Promise<void>}|undefined
   try {
@@ -101,17 +133,22 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
     if(p.formatVersion?.value!=="1"||typeof p.worktreeParent!=="string"||!path.isAbsolute(p.worktreeParent)||
       typeof p.repositoryId!=="string"||typeof git.path!=="string"||typeof git.sha256!=="string"||
       [agents["executor-v1"],agents["reviewer-v1"]].some(s=>typeof s!=="string"||!s.length))nativeUnavailable()
+    const witness=new LinuxGitWitness({path:git.path,sha256:git.sha256})
+    retentionWitness=witness
     workers=new NativePassiveWorkers(native,registry,custody,config.controllerSessionID,{sourceRoot:controller.workRoot,
       worktreeParent:p.worktreeParent,nativeProjectId:ctx.location.project.id,repositoryId:p.repositoryId,
       controllerId:config.controllerId,hostId:config.hostId,agents:agents as Record<"executor-v1"|"reviewer-v1",string>},
-      new LinuxGitWitness({path:git.path,sha256:git.sha256}))
+      witness)
+    // This instance supplies only immutable proof. Effect dispatch is bound to the actual worker
+    // below and still requires a separately qualified service permit, denied by default.
+    retentionProof=new NativeResultRetention(controller.workRoot,custody,witness,async()=>false,async()=>false)
     preparations=new NativeWorkerPreparation(registry,workers,custody,config.controllerSessionID,
       {projectId:config.projectId,controllerId:config.controllerId,hostId:config.hostId,worktreeParent:p.worktreeParent})
   }
     transport = await listenNativeTransport(config.transportOrigin, config.transportProof, bridge, adapter, sources,workers,initial,
-      ()=>({pid:process.pid,nativeOrigin:config.nativeOrigin}))
+      ()=>({pid:process.pid,nativeOrigin:config.nativeOrigin}),retentionProof)
     const initialRecovery=await initial.restore() // no model wake, canonical transition or incarnation adoption
-    tools = await registerConnectedWorkTools(ctx, registry)
+    tools = await registerConnectedWorkTools(ctx, registry,resultSubmissionPreflight(registry,custody,controller.workRoot,()=>workers,()=>retentionWitness))
     preparationTool=await ctx.tool.transform(editor=>{
       editor.add({name:"writhelm_prepare_worker",
       description:"Reserve an exact ready task, create a passive native receiver, enroll its bounded credential and bind. No model wake/start. Input JSON: task key, manifest reference, profile key, resources, reviewSubjects. Retry original preparationId after uncertain reply; never create a new identity to bypass a refusal.",
@@ -136,7 +173,7 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
         },options:{codemode:false}})
     })
     await ctx.tool.reload()
-    const reference:RuntimeReference=Object.freeze({hostId:config.hostId,pid:process.pid,registry,bridge,adapter,initial,sources,custody,deployment,
+    reference=Object.freeze({hostId:config.hostId,pid:process.pid,registry,bridge,adapter,initial,sources,custody,deployment,
       controllerSessionID:config.controllerSessionID,checkContextPolicy,
       async admitContext(sessionID:string,event?:SessionContext){
         if(adapter.owns(sessionID)){if(event&&initial.managed(sessionID))await initial.configure(event);await adapter.admitContext(sessionID)}
@@ -148,8 +185,18 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
       async admitPrompt(event:SessionPrompt){if(adapter.owns(event.sessionID))await adapter.admitTool(event.sessionID);else await initial.admitPrompt(event)}
     })
     runtimeReferences.set(config.root,reference)
-    return Object.freeze({ registry, bridge, sources, workers, preparations, initial, initialStart, initialRecovery, async close() {
+    const dispatchRaw=await deployment.read("dispatch-profile","current")
+    if(dispatchRaw!==undefined){
+      const d=closedObject(exactJSON(dispatchRaw,nativeUnavailable),["formatVersion","planId","capacity","pollMillis"])
+      if(d.formatVersion?.value!=="1"||!preparations||typeof d.planId!=="string"||
+        !/^(?:[1-9]|[12][0-9]|3[0-2])$/.test(d.capacity?.value??"")||
+        !/^(?:[1-9][0-9]{2,4})$/.test(d.pollMillis?.value??""))nativeUnavailable()
+      dispatch=new NativeDispatchFrontier(registry,preparations,initialStart,custody,config.controllerSessionID,d.planId,Number(d.capacity.value),Number(d.pollMillis.value))
+      dispatch.start()
+    }
+    return Object.freeze({ registry, bridge, sources, workers, preparations, initial, initialStart, initialRecovery, dispatch, async close() {
       if(runtimeReferences.get(config.root)===reference)runtimeReferences.delete(config.root)
+      await dispatch?.close()
       await transport!.close()
       await preparationTool?.dispose()
       await tools?.dispose()
@@ -158,6 +205,8 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
       await bridge.close()
     } })
   } catch (error) {
+    await dispatch?.close()
+    if(reference&&runtimeReferences.get(config.root)===reference)runtimeReferences.delete(config.root)
     if (transport) await transport.close()
     await preparationTool?.dispose()
     await tools?.dispose()

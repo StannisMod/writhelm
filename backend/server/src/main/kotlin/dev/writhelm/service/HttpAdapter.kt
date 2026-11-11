@@ -92,7 +92,7 @@ internal class HttpAdapter(private val service: WrithelmService,val profile: Htt
         var mayPublish=false;var sdkStarted=false;var sdkFinalized=false
         try {
             val t=checkNotNull(boundary(call,true))
-            if(path=="/internal/native/v1") {
+            if(path in setOf("/internal/native/v1","/internal/native/receipt/v1")) {
                 val endpoint=nativeEndpoint ?: stop("NOT_FOUND",404)
                 if(method!=HttpMethod.Post)stop("INVALID_INPUT",405)
                 val proof=call.request.headers.getAll("X-Writhelm-Native-Proof")
@@ -112,6 +112,7 @@ internal class HttpAdapter(private val service: WrithelmService,val profile: Htt
                 path=="/api/v1/commands" && method==HttpMethod.Post -> body(call,8*1024*1024,lease)
                 path=="/api/v1/reads" && method==HttpMethod.Post -> body(call,16384,lease)
                 path=="/internal/native/v1" && method==HttpMethod.Post -> body(call,16384,lease)
+                path=="/internal/native/receipt/v1" && method==HttpMethod.Post -> body(call,NativeRuntimeEndpoint.RESULT_REQUEST_BYTES,lease)
                 path=="/mcp" && method==HttpMethod.Post -> body(call,8*1024*1024+65536,lease)
                 else -> byteArrayOf()
             }
@@ -123,6 +124,7 @@ internal class HttpAdapter(private val service: WrithelmService,val profile: Htt
                     "/api/v1/commands" -> { if(method!=HttpMethod.Post)stop("INVALID_INPUT",405);mayPublish=true;wire(service.command(t,bytes)) }
                     "/api/v1/reads" -> { if(method!=HttpMethod.Post)stop("INVALID_INPUT",405);wire(service.read(t,bytes)) }
                     "/internal/native/v1" -> wire(checkNotNull(nativeEndpoint).read(t,bytes))
+                    "/internal/native/receipt/v1" -> wire(checkNotNull(nativeEndpoint).readResultReceipt(t,bytes))
                     "/mcp" -> {
                         when(method) {
                             HttpMethod.Delete -> { sdkStarted=true;mcp.delete(t,session?.single(),version?.single()).also { sdkFinalized=true } }

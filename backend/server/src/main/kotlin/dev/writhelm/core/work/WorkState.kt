@@ -171,6 +171,20 @@ internal class WorkState private constructor(
         return state
     }
     private fun validate(selected: Set<WorkRecordIdentity>?=null) {
+        val dispatchAttempts=records.values.mapNotNull { (it.payload as? WDispatchAttemptPayload)?.value }
+        val dispatchReservations=dispatchAttempts.map { (it.reservation.operation as CReserveAssignmentOperation).value }
+        val successors=dispatchAttempts.filter { it.previous!=null }
+        val planAttemptIds=records.values.mapNotNull { (it.payload as? WDispatchPlanPayload)?.value }
+            .flatMap { it.entries }.flatMap { listOf(it.preparationId,it.startId) }.toSet()
+        val successorIds=successors.flatMap { listOf(it.preparationId,requireNotNull(it.startId)) }
+        graph(dispatchAttempts.map { it.reservation.requestKey }.distinct().size==dispatchAttempts.size &&
+            dispatchReservations.map { it.assignmentId }.distinct().size==dispatchAttempts.size &&
+            dispatchReservations.map { it.workspaceId }.distinct().size==dispatchAttempts.size &&
+            dispatchReservations.map { it.intentId }.distinct().size==dispatchAttempts.size &&
+            dispatchReservations.map { it.intendedExecution.executionId }.distinct().size==dispatchAttempts.size &&
+            dispatchReservations.map { it.intendedExecution.nativeSessionId }.distinct().size==dispatchAttempts.size &&
+            successors.map { it.previous!!.identity }.distinct().size==successors.size &&
+            successorIds.distinct().size==successorIds.size && successorIds.none { it in planAttemptIds })
         var edges=0
         val discovered=LinkedHashMap<WorkRecordIdentity,MutableSet<WorkRecordIdentity>>()
         val costs=LinkedHashMap<WorkRecordIdentity,Int>()
@@ -221,6 +235,70 @@ internal class WorkState private constructor(
             links.records.forEach { ref -> edge();dependency(ref.identity);try { resolve(ref) }catch(_: WorkFault) { refuse(CodecProblem.INVALID_GRAPH) } }
             links.bodies.forEach { b -> edge();graph(bodies[b.digest]?.sizeBytes==b.byteLength) }
             when(val p=r.payload) {
+                is WDispatchClosurePayload -> {
+                    val c=p.value
+                    graph((r.identity.key as WorkKey.Id).id==c.requestKey && c.manifest.projectId==projectId)
+                    val materialization=(resolve(c.materialization).payload as? WDispatchMaterializationPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
+                    val previous=(required(WorkFamily.INPUT_MANIFESTS,materialization.manifest).payload as WInputManifestsPayload).value
+                    val next=(required(WorkFamily.INPUT_MANIFESTS,c.manifest).payload as WInputManifestsPayload).value
+                    graph(previous.knownGaps==listOf("Fresh mandatory-input closure assessment required for selected dependency results") &&
+                        c.assessment!=previous.declaredClosureAssessment &&
+                        next==previous.copy(declaredClosureAssessment=c.assessment,knownGaps=emptyList()))
+                }
+                is WDispatchMaterializationPayload -> {
+                    val c=p.value
+                    graph((r.identity.key as WorkKey.Id).id==c.requestKey && c.task.projectId==projectId)
+                    val plan=(resolve(c.plan).payload as? WDispatchPlanPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
+                    val entry=plan.entries.singleOrNull { it.task==c.task } ?: refuse(CodecProblem.INVALID_GRAPH)
+                    val old=(task(c.task).payload as WTaskRevisionsPayload).value
+                    val revised=(task(c.newTask).payload as WTaskRevisionsPayload).value
+                    graph(revised.verificationPlan==c.verificationPlan &&
+                        revised.copy(dependencies=old.dependencies,verificationPlan=old.verificationPlan)==old)
+                    graph(revised.dependencies.size==old.dependencies.size)
+                    old.dependencies.zip(revised.dependencies).forEach { (before,after) ->
+                        graph(after.copy(selectedResult=before.selectedResult)==before)
+                        if(before.selectedResult==null) {
+                            graph(entry.futureDependencies.any { it.producer==before.producer && it.readiness==before.readiness })
+                            val ref=after.selectedResult ?: refuse(CodecProblem.INVALID_GRAPH)
+                            val result=(resolve(ref).payload as? WResultsPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
+                            graph(result.task==before.producer)
+                        } else graph(after.selectedResult==before.selectedResult)
+                    }
+                    val verification=(required(WorkFamily.VERIFICATION_PLANS,c.verificationPlan).payload as WVerificationPlansPayload).value
+                    graph(verification.task==c.newTask)
+                    val manifest=(required(WorkFamily.INPUT_MANIFESTS,c.manifest).payload as WInputManifestsPayload).value
+                    graph(manifest.task==c.newTask && manifest.knownGaps.contains("Fresh mandatory-input closure assessment required for selected dependency results"))
+                }
+                is WDispatchAttemptPayload -> {
+                    val a=p.value;val plan=(resolve(a.plan).payload as? WDispatchPlanPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
+                    val root=a.rootPreparationId ?: a.preparationId
+                    val e=plan.entries.singleOrNull { it.preparationId==root } ?: refuse(CodecProblem.INVALID_GRAPH)
+                    val cmd=a.reservation;val reserve=(cmd.operation as? CReserveAssignmentOperation)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
+                    a.previous?.let { ref ->
+                        val predecessor=(resolve(ref).payload as? WDispatchAttemptPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
+                        val old=(predecessor.reservation.operation as CReserveAssignmentOperation).value
+                        graph(predecessor.plan==a.plan && (predecessor.rootPreparationId ?: predecessor.preparationId)==root &&
+                            old.intendedExecution.nativeHostId==reserve.intendedExecution.nativeHostId)
+                    }
+                    graph((r.identity.key as WorkKey.Id).id==a.preparationId && cmd.projectId==projectId &&
+                        e.futureDependencies.isEmpty() && reserve.task==e.task && reserve.manifest==e.manifest && reserve.profile==e.profile &&
+                        reserve.resources.map { it.resource }.toSet()==e.resources.toSet() && reserve.resources.size==e.resources.size &&
+                        reserve.reviewSubjects.isEmpty() && reserve.bodies.isEmpty() && reserve.intendedExecution.controllerId==plan.controllerId &&
+                        reserve.intendedExecution.template=="executor-v1")
+                }
+                is WDispatchPlanPayload -> {
+                    val plan=p.value;graph(plan.projectId==projectId && (r.identity.key as WorkKey.Id).id==plan.planId)
+                    plan.entries.forEach { e ->
+                        val t=(task(e.task).payload as WTaskRevisionsPayload).value
+                        graph(t.executionProfile==e.profile)
+                        e.futureDependencies.forEach { rule ->
+                            graph(t.dependencies.count { it.producer==rule.producer && it.readiness==rule.readiness && it.selectedResult==null }==1)
+                        }
+                        graph(required(WorkFamily.PROFILES,e.profile).payload is WProfilesPayload)
+                        val m=(resolve(e.manifest).payload as? WInputManifestsPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
+                        graph(m.task==e.task && m.base==t.base)
+                    }
+                }
                 is WMechanicalResultsPayload -> {
                     val v=p.value
                     val binding=(required(WorkFamily.ASSIGNMENT_BINDINGS,WorkKey.AssignmentBinding(projectId,v.assignment.assignmentId,v.assignment.generation)).payload as? WMechanicalBindingsPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)

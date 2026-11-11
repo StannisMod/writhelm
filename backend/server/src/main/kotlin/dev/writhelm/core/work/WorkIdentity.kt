@@ -42,6 +42,10 @@ internal enum class WorkFamily(val tag: String, val keyKind: WorkKeyKind, val mu
     CONDITIONS("conditions", WorkKeyKind.ID, false),
     CONDITION_CONFIRMATIONS("condition-confirmations", WorkKeyKind.ID, false),
     CONTINUATIONS("continuations", WorkKeyKind.ID, true),
+    DISPATCH_PLANS("dispatch-plans", WorkKeyKind.ID, false),
+    DISPATCH_ATTEMPTS("dispatch-attempts", WorkKeyKind.ID, false),
+    DISPATCH_MATERIALIZATIONS("dispatch-materializations", WorkKeyKind.ID, false),
+    DISPATCH_CLOSURES("dispatch-closures", WorkKeyKind.ID, false),
 }
 
 internal sealed interface WorkKey {

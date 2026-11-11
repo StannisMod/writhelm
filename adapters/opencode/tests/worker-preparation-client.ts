@@ -3,7 +3,7 @@
 import assert from "node:assert/strict"
 import * as fs from "node:fs/promises"
 import path from "node:path"
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { execFileSync } from "node:child_process"
 import type { Plugin } from "@opencode/plugin"
 import type { OpenCodeClient } from "@opencode/client"
@@ -14,7 +14,7 @@ import { SessionMessage } from "@opencode/schema/session-message"
 import { NativeRuntimeClient } from "../src/native-runtime-client.js"
 import { NativeCredentialRegistry } from "../src/native-credentials.js"
 import { LinuxNativeCustody } from "../src/native-runtime-custody.js"
-import { LinuxWorkRequestCustody } from "../src/connected-tools.js"
+import { LinuxWorkRequestCustody, registerConnectedWorkTools } from "../src/connected-tools.js"
 import { NativePassiveWorkers } from "../src/native-passive-worker.js"
 import { LinuxGitWitness } from "../src/linux-git-witness.js"
 import { ProtectedNativeBridge } from "../src/native-bridge.js"
@@ -22,14 +22,20 @@ import { ConnectedNativeAdapter } from "../src/connected-native.js"
 import { listenNativeTransport } from "../src/native-transport.js"
 import { contextJSON } from "../src/native-context-codec.js"
 import { exactJSON } from "../src/strict-json.js"
-import { NativeWorkerPreparation } from "../src/native-worker-preparation.js"
+import { NativeWorkerPreparation, NativeDispatchFrontier } from "../src/native-worker-preparation.js"
 import { NativeInitialAdapter } from "../src/native-initial.js"
 import { NativeInitialStart } from "../src/native-initial-start.js"
+import { sendContext } from "../src/native-context-protocol.js"
+import { NativeResultRetention } from "../src/native-result-retention.js"
+import { resultSubmissionPreflight } from "../src/native-runtime.js"
 
 let input="";for await(const chunk of process.stdin){input+=chunk;assert.ok(Buffer.byteLength(input)<65536)}
 const cfg=JSON.parse(input),sessionID="ses_worker_preparation_controller",sessions=new Map<string,any>(),inventory:Array<{directory:string;strategy:string}>=[]
 let trees=0,receivers=0,lost=true,wakes=0
+let releaseCreates!:()=>void
+const bothCreating=new Promise<void>(resolve=>{releaseCreates=resolve})
 const hooks=new Map<string,Array<(e:any)=>Promise<void>>>(),messages=new Map<string,any[]>(),instructions=new Map<string,Array<{key:string;value:string}>>()
+const registeredTools=new Map<string,any>()
 let boundary:Promise<void>|undefined,contextEvent:any
 const hook=(domain:string)=>(name:string,callback:(e:any)=>Promise<void>)=>{
   const key=domain+":"+name;hooks.set(key,[...(hooks.get(key)??[]),callback]);return Promise.resolve({dispose:async()=>{}})
@@ -43,7 +49,9 @@ const native={project:{list:async()=>[{id:"MOCK-native-project",canonical:cfg.so
     get:async({sessionID:id}:{sessionID:string})=>{if(id===sessionID)return {id,location:{directory:cfg.sourceRoot}}
       const s=sessions.get(id);if(!s)throw {_tag:"SessionNotFoundError",sessionID:id,message:"MOCK missing receiver"};return s},
     create:async(i:any)=>{receivers++;const s={...i,projectID:"MOCK-native-project",cost:0,tokens:{input:0,output:0,reasoning:0,cache:{read:0,write:0}}}
-      sessions.set(i.id,s);if(lost){lost=false;throw Error("MOCK lost original session-create reply")};return s},
+      sessions.set(i.id,s)
+      if(cfg.parallel&&!cfg.conflict){if(receivers===2)releaseCreates();await bothCreating}
+      if(lost){lost=false;throw Error("MOCK lost original session-create reply")};return s},
     context:async({sessionID:id}:{sessionID:string})=>messages.get(id)??[],inbox:{list:async()=>[]},active:async()=>({}),prompt:async()=>{throw Error("no provider call in this fixture")}}} as unknown as OpenCodeClient
 const ctx={app:{version:"2.2.5"},location:{directory:cfg.sourceRoot},session:{...native.session,hook:hook("session"),
   instructions:{entry:{list:async({sessionID:id}:any)=>instructions.get(id)??[],put:async({sessionID:id,key,value}:any)=>{
@@ -57,47 +65,132 @@ const ctx={app:{version:"2.2.5"},location:{directory:cfg.sourceRoot},session:{..
     boundary=invoke("session:context",contextEvent);void boundary.catch(()=>{})
     // Deliberately lose the original normal-prompt reply AFTER its native wake was admitted.
     throw Error("MOCK lost normal prompt acknowledgement")
-  }},tool:{hook:hook("tool")}} as unknown as Plugin.Context
+  }},tool:{hook:hook("tool"),transform:async(fn:(editor:any)=>void)=>{fn({add:(tool:any)=>registeredTools.set(tool.name,tool)});return {dispose:async()=>{}}},reload:async()=>{}}} as unknown as Plugin.Context
 const custody=new LinuxNativeCustody(path.join(cfg.root,"native"),[cfg.sourceRoot,cfg.worktreeParent]);await custody.initialize()
 const registry=new NativeCredentialRegistry(ctx,custody,new NativeRuntimeClient(cfg.origin,cfg.proof,cfg.storeId,cfg.projectId,cfg.controllerId,cfg.hostId),cfg.origin,
   new LinuxWorkRequestCustody(path.join(cfg.root,"requests"),[cfg.sourceRoot,cfg.worktreeParent]),"a".repeat(64))
 await registry.adopt(cfg.principalId,cfg.credentialId,cfg.token);await registry.bind(sessionID,cfg.credentialId,cfg.sourceRoot)
+const gitWitness=new LinuxGitWitness({path:"/usr/bin/git",sha256:createHash("sha256").update(await fs.readFile("/usr/bin/git")).digest("hex")})
 const workers=new NativePassiveWorkers(native,registry,custody,sessionID,{sourceRoot:cfg.sourceRoot,worktreeParent:cfg.worktreeParent,
   nativeProjectId:"MOCK-native-project",repositoryId:cfg.repositoryId,controllerId:cfg.controllerId,hostId:cfg.hostId,
-  agents:{"executor-v1":"build","reviewer-v1":"plan"}},new LinuxGitWitness({path:"/usr/bin/git",sha256:createHash("sha256").update(await fs.readFile("/usr/bin/git")).digest("hex")}))
+  agents:{"executor-v1":"build","reviewer-v1":"plan"}},gitWitness)
 const bridge=new ProtectedNativeBridge(registry,custody,sessionID,cfg.hostId)
 const adapter=new ConnectedNativeAdapter(ctx,native.session,bridge,cfg.hostId)
 const deployment=new LinuxNativeCustody(path.join(cfg.root,"deployment"),[cfg.sourceRoot,cfg.worktreeParent]);await deployment.initialize()
 const initial=new NativeInitialAdapter(ctx,native,registry,custody,deployment,sessionID);await initial.register()
-const transport=await listenNativeTransport(cfg.transportOrigin,Buffer.from(cfg.transportProof,"base64url"),bridge,adapter,undefined,workers,initial)
+let workerSession:string|undefined
+let retentionWrites=0
+const retentionGit={qualifySource:gitWitness.qualifySource.bind(gitWitness),verifyRetainedRef:gitWitness.verifyRetainedRef.bind(gitWitness),
+  pinRetainedRefOnce:async(...args:Parameters<LinuxGitWitness["pinRetainedRefOnce"]>)=>{retentionWrites++;await gitWitness.pinRetainedRefOnce(...args)}}
+const authorizeRetention=async(request:Parameters<NativeResultRetention["retain"]>[0],abort:AbortSignal)=>
+  workerSession!==undefined && registry.retentionPermit(workerSession,request,abort)
+const observeRetention=async(request:Parameters<NativeResultRetention["retain"]>[0],abort:AbortSignal)=>
+  workers.resultRetentionWorktree(request.assignmentId,request.generation,request.executionId,contextJSON(request.snapshot),abort)
+const retention=new NativeResultRetention(cfg.sourceRoot,custody,retentionGit,authorizeRetention,observeRetention)
+const transport=await listenNativeTransport(cfg.transportOrigin,Buffer.from(cfg.transportProof,"base64url"),bridge,adapter,undefined,workers,initial,undefined,retention)
+const workTools=await registerConnectedWorkTools(ctx,registry,resultSubmissionPreflight(registry,custody,cfg.sourceRoot,()=>workers,()=>gitWitness))
 let recoveredInitial:NativeInitialAdapter|undefined
 const signal=new AbortController().signal,parse=(s:string)=>exactJSON(s,()=>{throw Error("invalid service JSON")})
 try{
   const driver=new NativeWorkerPreparation(registry,workers,custody,sessionID,{projectId:cfg.projectId,controllerId:cfg.controllerId,
     hostId:cfg.hostId,worktreeParent:cfg.worktreeParent})
+  if(cfg.conflict){
+    let complete!:()=>void
+    const bound=new Promise<void>(r=>{complete=r})
+    const starter={runController:async()=>{complete()},restoreController:async()=>{complete()}}
+    const make=()=>new NativeDispatchFrontier(registry,driver,starter as never,custody,sessionID,cfg.planId,2,250)
+    let frontier=make();frontier.start()
+    const timeout=new Promise<never>((_,reject)=>{const timer=setTimeout(()=>reject(Error("conflict frontier timeout")),45000);timer.unref()})
+    await Promise.race([bound,timeout])
+    await new Promise(resolve=>setTimeout(resolve,2000));await frontier.close()
+    const before=await registry.dispatchContext(sessionID,cfg.planId,signal)
+    const attempts=before.attemptsJSON.map((raw:string)=>parse(raw))
+    assert.equal(attempts.length,2);assert.equal(before.activeAssignments.length,1)
+    const active=parse(before.activeAssignments[0])
+    const loser=attempts.find((row:any)=>row.payload.reservation.payload.assignmentId!==active.key.id);assert.ok(loser)
+    assert.equal(await registry.reservationRetryEligibility(sessionID,contextJSON(loser.payload.reservation),signal),"definitive-refusal")
+    assert.deepEqual({trees,receivers,wakes},{trees:1,receivers:1,wakes:0})
+    frontier=make();frontier.start();await new Promise(resolve=>setTimeout(resolve,2000));await frontier.close()
+    const after=await registry.dispatchContext(sessionID,cfg.planId,signal)
+    assert.equal(after.attemptsJSON.length,attempts.length);assert.equal(after.activeAssignments.length,1)
+    assert.deepEqual({trees,receivers,wakes},{trees:1,receivers:1,wakes:0})
+    process.stdout.write(JSON.stringify({passiveAndBound:true,assignmentId:active.key.id,trees,receivers,wakes,native:"MOCK",gitAndService:"REAL"}))
+  } else if(cfg.parallel){
+    let starts=0,complete!:()=>void
+    const bound=new Promise<void>(r=>{complete=r})
+    const starter={runController:async()=>{if(++starts>=2)complete()},restoreController:async()=>{if(++starts>=2)complete()}}
+    const make=()=>new NativeDispatchFrontier(registry,driver,starter as never,custody,sessionID,cfg.planId,2,250)
+    let frontier=make();frontier.start()
+    const timeout=new Promise<never>((_,reject)=>{const timer=setTimeout(()=>reject(Error("parallel frontier timeout")),45000);timer.unref()})
+    try {await Promise.race([bound,timeout])} finally {await frontier.close()}
+    assert.deepEqual({trees,receivers,wakes},{trees:2,receivers:2,wakes:0})
+    assert.equal(new Set(inventory.map(x=>x.directory)).size,2)
+    const frame=await registry.dispatchContext(sessionID,cfg.planId,signal)
+    const attempts=frame.attemptsJSON.map((raw:string)=>parse(raw))
+    assert.equal(attempts.length,2)
+    const first=attempts.find((row:any)=>row.payload.preparationId===cfg.preparationId);assert.ok(first)
+    frontier=make();frontier.start()
+    await new Promise(resolve=>setTimeout(resolve,1200));await frontier.close()
+    assert.deepEqual({trees,receivers,wakes},{trees:2,receivers:2,wakes:0})
+    process.stdout.write(JSON.stringify({passiveAndBound:true,assignmentId:first.payload.reservation.payload.assignmentId,trees,receivers,wakes,native:"MOCK",gitAndService:"REAL"}))
+  } else if(cfg.frontier){
+    const timeout=(message:string)=>new Promise<never>((_,reject)=>{const timer=setTimeout(()=>reject(Error(message)),30000);timer.unref()})
+    let losses=0,unknown!:()=>void,completed!:()=>void
+    const lostReply=new Promise<void>(r=>{unknown=r}),bound=new Promise<void>(r=>{completed=r})
+    const originalChannel=registry.dispatchAttemptChannel.bind(registry)
+    registry.dispatchAttemptChannel=async(id:string)=>{
+      const channel=await originalChannel(id)
+      return {...channel,send:async(route,raw,abort)=>{
+        const reply=await channel.send(route,raw,abort),command=JSON.parse(raw)
+        if(command.payload.formatVersion===2&&losses<3){if(++losses===3)unknown();throw Error("MOCK lost successor publication reply")}
+        return reply
+      }}
+    }
+    const starter={runController:async()=>{completed()},restoreController:async()=>{completed()}}
+    const make=()=>new NativeDispatchFrontier(registry,driver,starter as never,custody,sessionID,cfg.planId,1,250)
+    let frontier=make();frontier.start()
+    await Promise.race([lostReply,timeout("successor publication timeout")])
+    await frontier.close()
+    const saved=await custody.read("dispatch-successor",cfg.preparationId);assert.ok(saved)
+    const successor=JSON.parse(saved)
+    frontier=make();frontier.start()
+    try {
+      await Promise.race([bound,timeout("successor recovery timeout")])
+    } finally {await frontier.close()}
+    const frame=await registry.dispatchContext(sessionID,cfg.planId,signal)
+    const attempts=frame.attemptsJSON.map((raw:string)=>parse(raw))
+    assert.equal(attempts.length,2);assert.equal(attempts.filter((row:any)=>row.key.id===successor.preparationId).length,1)
+    assert.deepEqual({trees,receivers,wakes},{trees:1,receivers:1,wakes:0})
+    const job=parse((await custody.read("preparation-driver",successor.preparationId))!)
+    process.stdout.write(JSON.stringify({passiveAndBound:true,assignmentId:parse(job.reserveJSON).payload.assignmentId,trees,receivers,wakes,native:"MOCK",gitAndService:"REAL"}))
+  } else {
   const payload=parse(cfg.reserveJSON).payload
   const selection=contextJSON({task:payload.task,manifest:payload.manifest,profile:payload.profile,resources:payload.resources,reviewSubjects:[]})
   const actual={sessionID:Schema.decodeUnknownSync(Session.ID)(sessionID),messageID:Schema.decodeUnknownSync(SessionMessage.ID)("msg_worker_selection"),
     id:Schema.decodeUnknownSync(Tool.CallID)("call_worker_prepare"),signal}
-  await assert.rejects(driver.run(selection,actual))
-  const prepared=await driver.run(selection,actual)
-  assert.equal(prepared.phase,"binding-confirmed")
+  const planned={planRefJSON:cfg.planRefJSON as string}
+  if(cfg.planned)await assert.rejects(driver.runPlannedController(selection,cfg.preparationId,planned,signal))
+  else await assert.rejects(driver.run(selection,actual))
+  const prepared=cfg.planned?await driver.restorePlannedController(cfg.preparationId,planned,signal):await driver.run(selection,actual)
+  assert.equal(prepared.phase,"binding-confirmed",JSON.stringify(prepared))
   assert.deepEqual({trees,receivers,wakes},{trees:1,receivers:1,wakes:0})
-  const replay=await driver.run(selection,actual,prepared.preparationId)
+  const replay=cfg.planned?await driver.restorePlannedController(cfg.preparationId,planned,signal):await driver.run(selection,actual,prepared.preparationId)
   assert.equal(replay.phase,"binding-confirmed");assert.equal(contextJSON(replay.binding),contextJSON(prepared.binding))
   assert.deepEqual({trees,receivers,wakes},{trees:1,receivers:1,wakes:0})
   assert.equal((await registry.inspect(prepared.nativeSessionId))?.scope,"assignment")
+  workerSession=prepared.nativeSessionId
   assert.equal(wakes,0)
+  let resultId:string|undefined
   if(cfg.start){
     await deployment.retain("execution-profile",contextJSON(payload.profile),contextJSON({formatVersion:1,profileKeyJSON:contextJSON(payload.profile),
       model:{providerID:"synthetic",id:"no-call"},baseURL:null,routeID:"no-call",effortOptionKey:"effort",nativeOptions:{maxTokens:64,effort:"bounded"}}))
     const starter=new NativeInitialStart(registry,initial,custody,deployment,sessionID,cfg.projectId)
     const selected=contextJSON({assignment:prepared.assignmentSelector,binding:prepared.binding})
     const call={...actual,id:Schema.decodeUnknownSync(Tool.CallID)("call_initial_start")}
-    const started=await starter.run(selected,call)
+    const started=cfg.planned?await starter.runController(selected,cfg.startId,signal):await starter.run(selected,call)
     assert.equal(started.phase,"active-admission-confirmed");assert.equal(started.completionAsserted,false)
     await boundary;assert.equal(contextEvent.options.maxTokens,64);assert.equal(contextEvent.options.effort,"bounded")
-    const restored=await starter.run(selected,call,started.startId)
+    const restored=cfg.planned?await starter.restoreController(cfg.startId,signal):await starter.run(selected,call,started.startId)
     assert.equal(restored.phase,"active-admission-restored");assert.equal(wakes,1)
     await initial.close()
     hooks.clear() // Explicit MOCK host unload of the old plugin lifetime, not installed lifecycle evidence.
@@ -107,6 +200,93 @@ try{
     await recoveredInitial.admitTool(prepared.nativeSessionId)
     await invoke("tool:execute.before",{sessionID:prepared.nativeSessionId})
     assert.equal(wakes,1)
+    if(cfg.diff){
+      const directory=path.join(cfg.worktreeParent,prepared.workspaceId)
+      const resultText="counter=1\n"+("escaped=\\\"value\\\\path\n".repeat(1000))
+      await fs.writeFile(path.join(directory,"counter.txt"),resultText)
+      const git=(...args:string[])=>execFileSync("/usr/bin/git",["-c","core.hooksPath=/dev/null","-C",directory,...args],
+        {env:{PATH:"/usr/bin:/bin",GIT_CONFIG_GLOBAL:"/dev/null",GIT_CONFIG_NOSYSTEM:"1"},encoding:"utf8"}).trim()
+      git("add","counter.txt");git("-c","user.name=Fixture","-c","user.email=fixture@example.invalid","commit","--no-gpg-sign","-m","synthetic result")
+      const dispatch=await registry.dispatchContext(sessionID,cfg.planId,signal)
+      const task=parse(dispatch.entries.find((e:any)=>e.preparationId===cfg.preparationId).taskJSON)
+      const active=dispatch.activeAssignments.map((raw:string)=>parse(raw)).find((a:any)=>a.key?.id===prepared.assignmentId)
+      assert.equal(active?.payload?.state,"active")
+      const base=task.payload.base.code[0]
+      const result={...base,commit:{algorithm:"sha1",hex:git("rev-parse","HEAD")},tree:{algorithm:"sha1",hex:git("rev-parse","HEAD^{tree}")},retainedLocatorId:randomUUID()}
+      const observed=await gitWitness.observeDiff(directory,cfg.sourceRoot,base,result,signal)
+      const text=new TextDecoder("utf-8",{fatal:true}).decode(observed.bytes)
+      const channel=await registry.contextChannel(prepared.nativeSessionId,signal),subject={assignmentId:prepared.assignmentId,generation:0}
+      const retroKey={projectId:cfg.projectId,id:randomUUID()}
+      const retrospective=await sendContext(channel,"commands",contextJSON({formatVersion:3,projectId:cfg.projectId,requestKey:randomUUID(),
+        operation:"record_retrospective",payload:{key:retroKey,data:{task:payload.task,assignment:subject,result:null,outcome:"no-significant-new-findings",observations:[]},bodies:[]}}),signal)
+      assert.equal(retrospective.outcome?.kind,"success",JSON.stringify(retrospective))
+      const retro={family:"retrospectives",key:retrospective.outcome.result.key,digest:retrospective.outcome.result.digest}
+      resultId=randomUUID()
+      const submitJSON=(artifact=result)=>contextJSON({formatVersion:3,projectId:cfg.projectId,requestKey:randomUUID(),operation:"submit_result",
+        payload:{key:{projectId:cfg.projectId,id:resultId},data:{task:payload.task,assignment:subject,manifest:payload.manifest,artifacts:[artifact],
+          changes:{digest:observed.sha256,byteLength:observed.byteLength},claimedCriteria:[],evidence:[],retrospective:retro,pending:[]},
+          bodies:[{digest:observed.sha256,body:text}]}})
+      const submit=()=>sendContext(channel,"commands",submitJSON(),signal)
+      if(cfg.holdRetention){
+        const heldResult={...result,retainedLocatorId:randomUUID()},heldJSON=submitJSON(heldResult)
+        const workerCall={sessionID:Schema.decodeUnknownSync(Session.ID)(prepared.nativeSessionId),messageID:Schema.decodeUnknownSync(SessionMessage.ID)("msg_hold_fixture"),
+          id:Schema.decodeUnknownSync(Tool.CallID)("call_hold_fixture"),signal}
+        const tool=registeredTools.get("writhelm_work_command")!
+        assert.equal(await registry.originalResultReceipt(prepared.nativeSessionId,heldJSON,signal),"missing")
+        assert.equal(JSON.parse((await tool.execute({json:heldJSON},workerCall)).content).kind,"error")
+        assert.equal(JSON.parse((await tool.execute({json:heldJSON},workerCall)).content).kind,"error")
+        assert.equal(await registry.originalResultReceipt(prepared.nativeSessionId,heldJSON,signal),"missing")
+        assert.throws(()=>git("rev-parse","--verify",`refs/writhelm/results/${heldResult.retainedLocatorId}`))
+        assert.equal(retentionWrites,0)
+      }else{
+      const missing=await submit();assert.equal(missing.outcome?.kind,"rejected",JSON.stringify(missing))
+      await assert.rejects(registry.retentionPermit(prepared.nativeSessionId,{assignmentId:prepared.assignmentId,generation:"0",executionId:randomUUID(),snapshot:result},signal))
+      await assert.rejects(registry.retentionPermit(prepared.nativeSessionId,{assignmentId:prepared.assignmentId,generation:"0",executionId:active.payload.intendedExecution.executionId,
+        snapshot:{...result,repositoryId:randomUUID()}},signal))
+      await assert.rejects(registry.retentionPermit(sessionID,{assignmentId:prepared.assignmentId,generation:"0",executionId:active.payload.intendedExecution.executionId,snapshot:result},signal))
+      const original={assignmentId:prepared.assignmentId,generation:"0",executionId:active.payload.intendedExecution.executionId,snapshot:result}
+      await fs.writeFile(path.join(directory,"counter.txt"),"tampered before pin\n")
+      await assert.rejects(retention.retain(original,signal))
+      assert.equal(retentionWrites,0)
+      await fs.writeFile(path.join(directory,"counter.txt"),resultText)
+      await assert.rejects((async()=>{await retention.retain(original,signal);throw Error("MOCK lost completed reply")})())
+      const reopenedCustody=new LinuxNativeCustody(path.join(cfg.root,"native"),[cfg.sourceRoot,cfg.worktreeParent]);await reopenedCustody.initialize()
+      const reopenedRetention=new NativeResultRetention(cfg.sourceRoot,reopenedCustody,retentionGit,authorizeRetention,observeRetention)
+      await reopenedRetention.retain(original,signal)
+      assert.equal(retentionWrites,1) // exact original receipt recovered; no second Git effect
+      await assert.rejects(reopenedRetention.retain({...original,executionId:randomUUID()},signal))
+      await fs.writeFile(path.join(directory,"counter.txt"),"tampered\n")
+      const rejected=await submit()
+      assert.equal(rejected.outcome?.kind,"rejected",JSON.stringify(rejected))
+      assert.equal(rejected.outcome?.code,"INVALID_SUBJECT")
+      await fs.writeFile(path.join(directory,"counter.txt"),resultText)
+      const toolResult={...result,retainedLocatorId:randomUUID()}
+      const finalJSON=submitJSON(toolResult)
+      assert.ok(Buffer.byteLength(finalJSON)>8192)
+      assert.ok(Buffer.byteLength(JSON.stringify(finalJSON))>Buffer.byteLength(finalJSON)) // escaped nested command
+      assert.equal(await registry.originalResultReceipt(prepared.nativeSessionId,finalJSON,signal),"missing")
+      const workerCall={sessionID:Schema.decodeUnknownSync(Session.ID)(prepared.nativeSessionId),messageID:Schema.decodeUnknownSync(SessionMessage.ID)("msg_result_fixture"),
+        id:Schema.decodeUnknownSync(Tool.CallID)("call_result_fixture"),signal}
+      const tool=registeredTools.get("writhelm_work_command")!
+      const heldJSON=submitJSON()
+      await fs.writeFile(path.join(directory,"counter.txt"),"dirty preflight\n")
+      assert.equal(JSON.parse((await tool.execute({json:heldJSON},workerCall)).content).kind,"error")
+      await fs.writeFile(path.join(directory,"counter.txt"),resultText)
+      assert.equal(JSON.parse((await tool.execute({json:heldJSON},workerCall)).content).kind,"error")
+      assert.equal(await registry.originalResultReceipt(prepared.nativeSessionId,heldJSON,signal),"missing")
+      const submitted=JSON.parse((await tool.execute({json:finalJSON},workerCall)).content)
+      assert.equal(submitted.outcome?.kind,"success",JSON.stringify(submitted))
+      assert.equal(git("rev-parse",`refs/writhelm/results/${toolResult.retainedLocatorId}`),toolResult.commit.hex)
+      const replay=JSON.parse((await tool.execute({json:finalJSON},workerCall)).content)
+      assert.equal(replay.outcome?.kind,"success");assert.equal(replay.commandReplayed,true)
+      assert.equal(await registry.originalResultReceipt(prepared.nativeSessionId,finalJSON,signal),"match")
+      const changed=JSON.parse(finalJSON);changed.payload.data.claimedCriteria=[randomUUID()]
+      assert.equal(await registry.originalResultReceipt(prepared.nativeSessionId,JSON.stringify(changed),signal),"hold")
+      assert.equal(JSON.parse((await tool.execute({json:JSON.stringify(changed)},workerCall)).content).kind,"error")
+      await assert.rejects(registry.originalResultReceipt(sessionID,finalJSON,signal))
+      }
+    }
   }
-  process.stdout.write(JSON.stringify({passiveAndBound:true,assignmentId:prepared.assignmentId,trees,receivers,wakes,native:"MOCK",gitAndService:"REAL"}))
-}finally{await recoveredInitial?.close();await initial.close();await transport.close()}
+  process.stdout.write(JSON.stringify({passiveAndBound:true,assignmentId:prepared.assignmentId,resultId,trees,receivers,wakes,native:"MOCK",gitAndService:"REAL"}))
+  }
+}finally{await workTools.dispose();await recoveredInitial?.close();await initial.close();await transport.close()}

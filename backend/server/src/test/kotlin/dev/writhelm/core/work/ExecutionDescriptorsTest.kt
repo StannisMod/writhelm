@@ -13,6 +13,100 @@ import kotlin.test.*
 
 /** Pure descriptor compatibility/negative gates. Not an admitted command, writer or native effect. */
 class ExecutionDescriptorsTest {
+    @Test fun dispatchCommandRetainsRequestAndFingerprintsOnlyCanonicalSemantics() {
+        val f=ReviewProbeFixture()
+        val entry=DispatchPlanEntry(f.taskKey,f.manifest,f.profileKey,listOf(f.resource),uid(740),uid(741))
+        val command=DispatchPlanCommand(uid(742),DispatchPlanCandidate(project,uid(743),f.controller,listOf(entry)))
+        val codec=DispatchPlanCommandCodec();val bytes=codec.encode(command)
+        assertEquals(command,codec.decode(bytes))
+        assertContentEquals(bytes,codec.encode(codec.decode(bytes)))
+        assertEquals(codec.fingerprint(command),codec.fingerprint(command.copy(requestKey=uid(744))))
+        assertNotEquals(codec.fingerprint(command),codec.fingerprint(command.copy(plan=command.plan.copy(entries=listOf(entry.copy(startId=uid(745)))))))
+        val bad=bytes.decodeToString().replace("record_dispatch_plan","reserve_assignment").toByteArray()
+        assertFailsWith<CodecFault> { codec.decode(bad) }
+        assertFailsWith<CodecFault> { WorkCodec().decodeCommand(bytes) }
+    }
+    @Test fun dispatchPlanTransitionRequiresCurrentControllerAndUniqueOriginalIds() {
+        val f=ReviewProbeFixture()
+        val state=WorkState.restore(f.project,f.state.records.values,emptyList(),modelVersion=4)
+        val entry=DispatchPlanEntry(f.taskKey,f.manifest,f.profileKey,listOf(f.resource),uid(730),uid(731))
+        val plan=DispatchPlanCandidate(f.project,uid(732),f.controller,listOf(entry))
+        assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> { recordDispatchPlan(f.state,f.actor,plan) }.problem)
+        assertEquals(WorkProblem.INVALID_BINDING,assertFailsWith<WorkFault> { recordDispatchPlan(state,f.worker,plan) }.problem)
+        assertEquals(WorkProblem.INVALID_BINDING,assertFailsWith<WorkFault> { recordDispatchPlan(state,f.actor.copy(controllerId=uid(733)),plan) }.problem)
+        val effect=recordDispatchPlan(state,f.actor,plan)
+        assertEquals(plan,(effect.after.records.getValue(effect.result).payload as WDispatchPlanPayload).value)
+        val selector=WorkRead.Exact(f.project,effect.result,WorkCodec(modelVersion=4).digest(effect.after.records.getValue(effect.result)),null)
+        assertFailsWith<CodecFault> { WorkCodec().encodeRead(selector) }
+        assertEquals(WorkProblem.DUPLICATE_ID,assertFailsWith<WorkFault> { recordDispatchPlan(effect.after,f.actor,plan) }.problem)
+        assertEquals(WorkProblem.DUPLICATE_ID,assertFailsWith<WorkFault> { recordDispatchPlan(effect.after,f.actor,plan.copy(planId=uid(734))) }.problem)
+        assertEquals(WorkProblem.INVALID_REFERENCE,assertFailsWith<WorkFault> {
+            recordDispatchPlan(state,f.actor,plan.copy(entries=listOf(entry.copy(task=WorkKey.TaskRevision(f.project,uid(735),0)))))
+        }.problem)
+    }
+    @Test fun dispatchPlanRestoresOnlyInExplicitModel4GraphWithExactReferences() {
+        val f=ReviewProbeFixture()
+        val entry=DispatchPlanEntry(f.taskKey,f.manifest,f.profileKey,listOf(f.resource),uid(720),uid(721))
+        val plan=DispatchPlanCandidate(f.project,uid(722),f.controller,listOf(entry))
+        val record=WorkRecord(WorkRecordIdentity(WorkFamily.DISPATCH_PLANS,WorkKey.Id(f.project,plan.planId)),WDispatchPlanPayload(plan))
+        val codec=WorkCodec(modelVersion=4)
+        val bytes=codec.encodeRecord(record)
+        assertEquals(record,codec.decodeRecord(bytes))
+        assertFailsWith<CodecFault> { WorkCodec().decodeRecord(bytes) }
+        assertFailsWith<CodecFault> { WorkCodec(modelVersion=3).decodeRecord(bytes) }
+        val originalRecords=f.state.records.values.toList()
+        val restored=WorkState.restore(f.project,originalRecords+record,emptyList(),modelVersion=4)
+        assertEquals(record,restored.records[record.identity])
+        f.state=restored
+        val reserved=f.reserve()
+        assertEquals("held",(reserved.after.record(WorkFamily.CLAIMS,f.resource).payload as WClaimsPayload).value.state)
+        assertEquals(record,reserved.after.records[record.identity])
+        assertEquals(reserved.after.records,WorkState.restore(f.project,reserved.after.records.values,emptyList(),modelVersion=4).records)
+        assertEquals(WorkProblem.CLAIM_CONFLICT,assertFailsWith<WorkFault> { f.reserve() }.problem)
+        assertFailsWith<CodecFault> { WorkState.restore(f.project,originalRecords+record,emptyList()) }
+        val missing=record.copy(payload=WDispatchPlanPayload(plan.copy(entries=listOf(entry.copy(task=WorkKey.TaskRevision(f.project,uid(723),0))))))
+        assertFailsWith<CodecFault> { WorkState.restore(f.project,originalRecords+missing,emptyList(),modelVersion=4) }
+        val legacy=originalRecords.first()
+        assertContentEquals(WorkCodec().encodeRecord(legacy),codec.encodeRecord(legacy))
+    }
+    @Test fun dispatchSelectionUsesCurrentClaimGenerationButReservationRemainsArbiter() {
+        val f=ReviewProbeFixture()
+        val entry=DispatchPlanEntry(f.taskKey,f.manifest,f.profileKey,listOf(f.resource),uid(710),uid(711))
+        fun expected(bytes:ByteArray):JsonValue = StrictJson.decode(bytes).fields("task","manifest","profile","resources","reviewSubjects")
+            .getValue("resources").list().single().fields("resource","expectedGeneration").getValue("expectedGeneration")
+        val original=dispatchPreparationSelection(f.state,entry)
+        assertEquals(JNull,expected(original))
+        f.reserve()
+        assertEquals(0L,expected(dispatchPreparationSelection(f.state,entry)).long())
+        assertEquals(JNull,expected(original)) // retained attempts do not recapture a new generation
+        val another=CReserveAssignment(uid(712),f.taskKey,f.manifest,f.profileKey,uid(713),
+            listOf(CReserveAssignmentResourcesItem(f.resource,null)),emptyList(),uid(714),uid(715),emptyList(),f.executionIntent)
+        assertEquals(WorkProblem.CLAIM_CONFLICT,assertFailsWith<WorkFault> {
+            f.reducer.reduce(f.state,f.command(CReserveAssignmentOperation(another)),f.actor,f.facts)
+        }.problem)
+        assertFailsWith<WorkFault> { dispatchPreparationSelection(f.state,entry.copy(profile=WorkKey.Profile(project,uid(999),0))) }
+    }
+    @Test fun dispatchPlanCandidateIsStableAndRejectsForeignOrDuplicateSelections() {
+        val codec=DispatchPlanCandidateCodec()
+        val manifest=WorkReference(WorkRecordIdentity(WorkFamily.INPUT_MANIFESTS,WorkKey.Id(project,uid(700))),Digest.of(byteArrayOf(1)))
+        val entry=DispatchPlanEntry(WorkKey.TaskRevision(project,uid(701),0),manifest,key,listOf(WorkKey.Resource(project,uid(702))),uid(703),uid(704))
+        val other=entry.copy(task=WorkKey.TaskRevision(project,uid(705),0),preparationId=uid(706),startId=uid(707))
+        val plan=DispatchPlanCandidate(project,uid(708),uid(709),listOf(entry,other))
+        val bytes=codec.encode(plan)
+        assertContentEquals(bytes,codec.encode(codec.decode(bytes)))
+        assertContentEquals(bytes,codec.encode(plan.copy(entries=plan.entries.reversed())))
+        assertFailsWith<CodecFault> { codec.encode(plan.copy(entries=listOf(entry,other.copy(task=entry.task)))) }
+        assertFailsWith<CodecFault> { codec.encode(plan.copy(entries=listOf(entry,other.copy(startId=entry.preparationId)))) }
+        assertFailsWith<CodecFault> { codec.encode(plan.copy(entries=listOf(entry.copy(resources=listOf(WorkKey.Resource(uid(999),uid(1))))))) }
+        assertFailsWith<CodecFault> { codec.encode(plan.copy(entries=listOf(entry.copy(manifest=WorkReference(WorkRecordIdentity(WorkFamily.RESULTS,WorkKey.Id(project,uid(700))),manifest.digest))))) }
+        assertFailsWith<CodecFault> { WorkCodec().decodeRecord(bytes) }
+        val rule=DispatchFutureDependency(WorkKey.TaskRevision(project,uid(790),0),"implemented")
+        val version2=plan.copy(entries=listOf(entry.copy(futureDependencies=listOf(rule))))
+        val encoded2=codec.encode(version2)
+        assertEquals(version2,codec.decode(encoded2));assertEquals(2L,(StrictJson.decode(encoded2) as JObject).entries.getValue("formatVersion").long())
+        assertEquals(1L,(StrictJson.decode(bytes) as JObject).entries.getValue("formatVersion").long())
+        assertFailsWith<CodecFault> { codec.encode(version2.copy(entries=listOf(entry.copy(futureDependencies=listOf(rule.copy(readiness="accepted")))))) }
+    }
     private val codec=ExecutionDescriptorCodec()
     private val project=uid(1)
     private val key=WorkKey.Profile(project,uid(2),0)

@@ -11,7 +11,7 @@ internal object H1Catalog {
         "create_task_revision" to "task-revisions", "set_task_head" to "task-heads",
         "pin_input_manifest" to "input-manifests", "create_profile" to "profiles",
         "revise_verification_plan" to "verification-plans", "revise_applicability" to "applicability",
-        "update_plan" to "plans", "reserve_assignment" to "assignments", "bind_assignment" to "assignments",
+        "update_plan" to "plans", "record_dispatch_plan" to "dispatch-plans", "bind_dispatch_attempt" to "dispatch-attempts", "materialize_dispatch_dependency" to "dispatch-materializations", "close_dispatch_inputs" to "dispatch-closures", "reserve_assignment" to "assignments", "bind_assignment" to "assignments",
         "request_native_transition" to "native-intents", "observe_native_transition" to "native-intents",
         "record_recovery" to "recoveries", "rebind_assignment" to "assignments", "complete_assignment" to "assignments",
         "record_loaded_view" to "loaded-views", "record_memory" to "memory", "record_checkpoint" to "checkpoints",
@@ -33,6 +33,10 @@ internal object H1Catalog {
         in model2RefusalCodes -> model2RefusalCodes.getValue(op).map { it.name }.toSet()
         "set_task_head","record_delivery" -> setOf("DIGEST_MISMATCH","GENERATION_EXHAUSTED","INVALID_REFERENCE","MISSING_BODY","STALE_GENERATION")
         "update_plan" -> setOf("DIGEST_MISMATCH","GENERATION_EXHAUSTED","MISSING_BODY","STALE_GENERATION","WRONG_ASSIGNMENT")
+        "record_dispatch_plan" -> setOf("DUPLICATE_ID","FOREIGN_REFERENCE","INVALID_REFERENCE","INVALID_BINDING","NOT_READY")
+        "bind_dispatch_attempt" -> setOf("DUPLICATE_ID","FOREIGN_REFERENCE","INVALID_REFERENCE","INVALID_BINDING","INVALID_TRANSITION","NOT_READY")
+        "materialize_dispatch_dependency" -> setOf("BLOCKED_INPUT","DIGEST_MISMATCH","DUPLICATE_ID","FOREIGN_REFERENCE","INVALID_REFERENCE","INVALID_BINDING","INVALID_SUBJECT","MISSING_BODY","NOT_FOUND","NOT_READY")
+        "close_dispatch_inputs" -> setOf("BLOCKED_INPUT","STALE_GENERATION")
         "reserve_assignment" -> setOf("BLOCKED_INPUT","CLAIM_CONFLICT","DIGEST_MISMATCH","GENERATION_EXHAUSTED","INVALID_REFERENCE","MISSING_BODY","NOT_READY","STALE_GENERATION")
         "bind_assignment" -> setOf("DIGEST_MISMATCH","GENERATION_EXHAUSTED","INVALID_BINDING","MISSING_BODY","NATIVE_UNKNOWN","NOT_READY","STALE_GENERATION")
         "request_native_transition" -> setOf("BLOCKED_INPUT","DIGEST_MISMATCH","GENERATION_EXHAUSTED","INVALID_TRANSITION","MISSING_BODY","NATIVE_UNKNOWN","NOT_READY","STALE_GENERATION")
@@ -47,9 +51,13 @@ internal object H1Catalog {
         "record_controller_continuation" -> immutableCodes+"STALE_GENERATION"
         else -> immutableCodes
     } }
+    // This identifies paths only; the selected namespace codec and closed operation catalogue
+    // still refuse dispatch-plan records/commands in the production model2 publisher.
     fun family(tag: String)=WorkFamily.entries.singleOrNull { it.tag==tag } ?: fail(StoreProblem.UNSUPPORTED)
     fun effectFamilies(operation: String): Set<String> = setOf("bodies",resultFamilies.getValue(operation))+when(operation) {
         "create_task_revision" -> setOf("verification-plans")
+        "materialize_dispatch_dependency" -> setOf("task-revisions","verification-plans","input-manifests")
+        "close_dispatch_inputs" -> setOf("input-manifests")
         "reserve_assignment","rebind_assignment" -> setOf("assignments","claims","native-intents")
         "replace_isolated_assignment" -> setOf("assignments","claims","native-intents")
         "bind_assignment" -> setOf("assignments","assignment-bindings","native-intents")

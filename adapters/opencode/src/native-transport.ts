@@ -9,6 +9,7 @@ import { ConnectedNativeAdapter } from "./connected-native.js"
 import type { NativeContextSources } from "./native-context-source.js"
 import type { NativePassiveWorkers } from "./native-passive-worker.js"
 import type { NativeInitialAdapter } from "./native-initial.js"
+import type { NativeResultRetention, RetentionRequest } from "./native-result-retention.js"
 
 /** Private service -> in-process native host transport, deliberately separate from service HTTP
  * admission. Immutable reconciliation authenticates the retained peer proof without calling current
@@ -16,7 +17,7 @@ import type { NativeInitialAdapter } from "./native-initial.js"
  * This transport installs no plugin/profile and starts no model or native host. */
 export async function listenNativeTransport(origin: string, proof: Uint8Array, bridge: ProtectedNativeBridge,
   adapter: ConnectedNativeAdapter, sources?: NativeContextSources, workers?: NativePassiveWorkers,initial?:NativeInitialAdapter,
-  processSelector?:()=>Readonly<{pid:number;nativeOrigin:string}>): Promise<Readonly<{ close(): Promise<void> }>> {
+  processSelector?:()=>Readonly<{pid:number;nativeOrigin:string}>,retention?:NativeResultRetention): Promise<Readonly<{ close(): Promise<void> }>> {
   exactLoopback(origin, nativeUnavailable)
   if (process.platform !== "linux" || proof.length !== 32) nativeUnavailable()
   const secret = Buffer.from(proof), url = new URL(origin)
@@ -62,6 +63,17 @@ export async function listenNativeTransport(origin: string, proof: Uint8Array, b
         closedObject(input,["formatVersion","operation","intentId"])
         if(!initial||typeof input.intentId!=="string")nativeUnavailable()
         result=await initial.witness(input.intentId)
+      } else if(input.operation==="result-retention-proof"){
+        closedObject(input,["formatVersion","operation","assignmentId","executionGeneration","executionId","snapshotJSON"])
+        if(!retention||typeof input.assignmentId!=="string"||typeof input.executionGeneration!=="string"||
+          typeof input.executionId!=="string"||typeof input.snapshotJSON!=="string")nativeUnavailable()
+        const snapshot=exactJSON(input.snapshotJSON,nativeUnavailable) as RetentionRequest["snapshot"]
+        result=await retention.proof({assignmentId:input.assignmentId,generation:input.executionGeneration,
+          executionId:input.executionId,snapshot},AbortSignal.timeout(9000))
+      } else if(input.operation==="result-diff-proof"){
+        closedObject(input,["formatVersion","operation","assignmentId","executionGeneration","resultJSON"])
+        if(!workers||typeof input.assignmentId!=="string"||typeof input.executionGeneration!=="string"||typeof input.resultJSON!=="string")nativeUnavailable()
+        result=await workers.resultDiffProof(input.assignmentId,input.executionGeneration,input.resultJSON,AbortSignal.timeout(9000))
       } else if(input.operation==="worker-proof"){
         closedObject(input,["formatVersion","operation","assignmentId","executionGeneration"])
         if(!workers||typeof input.assignmentId!=="string"||typeof input.executionGeneration!=="string")nativeUnavailable()

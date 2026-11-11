@@ -9,6 +9,22 @@ import kotlin.test.*
 import org.junit.jupiter.api.Test
 
 class NamespaceBindingTest {
+    @Test fun `explicit model4 native authority projection preserves existing model2 facts`() {
+        val f=ReviewProbeFixture();f.reserve()
+        val oid=GitOid("sha1","0".repeat(40))
+        val legacy=h1WorkProjection(oid,mapOf(f.project to f.state))
+        val model4=WorkState.restore(f.project,f.state.records.values,f.state.bodies.values,modelVersion=4)
+        val projected=h1WorkProjection(oid,mapOf(f.project to model4),4)
+        assertEquals(legacy.assignments.keys,projected.assignments.keys)
+        val a=legacy.assignments.values.single();val b=projected.assignments.values.single()
+        fun fields(x:dev.writhelm.core.auth2.AssignmentAuthorityFacts)=listOf(x.projectId,x.assignmentId,x.taskId,x.assignmentGeneration,
+            x.executionGeneration,x.controllerId,x.executionId,x.template,x.reviewSubjects,x.phase,x.delegationId,x.taskRevision,x.inputManifest,
+            x.profile,x.nativeHostId,x.nativeSessionId,x.workspaceId,x.boundExecution,x.prepareIntent,x.claims,x.historicalBinding,x.subjectProducers,x.retiredReservationProof)
+        assertEquals(fields(a),fields(b))
+        assertEquals(StoreProblem.INTEGRITY,assertFailsWith<StoreFault> { h1WorkProjection(oid,mapOf(f.project to model4)) }.problem)
+        assertEquals(StoreProblem.INTEGRITY,assertFailsWith<StoreFault> { h1WorkProjection(oid,mapOf(f.project to f.state),4) }.problem)
+        assertEquals(StoreProblem.INTEGRITY,assertFailsWith<StoreFault> { h1WorkProjection(oid,emptyMap(),3) }.problem)
+    }
     @Test fun `frozen H1 authority projection explicitly refuses candidate model3`() {
         val oid=GitOid("sha1","0".repeat(40))
         val project=id(90)

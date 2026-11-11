@@ -466,3 +466,7 @@
 !/backend/server/src/main/kotlin/dev/writhelm/core/work/ResultDescriptors.kt
 !/backend/server/src/test/kotlin/dev/writhelm/core/work/ExecutionDescriptorsTest.kt
 !/backend/server/src/test/kotlin/dev/writhelm/core/work/ResultDescriptorsTest.kt
+
+# P37: exact local H1 checkpoint source paths; not private tasks or runtime data
+!/adapters/opencode/src/native-result-retention.ts
+!/backend/server/src/main/kotlin/dev/writhelm/core/work/CandidateInputs.kt

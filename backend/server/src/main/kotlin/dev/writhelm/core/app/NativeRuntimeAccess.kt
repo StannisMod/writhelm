@@ -54,6 +54,26 @@ internal class NativeRuntimeAccess(private val controller: UUID,private val host
         if(!state.authority.allows(c,project,Capability.READ))throw AppAccessFault(AppAccessProblem.FORBIDDEN)
         return identity(state,key,project)
     }
+    /** Current scoped admission only, not a receipt or an authorization to repeat an uncertain
+     * filesystem effect. The canonical submit-result transition still performs its own checks. */
+    fun retentionPermit(state:H1BoundState,key:dev.writhelm.core.auth.PresentedCredential,project:UUID,
+        subject:WAssignmentSubject,executionId:UUID,result:WSnapshot):JsonValue {
+        val c=actor(state,key,project)
+        if(c.scope !is CredentialScope.Assignment || !state.authority.allows(c,project,Capability.READ))throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        val admission=Auth2Policy(state.authority,state.projection).authorizeWork(key,WorkInvocation(project,dev.writhelm.core.auth2.WorkOperation.SUBMIT_RESULT,
+            result.retainedLocatorId,AssignmentSubject(project,subject.assignmentId,subject.generation),null,null))
+        if(admission?.mode!=AdmissionMode.EVALUATE)throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        val work=state.work.getValue(project);val a=work.assignment(subject.assignmentId);val execution=work.binding(subject).execution
+        val base=work.task(a.task).base?.code?.singleOrNull() ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        if(a.state!="active" || a.currentIntent!=null || a.executionGeneration!=subject.generation ||
+            a.intendedExecution.controllerId!=controller || execution.nativeHostId!=host || execution.executionId!=executionId ||
+            a.intendedExecution.executionId!=executionId || base.commit==null || result.commit==null ||
+            base.dirtyContentDigest!=null || result.dirtyContentDigest!=null || base.repositoryId!=result.repositoryId ||
+            base.commit.algorithm!=result.commit.algorithm)throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        state.requireCurrentContinuation(project,subject)
+        Model2Inspector(work).requireActivation(subject,true)
+        return obj("formatVersion" to num(1),"kind" to str("retention-permitted"),"basis" to state.basis.json())
+    }
     fun status(state: H1BoundState,key: dev.writhelm.core.auth.PresentedCredential,project: UUID,
         subject: WAssignmentSubject,binding: WorkReference,continuation: UUID?,safety: NativeRuntimeSafety=UnavailableNativeRuntimeSafety): JsonValue {
         val c=actor(state,key,project)

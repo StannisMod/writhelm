@@ -10,6 +10,8 @@ import type { OpenCodeClient } from "@opencode/client"
 import { NativeCredentialRegistry } from "../src/native-credentials.js"
 import { LinuxNativeCustody } from "../src/native-runtime-custody.js"
 import { NativeInitialAdapter } from "../src/native-initial.js"
+import { NativeWorkerPreparation, NativeDispatchFrontier } from "../src/native-worker-preparation.js"
+import { NativeInitialStart } from "../src/native-initial-start.js"
 import { contextJSON } from "../src/native-context-codec.js"
 
 const id=(n:number)=>`00000000-0000-0000-0000-${n.toString(16).padStart(12,"0")}`
@@ -224,4 +226,268 @@ test("effective-policy loss blocks both the initial prompt and an already ACTIVE
     await assert.rejects(active.adapter.admitModel({sessionID:active.envelope.nativeSessionId,kind:"primary",model:{providerID:"MOCK",id:"no-call"},headers:{}} as never))
     assert.equal(active.wakes(),1)
   }finally{await active.adapter.close()}
+})
+const projectId="11111111-1111-4111-8111-111111111111"
+const driverId="22222222-2222-4222-8222-222222222222"
+const signal=new AbortController().signal
+
+test("controller preparation retains original reservation and rejects assignment channel",async()=>{
+  const records=new Map<string,string>(),sent:string[]=[]
+  const custody={initialize:async()=>{},read:async(n:string,k:string)=>records.get(n+k),retain:async(n:string,k:string,v:string)=>{records.set(n+k,v)}}
+  let scope="controller",lose=true,authorized=true
+  const channel={scope,projectID:projectId,send:async(_route:string,raw:string)=>{sent.push(raw);if(lose)throw Error("MOCK response lost");return JSON.stringify({kind:"settled",outcome:{kind:"held"}})}}
+  let retryRaw=""
+  const registry={contextChannel:async()=>({...channel,scope}),sourceIdentity:async()=>{if(!authorized)throw Error("MOCK authority revoked")},
+    reservationRetryEligibility:async(_session:string,raw:string)=>{retryRaw=raw;return "definitive-refusal"}}
+  const driver=new NativeWorkerPreparation(registry as never,{} as never,custody as never,"ses_controller",{projectId,controllerId:driverId,hostId:driverId,worktreeParent:"/unused"})
+  const selection=JSON.stringify({task:{projectId,taskId:driverId},manifest:{family:"input-manifests",key:{projectId}},profile:{projectId},resources:[{}],reviewSubjects:[]})
+  await assert.rejects(driver.runController(selection,driverId,signal))
+  lose=false
+  const restored=new NativeWorkerPreparation(registry as never,{} as never,custody as never,"ses_controller",{projectId,controllerId:driverId,hostId:driverId,worktreeParent:"/unused"})
+  assert.equal((await restored.restoreController(driverId,signal)).phase,"reservation-held")
+  assert.equal(sent.length,4);assert.ok(sent.every(raw=>raw===sent[0]))
+  assert.equal(await restored.retryEligibilityController(driverId,signal),"definitive-refusal")
+  assert.equal(retryRaw,sent[0]);assert.equal(sent.length,4)
+  await assert.rejects(restored.retryEligibilityController("33333333-3333-4333-8333-333333333333",signal))
+  await assert.rejects(driver.runController(selection.replace('"resources":[{}]','"resources":[{},{}]'),driverId,signal))
+  authorized=false
+  await assert.rejects(driver.runController(selection,driverId,signal))
+  authorized=true
+  scope="assignment"
+  await assert.rejects(driver.runController(selection,driverId,signal))
+  await assert.rejects(restored.restoreController(driverId,signal))
+  await assert.rejects(restored.retryEligibilityController(driverId,signal))
+  scope="controller"
+  await assert.rejects(restored.restoreController("33333333-3333-4333-8333-333333333333",signal))
+  assert.equal(sent.length,4)
+})
+
+test("controller start rejects assignment channel before any operation",async()=>{
+  let identityCalls=0
+  const registry={contextChannel:async()=>({scope:"assignment",projectID:projectId}),sourceIdentity:async()=>{identityCalls++}}
+  const driver=new NativeInitialStart(registry as never,{} as never,{} as never,{} as never,"ses_controller",projectId)
+  await assert.rejects(driver.runController("{}",driverId,signal))
+  assert.equal(identityCalls,0)
+})
+
+test("planned controller binds original reservation before reserve and restores identical binding",async()=>{
+  const records=new Map<string,string>(),bindingRequests:string[]=[],reservations:string[]=[]
+  const custody={initialize:async()=>{},read:async(n:string,k:string)=>records.get(n+k),retain:async(n:string,k:string,v:string)=>{
+    const old=records.get(n+k);if(old!==undefined&&old!==v)throw Error("conflict");records.set(n+k,v)
+  }}
+  let settled=false,scope="controller"
+  const work={scope,projectID:projectId,send:async(_route:string,raw:string)=>{reservations.push(raw);return JSON.stringify({kind:"settled",outcome:{kind:"held"}})}}
+  const bind={scope,projectID:projectId,send:async(_route:string,raw:string)=>{
+    bindingRequests.push(raw);if(!settled)return JSON.stringify({kind:"error",code:"PUBLICATION_UNKNOWN"})
+    const cmd=JSON.parse(raw);return JSON.stringify({kind:"settled",identity:{projectId,operation:cmd.operation,requestKey:cmd.requestKey},
+      outcome:{kind:"success",result:{key:{projectId,id:driverId}}}})
+  }}
+  const registry={contextChannel:async()=>({...work,scope}),dispatchAttemptChannel:async()=>({...bind,scope}),sourceIdentity:async()=>{}}
+  const config={projectId,controllerId:driverId,hostId:driverId,worktreeParent:"/unused"}
+  const driver=new NativeWorkerPreparation(registry as never,{} as never,custody as never,"ses_controller",config)
+  const selection=JSON.stringify({task:{projectId,taskId:driverId},manifest:{family:"input-manifests",key:{projectId}},profile:{projectId},resources:[{}],reviewSubjects:[]})
+  const attempt={planRefJSON:JSON.stringify({family:"dispatch-plans",key:{projectId,id:driverId},digest:"a".repeat(64)})}
+  assert.equal((await driver.runPlannedController(selection,driverId,attempt,signal)).phase,"attempt-binding-held")
+  assert.equal(reservations.length,0);assert.equal(bindingRequests.length,3)
+  settled=true
+  const restored=new NativeWorkerPreparation(registry as never,{} as never,custody as never,"ses_controller",config)
+  assert.equal((await restored.restorePlannedController(driverId,attempt,signal)).phase,"reservation-held")
+  assert.ok(bindingRequests.every(raw=>raw===bindingRequests[0]));assert.equal(reservations.length,1)
+  assert.deepEqual(JSON.parse(bindingRequests[0]!).payload.reservation,JSON.parse(reservations[0]!))
+  await assert.rejects(restored.restorePlannedController(driverId,{planRefJSON:attempt.planRefJSON.replace("a".repeat(64),"b".repeat(64))},signal))
+  assert.equal(bindingRequests.length,4);assert.equal(reservations.length,1)
+  scope="assignment";await assert.rejects(restored.restorePlannedController(driverId,attempt,signal))
+})
+
+test("MOCK frontier overlaps ready work and starts a newly ready task without a batch barrier",async()=>{
+  const ids=["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","cccccccc-cccc-4ccc-8ccc-cccccccccccc"]
+  const prep=["11111111-1111-4111-8111-111111111111","22222222-2222-4222-8222-222222222222","33333333-3333-4333-8333-333333333333"]
+  const start=["44444444-4444-4444-8444-444444444444","55555555-5555-4555-8555-555555555555","66666666-6666-4666-8666-666666666666"]
+  const gates=prep.map(()=>{let resolve!:(v:any)=>void;const promise=new Promise<any>(r=>{resolve=r});return {promise,resolve}})
+  const started:string[]=[];let two!:()=>void,third!:()=>void,startedB!:()=>void
+  const overlap=new Promise<void>(r=>{two=r}),newlyReady=new Promise<void>(r=>{third=r}),startedSecond=new Promise<void>(r=>{startedB=r})
+  let readyThird=false,basis=1
+  const plan={key:{projectId,id:driverId},payload:{entries:prep.map((preparationId,i)=>({preparationId,startId:start[i]}))}}
+  const registry={dispatchContext:async()=>({basis:{revision:basis},planJSON:JSON.stringify(plan),attemptsJSON:[],
+    activeAssignments:readyThird?[JSON.stringify({key:{id:ids[1]},payload:{task:{taskId:ids[1]}}})]:[],
+    entries:ids.map((taskId,i)=>({preparationId:prep[i],startId:start[i],selectionJSON:JSON.stringify({task:{taskId}}),
+      taskJSON:JSON.stringify({key:{taskId},payload:{kind:"implementation",state:"executable",unresolved:[],dependencies:i===2?[{selectedResult:readyThird?{id:"exact"}:null}]:[]}})}))})}
+  const preparation={runPlannedController:async(_selection:string,id:string)=>{
+    started.push(id);if(started.length===2)two();if(id===prep[2])third()
+    return gates[prep.indexOf(id)]!.promise
+  },restorePlannedController:async()=>{throw Error("unexpected restore")}}
+  const initial={runController:async()=>{startedB();return {phase:"active"}},restoreController:async()=>{throw Error("unexpected restore")}}
+  const custody={read:async()=>undefined}
+  const frontier=new NativeDispatchFrontier(registry as never,preparation as never,initial as never,custody as never,"ses_controller",driverId,3,60000)
+  frontier.start();await overlap
+  assert.deepEqual(new Set(started),new Set(prep.slice(0,2)))
+  gates[1]!.resolve({phase:"binding-confirmed",state:"bound",currentIntent:null,assignmentSelector:{},binding:{}})
+  await startedSecond;readyThird=true;basis=2;frontier.wake();await newlyReady
+  assert.equal(started.filter(id=>id===prep[0]).length,1)
+  assert.equal(started.filter(id=>id===prep[2]).length,1)
+  gates[0]!.resolve({phase:"reservation-held"});gates[2]!.resolve({phase:"reservation-held"})
+  await frontier.close()
+})
+
+test("MOCK frontier retries retained attempt after lost reply at unchanged head",async()=>{
+  const prep="11111111-1111-4111-8111-111111111111",start="22222222-2222-4222-8222-222222222222"
+  const taskId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+  const plan={key:{projectId,id:driverId},payload:{entries:[{preparationId:prep,startId:start}]}}
+  const frame={basis:{revision:1},planJSON:JSON.stringify(plan),attemptsJSON:[],activeAssignments:[],entries:[{
+    preparationId:prep,startId:start,selectionJSON:JSON.stringify({task:{taskId}}),
+    taskJSON:JSON.stringify({key:{taskId},payload:{kind:"implementation",state:"executable",unresolved:[],dependencies:[]}})}]}
+  let retained=false,created=0,restored=0,done!:()=>void
+  const recovered=new Promise<void>(r=>{done=r})
+  const preparation={runPlannedController:async()=>{created++;retained=true;throw Error("lost response")},
+    restorePlannedController:async()=>{restored++;done();return {phase:"reservation-held"}}}
+  const frontier=new NativeDispatchFrontier({dispatchContext:async()=>frame} as never,preparation as never,{} as never,
+    {read:async()=>retained?"retained":undefined} as never,"ses_controller",driverId,1,250)
+  frontier.start()
+  try {
+    await Promise.race([recovered,new Promise<never>((_,reject)=>setTimeout(()=>reject(Error("recovery timeout")),2000))])
+    assert.equal(created,1);assert.equal(restored,1)
+  } finally {await frontier.close()}
+})
+
+test("MOCK frontier holds unknown outcome and retains one successor after definitive refusal",async()=>{
+  const prep="11111111-1111-4111-8111-111111111111",start="22222222-2222-4222-8222-222222222222"
+  const taskId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",reservation={operation:"reserve_assignment",payload:{assignmentId:driverId}}
+  const plan={key:{projectId,id:driverId},payload:{entries:[{preparationId:prep,startId:start}]}}
+  const tip={key:{projectId,id:prep},payload:{preparationId:prep,reservation}}
+  const frame={basis:{revision:1},planJSON:JSON.stringify(plan),attemptsJSON:[JSON.stringify(tip)],activeAssignments:[],entries:[{
+    preparationId:prep,startId:start,selectionJSON:JSON.stringify({task:{taskId}}),
+    taskJSON:JSON.stringify({key:{taskId},payload:{kind:"implementation",state:"executable",unresolved:[],dependencies:[]}})}]}
+  const records=new Map<string,string>([["preparation-driver"+prep,JSON.stringify({reserveJSON:JSON.stringify(reservation)})]])
+  let eligibility="hold",checks=0,firstCheck!:()=>void,success!:()=>void
+  const checked=new Promise<void>(r=>{firstCheck=r}),created=new Promise<void>(r=>{success=r})
+  const launched:string[]=[]
+  const preparation={restorePlannedController:async()=>({phase:"reservation-held"}),
+    retryEligibilityController:async()=>{checks++;if(checks===1)firstCheck();return eligibility},
+    runPlannedController:async(_selection:string,id:string,binding:any)=>{launched.push(id);assert.equal(binding.rootPreparationId,prep);success();return {phase:"reservation-held"}}}
+  const custody={read:async(n:string,k:string)=>records.get(n+k),retain:async(n:string,k:string,v:string)=>{records.set(n+k,v)}}
+  const frontier=new NativeDispatchFrontier({dispatchContext:async()=>frame} as never,preparation as never,{} as never,custody as never,
+    "ses_controller",driverId,1,250)
+  frontier.start()
+  try {
+    await checked;assert.equal(launched.length,0);assert.equal(records.has("dispatch-successor"+prep),false)
+    eligibility="definitive-refusal"
+    await Promise.race([created,new Promise<never>((_,reject)=>setTimeout(()=>reject(Error("successor timeout")),2000))])
+    const saved=JSON.parse(records.get("dispatch-successor"+prep)!)
+    assert.equal(launched[0],saved.preparationId);assert.notEqual(saved.startId,saved.preparationId)
+  } finally {await frontier.close()}
+})
+
+test("MOCK frontier restart retains successor identity after unknown publication",async()=>{
+  const prep="11111111-1111-4111-8111-111111111111",start="22222222-2222-4222-8222-222222222222"
+  const taskId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",reservation={operation:"reserve_assignment",payload:{assignmentId:driverId}}
+  const plan={key:{projectId,id:driverId},payload:{entries:[{preparationId:prep,startId:start}]}}
+  const tip={key:{projectId,id:prep},payload:{preparationId:prep,reservation}}
+  const frame={basis:{revision:1},planJSON:JSON.stringify(plan),attemptsJSON:[JSON.stringify(tip)],activeAssignments:[],entries:[{
+    preparationId:prep,startId:start,selectionJSON:JSON.stringify({task:{taskId}}),
+    taskJSON:JSON.stringify({key:{taskId},payload:{kind:"implementation",state:"executable",unresolved:[],dependencies:[]}})}]}
+  const records=new Map<string,string>([["preparation-driver"+prep,JSON.stringify({reserveJSON:JSON.stringify(reservation)})]])
+  const custody={read:async(n:string,k:string)=>records.get(n+k),retain:async(n:string,k:string,v:string)=>{
+    const old=records.get(n+k);if(old!==undefined&&old!==v)throw Error("conflicting original");records.set(n+k,v)
+  }}
+  let first!:()=>void,second!:()=>void
+  const unknown=new Promise<void>(r=>{first=r}),recovered=new Promise<void>(r=>{second=r}),ids:string[]=[]
+  const preparation={retryEligibilityController:async()=>"definitive-refusal",
+    restorePlannedController:async(id:string)=>{if(id===prep)return {phase:"reservation-held"};ids.push(id);second();return {phase:"attempt-binding-held"}},
+    runPlannedController:async(_selection:string,id:string)=>{ids.push(id);records.set("preparation-driver"+id,"retained");first();throw Error("publication response lost")}}
+  const make=()=>new NativeDispatchFrontier({dispatchContext:async()=>frame} as never,preparation as never,{} as never,custody as never,
+    "ses_controller",driverId,1,250)
+  const initial=make();initial.start();await unknown;await initial.close()
+  const resumed=make();resumed.start()
+  try {
+    await Promise.race([recovered,new Promise<never>((_,reject)=>setTimeout(()=>reject(Error("restart timeout")),2000))])
+    assert.equal(ids.length,2);assert.equal(ids[0],ids[1])
+    assert.equal(ids[0],JSON.parse(records.get("dispatch-successor"+prep)!).preparationId)
+  } finally {await resumed.close()}
+})
+
+test("MOCK frontier holds occupied claim and resumes only after it becomes free",async()=>{
+  const prep="11111111-1111-4111-8111-111111111111",start="22222222-2222-4222-8222-222222222222"
+  const taskId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",reservation={operation:"reserve_assignment",payload:{assignmentId:driverId}}
+  const plan={key:{projectId,id:driverId},payload:{entries:[{preparationId:prep,startId:start}]}}
+  const tip={key:{projectId,id:prep},payload:{preparationId:prep,reservation}}
+  let free=false,basis=0,checks=0,launched=0,done!:()=>void
+  const resumed=new Promise<void>(r=>{done=r})
+  const registry={dispatchContext:async()=>({basis:{revision:basis},planJSON:JSON.stringify(plan),attemptsJSON:[JSON.stringify(tip)],activeAssignments:[],entries:[{
+    preparationId:prep,startId:start,claimsAvailable:free,selectionJSON:JSON.stringify({task:{taskId}}),
+    taskJSON:JSON.stringify({key:{taskId},payload:{kind:"implementation",state:"executable",unresolved:[],dependencies:[]}})}]})}
+  const records=new Map<string,string>([["preparation-driver"+prep,JSON.stringify({reserveJSON:JSON.stringify(reservation)})]])
+  const preparation={restorePlannedController:async()=>({phase:"reservation-held"}),retryEligibilityController:async()=>{checks++;return "definitive-refusal"},
+    runPlannedController:async()=>{launched++;done();return {phase:"reservation-held"}}}
+  const custody={read:async(n:string,k:string)=>records.get(n+k),retain:async(n:string,k:string,v:string)=>{records.set(n+k,v)}}
+  const frontier=new NativeDispatchFrontier(registry as never,preparation as never,{} as never,custody as never,"ses_controller",driverId,1,250)
+  frontier.start()
+  try {
+    await new Promise(resolve=>setTimeout(resolve,600))
+    assert.equal(checks,0);assert.equal(launched,0);assert.equal(records.has("dispatch-successor"+prep),false)
+    free=true;basis++;frontier.wake()
+    await Promise.race([resumed,new Promise<never>((_,reject)=>setTimeout(()=>reject(Error("free claim did not resume")),2000))])
+    assert.equal(checks,1);assert.equal(launched,1)
+  } finally {await frontier.close()}
+})
+
+test("MOCK frontier retains materialization command and never reserves an unchecked manifest",async()=>{
+  const prep="11111111-1111-4111-8111-111111111111",start="22222222-2222-4222-8222-222222222222"
+  const taskId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",task={projectId,taskId,revision:0}
+  const plan={key:{projectId,id:driverId},payload:{entries:[{preparationId:prep,startId:start,futureDependencies:[{}]}]}}
+  let ready=false,done!:()=>void,first!:()=>void,sends=0
+  const checked=new Promise<void>(r=>{first=r}),published=new Promise<void>(r=>{done=r})
+  const records=new Map<string,string>(),requests:string[]=[]
+  const frame=()=>({basis:{revision:1},planJSON:JSON.stringify(plan),attemptsJSON:[],activeAssignments:[],entries:[{
+    preparationId:prep,startId:start,futureReady:ready,selectionJSON:JSON.stringify({task}),
+    taskJSON:JSON.stringify({key:task,payload:{kind:"implementation",state:"executable",unresolved:[],dependencies:[{selectedResult:null}]}})}]})
+  const channel={scope:"controller",projectID:projectId,send:async(_route:string,raw:string)=>{
+    requests.push(raw);sends++;if(sends<=3){if(sends===3)first();throw Error("MOCK lost publication reply")}
+    const cmd=JSON.parse(raw);done();return JSON.stringify({kind:"settled",identity:{operation:cmd.operation,projectId,requestKey:cmd.requestKey},
+      outcome:{kind:"success",result:{key:{projectId,id:cmd.requestKey}}}})
+  }}
+  const registry={dispatchContext:async()=>frame(),dispatchMaterializationChannel:async()=>channel}
+  const custody={read:async(n:string,k:string)=>records.get(n+k),retain:async(n:string,k:string,v:string)=>{records.set(n+k,v)}}
+  const preparation={runPlannedController:async()=>{throw Error("unchecked manifest was reserved")}}
+  const make=()=>new NativeDispatchFrontier(registry as never,preparation as never,{} as never,custody as never,"ses_controller",driverId,1,250)
+  const initial=make();initial.start()
+  await new Promise(resolve=>setTimeout(resolve,300));assert.equal(sends,0)
+  ready=true;initial.wake()
+  await Promise.race([checked,new Promise<never>((_,reject)=>setTimeout(()=>reject(Error("materialization timeout")),5000))])
+  await initial.close()
+  assert.equal(records.has("dispatch-materialization"+prep),true)
+  ready=false // Reconcile the original even if a later head is no longer uniquely ready.
+  const restored=make();restored.start()
+  try {
+    await Promise.race([published,new Promise<never>((_,reject)=>setTimeout(()=>reject(Error("recovery timeout")),2000))])
+    assert.ok(requests.every(raw=>raw===requests[0]));assert.equal(requests.length,4)
+  } finally {await restored.close()}
+})
+
+test("controller start reuses the retained transition after a lost response",async()=>{
+  const records=new Map<string,string>(),commands:string[]=[]
+  const custody={initialize:async()=>{},read:async(n:string,k:string)=>records.get(n+k),retain:async(n:string,k:string,v:string)=>{
+    const old=records.get(n+k);if(old!==undefined&&old!==v)throw Error("conflicting retained bytes");records.set(n+k,v)
+  }}
+  const key={projectId,id:driverId},binding={family:"assignment-bindings",key:{projectId,assignmentId:driverId,generation:0}}
+  let lose=true,reads=0
+  const channel={scope:"controller",projectID:projectId,send:async(route:string,raw:string)=>{
+    if(route==="reads"){reads++;return JSON.stringify({kind:"read",data:{key,payload:{binding,state:"bound",currentIntent:null,profile:{projectId}}}})}
+    commands.push(raw)
+    if(lose)throw Error("MOCK response lost")
+    return JSON.stringify({kind:"settled",outcome:{kind:"held"}})
+  }}
+  const registry={contextChannel:async()=>channel,sourceIdentity:async()=>{}}
+  const deployment={read:async()=>"profile"}
+  const driver=new NativeInitialStart(registry as never,{} as never,custody as never,deployment as never,"ses_controller",projectId)
+  const selection=JSON.stringify({assignment:{family:"assignments",key,generation:0},binding})
+  await assert.rejects(driver.runController(selection,driverId,signal))
+  lose=false
+  const restored=new NativeInitialStart(registry as never,{} as never,custody as never,deployment as never,"ses_controller",projectId)
+  assert.equal((await restored.restoreController(driverId,signal)).phase,"start-intent-held")
+  assert.equal(reads,1)
+  assert.equal(commands.length,4)
+  assert.ok(commands.every(raw=>raw===commands[0]))
+  await assert.rejects(driver.runController(selection.replace('"generation":0','"generation":1'),driverId,signal))
+  await assert.rejects(restored.restoreController("33333333-3333-4333-8333-333333333333",signal))
+  assert.equal(commands.length,4)
 })

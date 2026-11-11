@@ -160,9 +160,143 @@ internal class CanonicalTaskDecisionFacts(private val delegate: H1RuntimeFacts):
 internal data class ReservationProfileProof(val basis: GitOid,val project: UUID,val command: Digest,val profile: WorkReference)
 internal data class ReservationPacketProof(val basis: GitOid,val project: UUID,val command: Digest,val task: WorkKey.TaskRevision,
     val manifest: WorkReference,val profile: WorkReference)
+internal data class ReservationInputProof(val basis:GitOid,val project:UUID,val command:Digest,val task:WorkKey.TaskRevision,
+    val manifest:WorkReference,val profile:WorkReference)
 internal interface ReservationProofControl {
     fun profile(state: H1BoundState,command: WorkCommand): ReservationProfileProof?
     fun packet(state: H1BoundState,command: WorkCommand): ReservationPacketProof?
+    fun inputs(state:H1BoundState,command:WorkCommand):ReservationInputProof?=null
+}
+
+/** Separately obtained assessment, tied to the exact structural subject and command at H.
+ * Implementations must establish the assessor's provenance and independence; a worker field,
+ * the structural checks below, or a synthetically supplied value is not such qualification. */
+internal data class PrebindingAssessment(val basis:GitOid,val project:UUID,val command:Digest,
+    val task:WorkReference,val manifest:WorkReference,val profile:WorkReference,val assessment:WSource)
+internal fun interface PrebindingAssessmentControl {
+    fun independentlyAssess(state:H1BoundState,command:WorkCommand):PrebindingAssessment?
+}
+
+/** Resolve receipt-derived attribution for an exact assessment subject at H. This only establishes
+ * who recorded the evidence and its declared subject; the evidence's text, outcome or identity is
+ * not by itself an independently qualified completeness assessment or permission to close a gap. */
+internal fun attributedClosureEvidence(state:H1BoundState,project:UUID,inventory:PrebindingInputInventory,
+    evidence:WorkReference,controllerPrincipal:UUID):H1EvidenceAttribution? {
+    return try {
+        if(evidence.identity.family!=WorkFamily.EVIDENCE || evidence.identity.key.projectId!=project)return null
+        val work=state.work[project] ?: return null
+        val attribution=state.evidence[evidence.identity] ?: return null
+        if(attribution.reference!=evidence || attribution.principalId==controllerPrincipal)return null
+        val delegation=state.authority.delegations[attribution.delegationId] ?: return null
+        if(delegation.binding.projectId!=project || delegation.binding.principalId!=attribution.principalId)return null
+        val data=(work.resolve(evidence).payload as? WEvidencePayload)?.value ?: return null
+        val exact=inventory.dependencies+listOf(inventory.task,inventory.manifest)
+        if(exact.any { ref -> data.subjects.none { (it as? WSourceVariant2Value)?.value?.reference==ref } })return null
+        if(inventory.dependencies.any { ref ->
+            val result=(work.resolve(ref).payload as? WResultsPayload)?.value ?: return null
+            result.producer.principalId==attribution.principalId
+        })return null
+        attribution
+    } catch(_:Exception) { null }
+}
+/** Historical attribution check over retained values; never re-runs a current provider and does
+ * not establish the semantic or operational qualification of the recorded assessment. */
+internal fun closureAttributionMatches(state:H1BoundState,project:UUID,inputs:PrebindingInputInventory,
+    controllerPrincipal:UUID,record:WDispatchClosurePayload):Boolean {
+    val source=record.value.assessment as? WSourceVariant2Value ?: return false
+    val attribution=attributedClosureEvidence(state,project,inputs,source.value.reference,controllerPrincipal) ?: return false
+    val evidence=try { state.work[project]?.resolve(source.value.reference)?.payload as? WEvidencePayload }
+        catch(_:Exception) { null } ?: return false
+    return evidence.value.outcome=="passed" && record.assessor==attribution.principalId && record.delegation==attribution.delegationId
+}
+
+/** A separately qualified assessor must return the exact subject it assessed at H. Receipt
+ * attribution alone, a worker's outcome label, and structural inventory are not qualification. */
+internal data class QualifiedClosureAssessment(val basis:GitOid,val materialization:WorkReference,
+    val inputs:PrebindingInputInventory,val evidence:WorkReference,val assessor:UUID,val delegation:UUID)
+internal fun interface ClosureAssessmentQualification {
+    fun assess(state:H1BoundState,command:DispatchClosureCommand,inputs:PrebindingInputInventory,
+        attribution:H1EvidenceAttribution):QualifiedClosureAssessment?
+}
+
+/** Builds a closure reducer input only after exact-H inventory, receipt-derived authorship and an
+ * independent qualification provider all agree. No default provider is installed. The caller must
+ * still authenticate the controller and publish with a same-head CAS and historical audit. */
+internal fun verifiedDispatchClosureAssessment(state:H1BoundState,command:DispatchClosureCommand,
+    facts:WorkExternalFacts,controllerPrincipal:UUID,qualification:ClosureAssessmentQualification):PrebindingClosureAssessment? {
+    return try {
+        val project=command.manifest.projectId
+        if(command.expectedHead!=WorkGitOid(state.basis.algorithm,state.basis.hex))return null
+        val work=state.work[project] ?: return null
+        val materialization=(work.resolve(command.materialization).payload as? WDispatchMaterializationPayload)?.value ?: return null
+        val inputs=prebindingMaterializedInputs(work,materialization.requestKey,facts)
+        val source=command.assessment as? WSourceVariant2Value ?: return null
+        val attribution=attributedClosureEvidence(state,project,inputs,source.value.reference,controllerPrincipal) ?: return null
+        // A failed or inconclusive report cannot be qualified into a successful closure. A passed
+        // label is necessary only: the separately qualified provider still checks its substance.
+        val evidence=(work.resolve(source.value.reference).payload as? WEvidencePayload)?.value ?: return null
+        if(evidence.outcome!="passed")return null
+        val expected=QualifiedClosureAssessment(state.basis,command.materialization,inputs,source.value.reference,
+            attribution.principalId,attribution.delegationId)
+        if(qualification.assess(state,command,inputs,attribution)!=expected)return null
+        PrebindingClosureAssessment(command.expectedHead,materialization.requestKey,inputs,command.assessment,
+            attribution.principalId,attribution.delegationId)
+    } catch(_:Exception) { null }
+}
+
+/** Real structural verifier for the reservation inputs, combined with a separate trusted
+ * independent-assessment provider. It does not create or remove a gap, qualify a profile, prove
+ * a full assignment packet, or establish semantic discovery of undeclared requirements. */
+internal class IndependentPrebindingInputVerifier(private val observations:H1RuntimeFacts,
+    private val assessor:PrebindingAssessmentControl):ReservationProofControl {
+    override fun profile(state:H1BoundState,command:WorkCommand):ReservationProfileProof?=null
+    override fun packet(state:H1BoundState,command:WorkCommand):ReservationPacketProof?=null
+    override fun inputs(state:H1BoundState,command:WorkCommand):ReservationInputProof? {
+        return try {
+            val op=(command.operation as? CReserveAssignmentOperation)?.value ?: return null
+            val observed=observations.capture(state,command)
+            if(observed.basis!=state.basis)return null
+            val facts=observed.facts;val work=state.work.getValue(command.projectId)
+            if(work.modelVersion!=4)return null
+            val task=work.task(op.task)
+            val manifest=(work.resolve(op.manifest).payload as? WInputManifestsPayload)?.value ?: return null
+            val taskRef=work.reference(WorkFamily.TASK_REVISIONS,op.task)
+            val profile=work.reference(WorkFamily.PROFILES,op.profile)
+            if(task.state!="executable" || task.unresolved.isNotEmpty() || task.executionProfile!=op.profile ||
+                manifest.task!=op.task || manifest.base!=task.base || manifest.knownGaps.isNotEmpty() ||
+                task.kind in setOf("implementation","remediation") && task.approvedDesign.isEmpty() ||
+                task.approvedDesign.any { it !in facts.approvedDecisions })return null
+            val base=task.base ?: return null
+            if(base.code.any { it !in facts.retainedSnapshots })return null
+            val applicability=(work.record(WorkFamily.APPLICABILITY,manifest.applicability).payload as? WApplicabilityPayload)?.value ?: return null
+            if(applicability.entries.any { it.state!="applicable" })return null
+            fun available(source:WSource):Boolean=when(source) {
+                is WSourceVariant0Value -> source.value.reference in facts.knowledgeSources && state.core.validationSourceAvailable(source.value.reference)
+                is WSourceVariant1Value -> source.value.artifact in facts.retainedSnapshots
+                is WSourceVariant2Value -> {
+                    val record=work.resolve(source.value.reference)
+                    val result=(record.payload as? WResultsPayload)?.value
+                    (result==null || result.artifacts.isNotEmpty() && result.artifacts.all { it in facts.retainedSnapshots } &&
+                        WorkSubmittedDiff(result.task,result.artifacts,result.changes) in facts.submittedDiffs) &&
+                        workLinks(record.payload).bodies.all { work.bodies[it.digest]?.sizeBytes==it.byteLength }
+                }
+            }
+            if(!available(manifest.declaredClosureAssessment) || manifest.items.any { item ->
+                !available(item.source) || item.exactFragments.any { work.bodies[it.digest]?.sizeBytes!=it.byteLength }
+            })return null
+            val required=applicability.entries.flatMap { listOf(it.source)+it.dependencies }+task.criteria.flatMap { it.clauses }
+            if(required.any { requiredSource -> manifest.items.none { it.mandatory && it.source==requiredSource } })return null
+            task.dependencies.forEach { dependency ->
+                val ref=dependency.selectedResult ?: return null
+                val result=(work.resolve(ref).payload as? WResultsPayload)?.value ?: return null
+                if(result.task!=dependency.producer || manifest.items.none { it.mandatory && (it.source as? WSourceVariant2Value)?.value?.reference==ref })return null
+            }
+            val fingerprint=WorkCodec().fingerprint(command)
+            val expected=PrebindingAssessment(state.basis,command.projectId,fingerprint,taskRef,op.manifest,profile,manifest.declaredClosureAssessment)
+            if(assessor.independentlyAssess(state,command)!=expected)return null
+            ReservationInputProof(state.basis,command.projectId,fingerprint,op.task,op.manifest,profile)
+        }catch(_:Exception){null}
+    }
 }
 
 /** Narrow candidate adapter; not a qualification provider or authority decision. It admits only
@@ -185,8 +319,131 @@ internal class ReservationProofFacts(private val delegate: H1RuntimeFacts,privat
         } catch(_: Exception) { return original }
         val profile=try { proofs.profile(state,command)==expected.first } catch(_: Exception) { false }
         val packet=try { proofs.packet(state,command)==expected.second } catch(_: Exception) { false }
-        return H1ObservedFacts(original.basis,if(packet)original.facts.copy(verifiedPackets=original.facts.verifiedPackets+op.manifest) else original.facts,
+        val input=if(state.work.getValue(command.projectId).modelVersion==4)try {
+            proofs.inputs(state,command)==ReservationInputProof(state.basis,command.projectId,expected.second.command,op.task,op.manifest,expected.second.profile)
+        } catch(_:Exception) { false } else false
+        val facts=original.facts.copy(verifiedPackets=if(packet)original.facts.verifiedPackets+op.manifest else original.facts.verifiedPackets,
+            prebindingClosures=if(input)original.facts.prebindingClosures+WorkPrebindingClosure(op.task,op.manifest,op.profile,expected.second.command) else original.facts.prebindingClosures)
+        return H1ObservedFacts(original.basis,facts,
             if(profile)original.qualifiedProfiles+expected.first.profile else original.qualifiedProfiles)
+    }
+}
+
+/** Trusted adapter output, not a worker assertion. `changes` is the digest and byte length of the
+ * exact observed Git diff bytes, not a summary or an assessment of semantic correctness. */
+internal data class NativeResultDiffProof(val basis:GitOid,val project:UUID,val command:Digest,
+    val assignment:WAssignmentSubject,val executionId:UUID,val task:WorkKey.TaskRevision,val manifest:WorkReference,
+    val base:WSnapshot,val result:WSnapshot,val changes:WorkBodyReference)
+internal fun interface NativeResultDiffProofControl {
+    fun observe(state:H1BoundState,command:WorkCommand):NativeResultDiffProof?
+}
+internal fun interface NativeResultDiffRawControl {
+    fun resultDiffProof(assignment:UUID,generation:Long,result:WSnapshot):JsonValue?
+}
+
+/** Decode a protected host observation against the exact current assignment and retained original
+ * preparation identity. This is read-only and supplies no snapshot-retention or fencing fact. */
+internal class NativeResultDiffTransportProof(private val native:NativeResultDiffRawControl,private val epoch:String):NativeResultDiffProofControl {
+    init { require(epoch.matches(Regex("[0-9a-f]{64}"))) }
+    override fun observe(state:H1BoundState,command:WorkCommand):NativeResultDiffProof? {
+      return try {
+        val data=(command.operation as? CSubmitResultOperation)?.value?.data ?: return null
+        val work=state.work.getValue(command.projectId);val assignment=work.assignment(data.assignment.assignmentId)
+        val execution=assignment.execution ?: return null
+        val base=work.task(assignment.task).base?.code?.singleOrNull() ?: return null
+        val result=data.artifacts.singleOrNull() ?: return null
+        if(data.assignment.generation!=0L || assignment.executionGeneration!=0L || assignment.state!="active")return null
+        val raw=native.resultDiffProof(data.assignment.assignmentId,data.assignment.generation,result) ?: return null
+        val frame=raw.fields("formatVersion","preparationJSON","resultJSON","diffSha256","diffByteLength")
+        workRequire(frame.getValue("formatVersion").long()==1L,WorkProblem.INVALID_SUBJECT)
+        val job=StrictJson.decode(frame.getValue("preparationJSON").string().toByteArray(),JsonLimits(bytes=2*1024*1024,stringBytes=1024*1024))
+            .fields("formatVersion","assignmentId","generation","intentId","workspaceId","intendedExecution","taskJSON","profileJSON",
+                "baseJSON","snapshotJSON","artifactLocatorId","epoch","directory","agent","model")
+        workRequire(job.getValue("formatVersion").long()==1L && uuid(job.getValue("assignmentId"))==data.assignment.assignmentId &&
+            job.getValue("generation").string()=="0" && uuid(job.getValue("workspaceId"))==assignment.workspaceId &&
+            job.getValue("epoch").string()==epoch && decodeWExecutionIntent(job.getValue("intendedExecution"))==assignment.intendedExecution &&
+            identityCodec.decodeKey(WorkFamily.TASK_REVISIONS,job.getValue("taskJSON").string().toByteArray())==assignment.task &&
+            decodeWSnapshot(StrictJson.decode(job.getValue("baseJSON").string().toByteArray()))==base &&
+            decodeWSnapshot(StrictJson.decode(frame.getValue("resultJSON").string().toByteArray()))==result,WorkProblem.INVALID_SUBJECT)
+        val size=frame.getValue("diffByteLength").long()
+        workRequire(size in 0..(8L*1024*1024),WorkProblem.INVALID_SUBJECT)
+        NativeResultDiffProof(state.basis,command.projectId,WorkCodec().fingerprint(command),data.assignment,execution.executionId,
+            assignment.task,assignment.manifest,base,result,WorkBodyReference(Digest.parse(frame.getValue("diffSha256").string()),size.toInt()))
+      } catch(_:Exception) { null }
+    }
+}
+
+/** Fail-closed adapter; wiring a proof transport does not qualify a retention provider. A provider must
+ * independently observe the worktree/diff and bind its proof to the exact command and H; separate
+ * trusted facts must already establish retention of the exact result snapshot and locator.
+ * It does not establish writer fencing, semantic scope, acceptance or integration. */
+internal class NativeResultDiffFacts(private val delegate:H1RuntimeFacts,private val control:NativeResultDiffProofControl):H1RuntimeFacts {
+    override fun capture(state:H1BoundState,command:WorkCommand):H1ObservedFacts {
+        val original=delegate.capture(state,command)
+        val submitted=(command.operation as? CSubmitResultOperation)?.value?.data ?: return original
+        if(original.basis!=state.basis)return original
+        val expected=try {
+            val work=state.work.getValue(command.projectId)
+            val assignment=work.assignment(submitted.assignment.assignmentId)
+            val execution=assignment.execution ?: return original
+            val base=work.task(assignment.task).base?.code?.singleOrNull() ?: return original
+            val result=submitted.artifacts.singleOrNull() ?: return original
+            if(assignment.state!="active" || assignment.executionGeneration!=submitted.assignment.generation ||
+                assignment.task!=submitted.task || assignment.manifest!=submitted.manifest ||
+                base.commit==null || result.commit==null || base.dirtyContentDigest!=null || result.dirtyContentDigest!=null ||
+                base.repositoryId!=result.repositoryId || base.commit.algorithm!=result.commit.algorithm ||
+                result !in original.facts.retainedSnapshots)return original
+            NativeResultDiffProof(state.basis,command.projectId,WorkCodec().fingerprint(command),submitted.assignment,
+                execution.executionId,submitted.task,submitted.manifest,base,result,submitted.changes)
+        } catch(_:Exception) { return original }
+        val observed=try { control.observe(state,command) } catch(_:Exception) { null }
+        if(observed!=expected)return original
+        return H1ObservedFacts(original.basis,original.facts.copy(
+            submittedDiffs=original.facts.submittedDiffs+WorkSubmittedDiff(expected.task,listOf(expected.result),expected.changes)),original.qualifiedProfiles)
+    }
+}
+
+internal fun interface NativeResultRetentionRawControl {
+    fun retentionProof(assignment:UUID,generation:Long,execution:UUID,result:WSnapshot):JsonValue?
+}
+
+/** A separately configured qualification must establish the retention profile's actual storage,
+ * synchronization and recovery guarantees. Neither a native transport secret nor a ref supplies it. */
+internal fun interface ResultRetentionQualification { fun qualified(state:H1BoundState,command:WorkCommand):Boolean }
+
+/** Optional, fail-closed service adapter. Caller authentication and submit permission remain in the
+ * ordinary work reduction; this is a read-only exact-result observation, never an effect dispatch. */
+internal class NativeResultRetentionFacts(private val delegate:H1RuntimeFacts,private val native:NativeResultRetentionRawControl,
+    private val qualification:ResultRetentionQualification):H1RuntimeFacts {
+    override fun capture(state:H1BoundState,command:WorkCommand):H1ObservedFacts {
+        val original=delegate.capture(state,command)
+        if(original.basis!=state.basis)return original
+        val data=(command.operation as? CSubmitResultOperation)?.value?.data ?: return original
+        return try {
+            val work=state.work.getValue(command.projectId);val assignment=work.assignment(data.assignment.assignmentId)
+            val execution=assignment.execution ?: return original
+            val delegation=assignment.delegationId?.let { state.authority.delegations[it] } ?: return original
+            val credential=state.authority.credentials[execution.credentialId] ?: return original
+            val base=work.task(assignment.task).base?.code?.singleOrNull() ?: return original
+            val result=data.artifacts.singleOrNull() ?: return original
+            if(assignment.state!="active" || data.assignment.generation!=0L || assignment.executionGeneration!=0L ||
+                assignment.task!=data.task || assignment.manifest!=data.manifest ||
+                execution.executionId!=assignment.intendedExecution.executionId ||
+                delegation.status!=CredentialStatus.ACTIVE || credential.credential.status!=CredentialStatus.ACTIVE ||
+                credential.credential.replacedBy!=null || credential.scope!=CredentialScope.Assignment(delegation.id) ||
+                delegation.binding.assignmentId!=data.assignment.assignmentId || delegation.binding.executionGeneration!=data.assignment.generation ||
+                delegation.binding.executionId!=execution.executionId || base.commit==null || result.commit==null ||
+                base.dirtyContentDigest!=null || result.dirtyContentDigest!=null || base.repositoryId!=result.repositoryId ||
+                base.commit.algorithm!=result.commit.algorithm || !qualification.qualified(state,command))return original
+            val raw=native.retentionProof(data.assignment.assignmentId,data.assignment.generation,execution.executionId,result) ?: return original
+            if(raw===JNull)return original
+            val frame=StrictJson.decode(raw.string().toByteArray(),JsonLimits(bytes=65536,stringBytes=32768))
+                .fields("formatVersion","assignmentId","generation","executionId","snapshot")
+            if(frame.getValue("formatVersion").long()!=1L || uuid(frame.getValue("assignmentId"))!=data.assignment.assignmentId ||
+                frame.getValue("generation").string()!=data.assignment.generation.toString() ||
+                uuid(frame.getValue("executionId"))!=execution.executionId || decodeWSnapshot(frame.getValue("snapshot"))!=result)return original
+            H1ObservedFacts(original.basis,original.facts.copy(retainedSnapshots=original.facts.retainedSnapshots+result),original.qualifiedProfiles)
+        } catch(_:Exception) { original }
     }
 }
 

@@ -2,6 +2,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { createServer } from "node:http"
+import { createHash } from "node:crypto"
 import { NativeRuntimeClient } from "../src/native-runtime-client.js"
 
 const id = "00000000-0000-0000-0000-000000000001"
@@ -46,7 +47,48 @@ test("real local HTTP client preserves exact generation and refuses inconsistent
     assert.equal((await client.status(token, subject)).active, false)
     reply = valid; rateLimited = 1
     assert.equal((await client.status(token, subject)).active, true) // bounded read recapture, not an effect retry
+    const preparationId="11111111-1111-4111-8111-111111111111",startId="22222222-2222-4222-8222-222222222222"
+    const task={projectId:id,taskId:id,revision:0},manifest={family:"input-manifests",key:{projectId:id,id},digest:"a".repeat(64)},profile={projectId:id,profileId:id,revision:0},resource={projectId:id,resourceId:id}
+    const plan={family:"dispatch-plans",key:{projectId:id,id},payload:{projectId:id,planId:id,controllerId:id,entries:[{preparationId,startId,task,manifest,profile,resources:[resource]}]}}
+    const entry={preparationId,startId,futureReady:false,claimsAvailable:true,taskJSON:JSON.stringify({family:"task-revisions",key:task}),selectionJSON:JSON.stringify({task,manifest,profile,resources:[{resource,expectedGeneration:null}],reviewSubjects:[]})}
+    const digest=createHash("sha256").update(JSON.stringify(plan)).digest("hex")
+    const attempt={family:"dispatch-attempts",key:{projectId:id,id:preparationId},payload:{preparationId,plan:{family:"dispatch-plans",key:{projectId:id,id},digest}}}
+    reply={formatVersion:1,basis:{},planJSON:JSON.stringify(plan),entries:[entry],activeAssignments:[],attemptsJSON:[JSON.stringify(attempt)]}
+    assert.equal((await client.dispatchContext(token,id)).entries[0].preparationId,preparationId)
+    assert.equal(received?.operation,"dispatch-context")
+    reply={...reply,attemptsJSON:[JSON.stringify({...attempt,key:{projectId:id,id:startId}})]}
+    await assert.rejects(client.dispatchContext(token,id),/unavailable or forbidden/)
+    reply={...reply,attemptsJSON:[JSON.stringify(attempt)]}
+    reply={...reply,entries:[{...entry,startId:preparationId}]}
+    await assert.rejects(client.dispatchContext(token,id),/unavailable or forbidden/)
+    reply={...reply,entries:[{...entry,selectionJSON:JSON.stringify({task,manifest,profile,resources:[],reviewSubjects:[]})}]}
+    await assert.rejects(client.dispatchContext(token,id),/unavailable or forbidden/)
+    reply={...reply,planJSON:JSON.stringify({...plan,key:{projectId:id,id:preparationId}}),entries:[entry]}
+    await assert.rejects(client.dispatchContext(token,id),/unavailable or forbidden/)
+    reply={formatVersion:1,kind:"hold"}
+    assert.equal(await client.reservationRetryEligibility(token,"original reservation"),"hold")
+    assert.equal(received?.operation,"reservation-retry");assert.equal(received?.reservationJSON,"original reservation")
+    reply={formatVersion:1,kind:"definitive-refusal"}
+    assert.equal(await client.reservationRetryEligibility(token,"original reservation"),"definitive-refusal")
+    reply={formatVersion:1,kind:"retry-now"}
+    await assert.rejects(client.reservationRetryEligibility(token,"original reservation"),/unavailable or forbidden/)
     const cancel = new AbortController(); cancel.abort()
     await assert.rejects(client.status(token, subject, null, cancel.signal))
   } finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())) }
+})
+
+test("receipt channel is separately bounded and carries escaped full-size commands",async()=>{
+  let requests=0,route="",received=""
+  const fetcher=(async(url,init)=>{
+    requests++;route=String(url);received=String(init?.body)
+    return new Response(JSON.stringify({formatVersion:1,kind:"missing"}),{status:200})
+  }) as typeof fetch
+  const client=new NativeRuntimeClient("http://127.0.0.1:12345",proof,id,id,id,id,fetcher)
+  const command="\\".repeat(2*1024*1024)
+  assert.equal(await client.originalResultReceipt(token,command),"missing")
+  assert.equal(route,"http://127.0.0.1:12345/internal/native/receipt/v1")
+  assert.equal(JSON.parse(received).commandJSON,command)
+  assert.ok(Buffer.byteLength(received)>2*1024*1024)
+  await assert.rejects(client.originalResultReceipt(token,command+"x"))
+  assert.equal(requests,1)
 })

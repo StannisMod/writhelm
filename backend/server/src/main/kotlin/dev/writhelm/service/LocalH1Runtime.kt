@@ -52,7 +52,12 @@ internal class LocalH1Runtime private constructor(val app: H1Application,private
         // real reader is composed, but cannot turn profile/configuration labels into authority.
         val profileFacts=LinuxRegisteredProfileFacts(CanonicalTaskDecisionFacts(UnavailableH1RuntimeFacts),
             root.resolve("profile-qualification"),emptyList(),CurrentProfileEnvironment { _,_->null })
-        installFacts(ConnectedRuntimeFacts(NativeInitialFacts(NativePreparationFacts(NativeContextFacts(profileFacts,native,epoch,provenance),native,epoch),native,epoch),preparation,native,
+        val nativeFacts=NativeInitialFacts(NativePreparationFacts(NativeContextFacts(profileFacts,native,epoch,provenance),native,epoch),native,epoch)
+        // Read-only producers are wired but there is deliberately no qualified retention profile.
+        // An existing/observable Git ref, native peer authentication or executable pin is NOT one.
+        val retained=NativeResultRetentionFacts(nativeFacts,native,ResultRetentionQualification { _,_->false })
+        val resultFacts=NativeResultDiffFacts(retained,NativeResultDiffTransportProof(native,epoch))
+        installFacts(ConnectedRuntimeFacts(resultFacts,preparation,native,
             provenance,checks::observed))
         engine=ConnectedWorkEngine(app,project,{token},preparation,native,LinuxConnectedCustody(root.resolve("engine")))
     }

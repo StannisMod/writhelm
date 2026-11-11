@@ -38,6 +38,10 @@ internal fun decodeWorkPayload(f: WorkFamily, v: JsonValue): WorkPayload = when(
     WorkFamily.CONDITIONS -> WConditionsPayload(decodeWConditions(v))
     WorkFamily.CONDITION_CONFIRMATIONS -> WConditionConfirmationsPayload(decodeWConditionConfirmations(v))
     WorkFamily.CONTINUATIONS -> WContinuationsPayload(decodeWContinuations(v))
+    WorkFamily.DISPATCH_PLANS -> refuse(CodecProblem.UNSUPPORTED_FORMAT)
+    WorkFamily.DISPATCH_ATTEMPTS -> refuse(CodecProblem.UNSUPPORTED_FORMAT)
+    WorkFamily.DISPATCH_MATERIALIZATIONS -> refuse(CodecProblem.UNSUPPORTED_FORMAT)
+    WorkFamily.DISPATCH_CLOSURES -> refuse(CodecProblem.UNSUPPORTED_FORMAT)
 }
 internal fun encodeWorkPayload(v: WorkPayload): JsonValue = when(v) {
     is WTaskRevisionsPayload -> encodeWTaskRevisions(v.value)
@@ -74,6 +78,10 @@ internal fun encodeWorkPayload(v: WorkPayload): JsonValue = when(v) {
     is WConditionsPayload -> encodeWConditions(v.value)
     is WConditionConfirmationsPayload -> encodeWConditionConfirmations(v.value)
     is WContinuationsPayload -> encodeWContinuations(v.value)
+    is WDispatchPlanPayload -> StrictJson.decode(DispatchPlanCandidateCodec().encode(v.value))
+    is WDispatchAttemptPayload -> StrictJson.decode(DispatchAttemptCodec().encode(v.value))
+    is WDispatchMaterializationPayload -> StrictJson.decode(DispatchMaterializationCommandCodec().encode(v.value))
+    is WDispatchClosurePayload -> encodeDispatchClosureRecord(v)
 }
 internal fun payloadFamily(v: WorkPayload): WorkFamily = when(v) {
     is WTaskRevisionsPayload -> WorkFamily.TASK_REVISIONS
@@ -112,6 +120,10 @@ internal fun payloadFamily(v: WorkPayload): WorkFamily = when(v) {
     is WConditionsPayload -> WorkFamily.CONDITIONS
     is WConditionConfirmationsPayload -> WorkFamily.CONDITION_CONFIRMATIONS
     is WContinuationsPayload -> WorkFamily.CONTINUATIONS
+    is WDispatchPlanPayload -> WorkFamily.DISPATCH_PLANS
+    is WDispatchAttemptPayload -> WorkFamily.DISPATCH_ATTEMPTS
+    is WDispatchMaterializationPayload -> WorkFamily.DISPATCH_MATERIALIZATIONS
+    is WDispatchClosurePayload -> WorkFamily.DISPATCH_CLOSURES
 }
 internal fun decodeWorkOperation(n: String, v: JsonValue): WorkOperation = when(n) {
     "create_task_revision" -> CCreateTaskRevisionOperation(decodeCCreateTaskRevision(v))

@@ -20,6 +20,8 @@ internal data class WorkRetainedCut(val nativeHostId: UUID,val nativeSessionId: 
 internal data class WorkTargetObservation(val repositoryId: UUID,val targetId: UUID,val commit: WorkGitOid,
     val tree: WorkGitOid,val dirtyDigest: Digest?)
 internal data class WorkSubmittedDiff(val task: WorkKey.TaskRevision,val artifacts: List<WSnapshot>,val changes: WorkBodyReference)
+/** Trusted pre-binding input assessment for one exact reservation command, not a full packet. */
+internal data class WorkPrebindingClosure(val task:WorkKey.TaskRevision,val manifest:WorkReference,val profile:WorkKey.Profile,val fingerprint:Digest)
 /** Qualified adapters/core supply exact facts at the same captured H. Missing entries refuse.
  * No default always-allow callback, model assertion or native execution is implemented here. */
 internal data class WorkExternalFacts(val knowledgeSources: Set<KnowledgeReference>,
@@ -28,16 +30,24 @@ internal data class WorkExternalFacts(val knowledgeSources: Set<KnowledgeReferen
     val targets: Set<WorkTargetObservation>,val completedAssignments: Set<WAssignmentSubject>,
     val isolatedAssignments: Set<WAssignmentSubject>,val verifiedPackets: Set<WorkReference>,
     val registeredExecutions: Map<UUID,WExecution>,val integrations: Map<WorkKey.Id,WorkIntegrationObservation>,
-    val submittedDiffs: Set<WorkSubmittedDiff>,val model2: Model2Facts=Model2Facts.empty())
+    val submittedDiffs: Set<WorkSubmittedDiff>,val model2: Model2Facts=Model2Facts.empty(),
+    val prebindingClosures:Set<WorkPrebindingClosure> = emptySet())
 internal data class WorkEffect(val before: WorkState,val after: WorkState,val result: WorkRecordIdentity,
     val changedRecords: List<WorkRecord>,val addedBodies: List<Utf8Content>)
 
 internal class WorkReducer {
-    fun reduce(h: WorkState,original: WorkCommand,actor: WorkExecutionInput,facts: WorkExternalFacts): WorkEffect {
-        workRequire(h.modelVersion==2,WorkProblem.NOT_READY) // legacy command3 is not a model3 writer
-        val codec=WorkCodec();val command=codec.decodeCommand(codec.encodeCommand(original))
+    fun reduce(h: WorkState,original: WorkCommand,actor: WorkExecutionInput,facts: WorkExternalFacts): WorkEffect =
+        reduceInternal(h,original,actor,facts,null)
+    /** Only the dedicated closure reducer calls this after reconstructing the exact successor from
+     * a same-head assessment. This is not a wire admission or a qualification decision. */
+    internal fun reduceClosurePin(h:WorkState,original:WorkCommand,actor:WorkExecutionInput,facts:WorkExternalFacts,
+        task:WorkKey.TaskRevision):WorkEffect = reduceInternal(h,original,actor,facts,task)
+    private fun reduceInternal(h: WorkState,original: WorkCommand,actor: WorkExecutionInput,facts: WorkExternalFacts,
+        closureTask:WorkKey.TaskRevision?): WorkEffect {
+        workRequire(h.modelVersion in setOf(2,4),WorkProblem.NOT_READY) // mechanical model3 remains isolated
+        val codec=WorkCodec(modelVersion=h.modelVersion);val command=codec.decodeCommand(codec.encodeCommand(original))
         workRequire(command.projectId==h.projectId,WorkProblem.FOREIGN_REFERENCE)
-        val tx=WorkTransaction(h,actor,facts,command.requestKey,codec.fingerprint(command))
+        val tx=WorkTransaction(h,actor,facts,command.requestKey,codec.fingerprint(command),closureTask)
         try {
             val result=tx.apply(command.operation)
             return tx.finish(result,command.operation)
@@ -52,7 +62,7 @@ internal class WorkReducer {
     /** Internal enrollment effect, composed atomically with AUTH's six records and one receipt by APP.
      * AUTH must validate its candidate first; this checks exact reserved-work equality independently. */
     fun bindRegistration(h: WorkState,registration: WorkRegistrationBinding): WorkEffect {
-        workRequire(h.modelVersion==2,WorkProblem.NOT_READY)
+        workRequire(h.modelVersion in setOf(2,4),WorkProblem.NOT_READY)
         val a=h.assignment(registration.assignmentId)
         workRequire(a.generation==registration.expectedGeneration,WorkProblem.STALE_GENERATION)
         workRequire(a.state=="reserved" && a.delegationId==null && a.execution==null && a.binding==null,WorkProblem.INVALID_BINDING)
@@ -71,10 +81,10 @@ internal data class WorkRegistrationBinding(val assignmentId: UUID,val expectedG
     val subjectResults: List<WorkReference>,val delegationId: UUID)
 
 internal class WorkTransaction(val h: WorkState,val actor: WorkExecutionInput,val facts: WorkExternalFacts,
-    val requestKey: UUID,val fingerprint: Digest) {
+    val requestKey: UUID,val fingerprint: Digest,private val closureTask:WorkKey.TaskRevision?=null) {
     private val changes=LinkedHashMap<WorkRecordIdentity,WorkRecord>()
     internal val project get()=h.projectId
-    private val codec=WorkCodec()
+    private val codec=WorkCodec(modelVersion=h.modelVersion)
     private fun id(f: WorkFamily,k: WorkKey)=WorkRecordIdentity(f,k)
     internal fun key(i: UUID)=WorkKey.Id(project,i)
     private fun get(f: WorkFamily,k: WorkKey)=changes[id(f,k)] ?: h.record(f,k)
@@ -123,7 +133,7 @@ internal class WorkTransaction(val h: WorkState,val actor: WorkExecutionInput,va
         }
     }
     private fun decision(d: KnowledgeReference)=workRequire(d in facts.approvedDecisions,WorkProblem.BLOCKED_INPUT)
-    internal fun taskReady(task: WorkKey.TaskRevision,manifest: WorkReference,profile: WorkKey.Profile) {
+    internal fun taskReady(task: WorkKey.TaskRevision,manifest: WorkReference,profile: WorkKey.Profile,prebinding:Boolean=false) {
         val t=h.task(task)
         workRequire(t.state=="executable" && t.unresolved.isEmpty() && t.executionProfile==profile,WorkProblem.NOT_READY)
         workRequire(t.kind !in setOf("implementation","remediation") || t.approvedDesign.isNotEmpty(),WorkProblem.BLOCKED_INPUT)
@@ -133,7 +143,8 @@ internal class WorkTransaction(val h: WorkState,val actor: WorkExecutionInput,va
         p.qualificationEvidence.forEach(::source)
         workRequire(p.outputReserveTokens+p.toolReserveTokens+p.compactionReserveTokens<p.contextTokens,WorkProblem.NOT_READY)
         val m=(resolve(manifest,WorkFamily.INPUT_MANIFESTS).payload as WInputManifestsPayload).value
-        workRequire(m.task==task && m.base==t.base && m.knownGaps.isEmpty() && manifest in facts.verifiedPackets,WorkProblem.BLOCKED_INPUT)
+        val inputProof=prebinding && h.modelVersion==4 && WorkPrebindingClosure(task,manifest,profile,fingerprint) in facts.prebindingClosures
+        workRequire(m.task==task && m.base==t.base && m.knownGaps.isEmpty() && (manifest in facts.verifiedPackets || inputProof),WorkProblem.BLOCKED_INPUT)
         m.items.forEach { source(it.source) };source(m.declaredClosureAssessment)
         val app=(h.record(WorkFamily.APPLICABILITY,m.applicability).payload as WApplicabilityPayload).value
         workRequire(app.entries.none { it.state!="applicable" },WorkProblem.BLOCKED_INPUT)
@@ -187,7 +198,12 @@ internal class WorkTransaction(val h: WorkState,val actor: WorkExecutionInput,va
         }
         is CSetTaskHeadOperation -> op.value.let { v ->put(v.key,WTaskHeadsPayload(WTaskHeads(v.expectedGeneration?.let(::nextGeneration) ?: 0,v.title,v.draft,v.executable)),v.expectedGeneration) }
         is CCreateProfileOperation -> put(op.value.key,WProfilesPayload(op.value.data))
-        is CPinInputManifestOperation -> put(op.value.key,WInputManifestsPayload(op.value.data))
+        is CPinInputManifestOperation -> op.value.let { v ->
+            if(h.modelVersion==4 && v.data.knownGaps.isEmpty() && closureTask!=v.data.task) {
+                workRequire(h.records.values.none { (it.payload as? WDispatchMaterializationPayload)?.value?.newTask==v.data.task },WorkProblem.BLOCKED_INPUT)
+            }
+            put(v.key,WInputManifestsPayload(v.data))
+        }
         is CReviseApplicabilityOperation -> put(op.value.key,WApplicabilityPayload(op.value.data))
         is CReviseVerificationPlanOperation -> op.value.let { v ->
             val previous=v.data.previous ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
@@ -244,7 +260,7 @@ internal class WorkTransaction(val h: WorkState,val actor: WorkExecutionInput,va
     }
     private fun reserve(v: CReserveAssignment): WorkRecordIdentity {
         workRequire(actor.controllerId==v.intendedExecution.controllerId,WorkProblem.INVALID_BINDING)
-        taskReady(v.task,v.manifest,v.profile)
+        taskReady(v.task,v.manifest,v.profile,prebinding=true)
         workRequire(h.records.values.none { r -> (r.payload as? WAssignmentsPayload)?.value?.let { a ->
             a.state !in setOf("completed","replaced") && (a.workspaceId==v.workspaceId || a.task.taskId==v.task.taskId && a.intendedExecution.template=="executor-v1" && v.intendedExecution.template=="executor-v1") }==true },WorkProblem.CLAIM_CONFLICT)
         workRequire((v.intendedExecution.template=="executor-v1")==v.reviewSubjects.isEmpty(),WorkProblem.INVALID_SUBJECT)

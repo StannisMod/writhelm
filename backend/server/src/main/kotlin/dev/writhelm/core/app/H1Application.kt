@@ -24,19 +24,37 @@ internal fun interface NativeControllerRuntimeSafety { fun safeAccess(state: H1B
 internal object UnavailableNativeControllerSafety: NativeControllerRuntimeSafety {
     override fun safeAccess(state: H1BoundState,controller: UUID)=false
 }
+/** Trusted deployment qualification for this exact retention effect; never supplied by a worker. */
+internal fun interface RetentionEffectQualification {
+    fun qualified(state:H1BoundState,project:UUID,subject:WAssignmentSubject,execution:UUID,result:WSnapshot):Boolean
+}
 internal class H1Options(val runtime: H1RuntimeFacts,val app: AppOptions=AppOptions(admission=AdmissionPolicy(formatVersion=2)),
     val commandReplyBytes: Int=65536,val navigationClock: ()->Long={System.nanoTime()/1000000},
     val nativeSafety: NativeRuntimeSafety=UnavailableNativeRuntimeSafety,
-    val controllerSafety: NativeControllerRuntimeSafety=UnavailableNativeControllerSafety) {
-    init { require(app.admission.formatVersion==2 && commandReplyBytes in 1024..65536) }
+    val controllerSafety: NativeControllerRuntimeSafety=UnavailableNativeControllerSafety,
+    val workModelVersion:Int=2,val retentionEffectQualification:RetentionEffectQualification=RetentionEffectQualification { _,_,_,_,_->false }) {
+    init { require(app.admission.formatVersion==2 && commandReplyBytes in 1024..65536 && workModelVersion in setOf(2,4)) }
 }
 internal class H1Genesis(val core: ApprovalWorkflow,val auth: Collection<Auth2Record>,val work: Map<UUID,WorkState>)
+internal enum class ReservationRetryEligibility { HOLD, DEFINITIVE_REFUSAL }
+internal enum class OriginalResultReceipt { MATCH, MISSING, HOLD }
+/** Exact durable original receipt from a validated snapshot, never a caller-provided outcome. */
+internal fun definitiveReservationRefusal(snapshot:StoreSnapshot,storeId:UUID,principal:UUID,command:WorkCommand):Boolean {
+    if(command.operation !is CReserveAssignmentOperation)return false
+    val identity=dev.writhelm.core.store.CommandIdentity(principal,command.projectId,"reserve_assignment",command.requestKey)
+    val bytes=snapshot.file(identity.path) ?: return false
+    val receipt=JournalCodec.decode(bytes,identity.path)
+    if(receipt.identity!=identity || receipt.storeId!=storeId || receipt.fingerprintVersion!=3 ||
+        receipt.fingerprint!=WorkCodec().fingerprint(command).hex || receipt.writes.isNotEmpty())return false
+    val rejected=receipt.outcome as? LogicalOutcome.Rejected ?: return false
+    return rejected.domain=="work" && rejected.code in setOf("NOT_READY","BLOCKED_INPUT","CLAIM_CONFLICT","STALE_GENERATION")
+}
 
 /** One persistent H1 publisher profile. Every callback sees one bounded request-local presentation;
  * synchronized execution/read and finally cleanup prevent credential sharing across callers. */
 internal class H1Application private constructor(private val storeId: UUID,private val options: H1Options): AutoCloseable {
     private lateinit var store: GitCommandStore
-    private val cache=H1SnapshotCache(storeId,options.app.limits)
+    private val cache=H1SnapshotCache(storeId,options.app.limits,options.workModelVersion)
     private val boundary=H1BoundaryValidator(cache)
     private val reduction=H1JointReduction()
     private val legacy=H1LegacyReduction(options.app.limits)
@@ -73,10 +91,24 @@ internal class H1Application private constructor(private val storeId: UUID,priva
     private fun request(c: StoreCommand): Request=(active ?: fail(StoreProblem.INTEGRITY)).also { integrity(it.command===c) }
     private val bindings=H1PublicationBindings(reduction::canonicalize,
         { h,c -> authorize(cache.load(h),request(c)) },
-        { h,c -> val plan=request(c).candidate ?: fail(StoreProblem.INTEGRITY);integrity(plan.before.basis==h.oid);plan.evaluation.changes.map { it.key }.toSet() },
+        { h,c ->
+            val request=request(c);val plan=request.candidate ?: fail(StoreProblem.INTEGRITY);integrity(plan.before.basis==h.oid)
+            if(c.operation=="bind_dispatch_attempt" && plan.evaluation.outcome is LogicalOutcome.Success) {
+                val original=DispatchAttemptCommandCodec().decode(c.bytes()).attempt.reservation
+                val admission=reduction.authorizeWork(plan.before,original,request.presentation) ?: fail(StoreProblem.DENIED)
+                val identity=dev.writhelm.core.store.CommandIdentity(admission.identity.principalId,original.projectId,original.operation.name,original.requestKey)
+                if(h.file(identity.path)!=null)fail(StoreProblem.DENIED)
+                val attempt=DispatchAttemptCommandCodec().decode(c.bytes()).attempt
+                attempt.previous?.let { ref ->
+                    val predecessor=(plan.before.work.getValue(original.projectId).resolve(ref).payload as? WDispatchAttemptPayload)?.value ?: fail(StoreProblem.DENIED)
+                    if(!definitiveReservationRefusal(h,storeId,admission.identity.principalId,predecessor.reservation))fail(StoreProblem.DENIED)
+                }
+            }
+            plan.evaluation.changes.map { it.key }.toSet()
+        },
         { key,bytes,historical -> when(key.namespace) {
             "auth" -> Auth2RecordCodec(if(historical)auth2History() else auth2Admission()).decode(bytes,key.path)
-            "work" -> { val codec=WorkCodec();val r=codec.decodeRecord(bytes,historical);integrity(identityCodec.recordPath(r.identity)==key.path && bytes.contentEquals(codec.encodeRecord(r,historical))) }
+            "work" -> { val codec=WorkCodec(modelVersion=options.workModelVersion);val r=codec.decodeRecord(bytes,historical);integrity(identityCodec.recordPath(r.identity)==key.path && bytes.contentEquals(codec.encodeRecord(r,historical))) }
             else -> fail(StoreProblem.UNSUPPORTED)
         } },
         { _,c,_ -> preflight(c) },
@@ -88,6 +120,35 @@ internal class H1Application private constructor(private val storeId: UUID,priva
         })
     private fun authorize(base: H1BoundState,r: Request): CurrentCommandScope {
         val c=r.command;val key=r.presentation
+        if(c.operation=="close_dispatch_inputs") {
+            if(options.workModelVersion!=4)return CurrentCommandScope.Denied
+            val command=DispatchClosureCommandCodec().decode(c.bytes())
+            val admission=reduction.authorizeDispatchClosure(base,command,key) ?: return CurrentCommandScope.Denied
+            return CurrentCommandScope.NewEffect(AuthenticatedActor(admission.identity.principalId,admission.credentialId))
+        }
+        if(c.operation=="materialize_dispatch_dependency") {
+            if(options.workModelVersion!=4)return CurrentCommandScope.Denied
+            val command=DispatchMaterializationCommandCodec().decode(c.bytes())
+            val admission=reduction.authorizeDispatchMaterialization(base,command,key) ?: return CurrentCommandScope.Denied
+            return CurrentCommandScope.NewEffect(AuthenticatedActor(admission.identity.principalId,admission.credentialId))
+        }
+        if(c.operation=="bind_dispatch_attempt") {
+            if(options.workModelVersion!=4)return CurrentCommandScope.Denied
+            val cmd=DispatchAttemptCommandCodec().decode(c.bytes());val reserve=cmd.attempt.reservation
+            val controller=(reserve.operation as CReserveAssignmentOperation).value.intendedExecution.controllerId
+            val call=WorkInvocation(reserve.projectId,AuthorityOperation.BIND_DISPATCH_ATTEMPT,cmd.requestKey,null,controller,null)
+            val admission=Auth2Policy(base.authority,base.projection).authorizeWork(key,call) ?: return CurrentCommandScope.Denied
+            val original=reduction.authorizeWork(base,reserve,key) ?: return CurrentCommandScope.Denied
+            if(original.mode!=AdmissionMode.EVALUATE || original.identity.principalId!=admission.identity.principalId || original.credentialId!=admission.credentialId)return CurrentCommandScope.Denied
+            return CurrentCommandScope.NewEffect(AuthenticatedActor(admission.identity.principalId,admission.credentialId))
+        }
+        if(c.operation=="record_dispatch_plan") {
+            if(options.workModelVersion!=4)return CurrentCommandScope.Denied
+            val command=DispatchPlanCommandCodec().decode(c.bytes())
+            val call=WorkInvocation(command.plan.projectId,AuthorityOperation.RECORD_DISPATCH_PLAN,command.requestKey,null,command.plan.controllerId,null)
+            val admission=Auth2Policy(base.authority,base.projection).authorizeWork(key,call) ?: return CurrentCommandScope.Denied
+            return CurrentCommandScope.NewEffect(AuthenticatedActor(admission.identity.principalId,admission.credentialId))
+        }
         if(c.fingerprintVersion==3 && c.operation !in H1Catalog.authOperations) {
             val admission=reduction.authorizeWork(base,WorkCodec().decodeCommand(c.bytes()),key) ?: return CurrentCommandScope.Denied
             val actor=AuthenticatedActor(admission.identity.principalId,admission.credentialId)
@@ -107,7 +168,69 @@ internal class H1Application private constructor(private val storeId: UUID,priva
     }
     private fun evaluate(base: H1BoundState,r: Request): H1JointCandidate {
         val c=r.command
-        return if(c.fingerprintVersion!=3)legacy.evaluate(base,c,r.presentation)
+        return if(c.operation=="close_dispatch_inputs") {
+                val command=DispatchClosureCommandCodec().decode(c.bytes())
+                reduction.authorizeDispatchClosure(base,command,r.presentation) ?: fail(StoreProblem.DENIED)
+                // No deployed provider and durable qualification provenance exist. Registering the
+                // command must not turn evidence attribution into a qualified assessment.
+                val code=if(command.expectedHead!=WorkGitOid(base.basis.algorithm,base.basis.hex)) "STALE_GENERATION" else "BLOCKED_INPUT"
+                H1JointCandidate(base,base.core,base.authority,base.work,Evaluation(LogicalOutcome.Rejected("work",code),emptyList()))
+            } else if(c.operation=="materialize_dispatch_dependency") {
+                val command=DispatchMaterializationCommandCodec().decode(c.bytes())
+                val admission=reduction.authorizeDispatchMaterialization(base,command,r.presentation) ?: fail(StoreProblem.DENIED)
+                try {
+                    val state=base.work.getValue(command.task.projectId)
+                    val proposal=materializeDispatchDependency(state,command.plan,command.task,command.newTask,command.verificationPlan,command.manifest)
+                    val taskCommand=WorkCommand(command.requestKey,state.projectId,CCreateTaskRevisionOperation(proposal.task))
+                    val observations=r.observations.getOrPut(base.basis) { options.runtime.capture(base,taskCommand) }
+                    val first=reduction.work(base,taskCommand,r.presentation,observations)
+                    if(first.evaluation.outcome is LogicalOutcome.Rejected)first else {
+                        val middle=H1BoundState.checked(base.storeId,base.basis,first.core,first.authority.records(),first.work,options.app.limits,4)
+                        val pin=WorkCommand(command.requestKey,state.projectId,CPinInputManifestOperation(proposal.manifest))
+                        val second=reduction.work(middle,pin,r.presentation,observations)
+                        if(second.evaluation.outcome is LogicalOutcome.Rejected)
+                            H1JointCandidate(base,base.core,base.authority,base.work,second.evaluation)
+                        else {
+                            val identity=WorkRecordIdentity(WorkFamily.DISPATCH_MATERIALIZATIONS,WorkKey.Id(state.projectId,command.requestKey))
+                            workRequire(identity !in state.records,WorkProblem.DUPLICATE_ID)
+                            val row=WorkRecord(identity,WDispatchMaterializationPayload(command))
+                            val after=second.work.getValue(state.projectId).derive(listOf(row),emptyList())
+                            validateDispatchMaterializationEdge(state,after,command)
+                            val codec=WorkCodec(modelVersion=4)
+                            val change=RecordChange(RecordKey("work",identity.family.tag,StrictJson.decode(identityCodec.encodeKey(identity.key))),codec.encodeRecord(row))
+                            val result=obj("key" to StrictJson.decode(identityCodec.encodeKey(identity.key)),"generation" to JNull,"digest" to digest(codec.digest(row)))
+                            H1JointCandidate(base,base.core,base.authority,base.work+(state.projectId to after),
+                                Evaluation(LogicalOutcome.Success(c.operation,result,false),(first.evaluation.changes+second.evaluation.changes+change).sortedBy { it.key.path }))
+                        }
+                    }
+                } catch(e:WorkFault) {
+                    H1JointCandidate(base,base.core,base.authority,base.work,Evaluation(LogicalOutcome.Rejected("work",e.problem.name),emptyList()))
+                }
+            } else if(c.operation=="bind_dispatch_attempt") {
+                val command=DispatchAttemptCommandCodec().decode(c.bytes())
+                try {
+                    val candidate=reduction.dispatchAttempt(base,command,r.presentation)
+                    val record=candidate.effect.after.records.getValue(candidate.effect.result)
+                    val result=obj("key" to StrictJson.decode(identityCodec.encodeKey(record.identity.key)),"generation" to JNull,
+                        "digest" to digest(WorkCodec(modelVersion=4).digest(record)))
+                    H1JointCandidate(base,base.core,base.authority,base.work+(command.attempt.reservation.projectId to candidate.effect.after),
+                        Evaluation(LogicalOutcome.Success(c.operation,result,false),listOf(candidate.change)))
+                } catch(e:WorkFault) {
+                    H1JointCandidate(base,base.core,base.authority,base.work,Evaluation(LogicalOutcome.Rejected("work",e.problem.name),emptyList()))
+                }
+            } else if(c.operation=="record_dispatch_plan") {
+                val command=DispatchPlanCommandCodec().decode(c.bytes())
+                try {
+                    val candidate=reduction.dispatchPlan(base,command,r.presentation)
+                    val record=candidate.effect.after.records.getValue(candidate.effect.result)
+                    val result=obj("key" to StrictJson.decode(identityCodec.encodeKey(record.identity.key)),"generation" to JNull,
+                        "digest" to digest(WorkCodec(modelVersion=4).digest(record)))
+                    H1JointCandidate(base,base.core,base.authority,base.work+(command.plan.projectId to candidate.effect.after),
+                        Evaluation(LogicalOutcome.Success(c.operation,result,false),listOf(candidate.change)))
+                } catch(e:WorkFault) {
+                    H1JointCandidate(base,base.core,base.authority,base.work,Evaluation(LogicalOutcome.Rejected("work",e.problem.name),emptyList()))
+                }
+            } else if(c.fingerprintVersion!=3)legacy.evaluate(base,c,r.presentation)
             else if(c.operation in H1Catalog.authOperations)reduction.auth3(base,Auth3CommandCodec().decode(c.bytes()),r.presentation)
             else WorkCodec().decodeCommand(c.bytes()).let { command ->
                 val facts=r.observations.getOrPut(base.basis) { options.runtime.capture(base,command) }
@@ -116,7 +239,7 @@ internal class H1Application private constructor(private val storeId: UUID,priva
     }
     private fun ports()=StorePorts(mapOf(
         "auth" to NamespaceValidator(StrictJson.decode(Auth2RecordCodec().header())) { cache.load(it) },
-        "work" to NamespaceValidator(obj("formatVersion" to num(1),"modelVersion" to num(2))) { cache.load(it) },
+        "work" to NamespaceValidator(obj("formatVersion" to num(1),"modelVersion" to num(options.workModelVersion))) { cache.load(it) },
         "policy" to NamespaceValidator(obj("formatVersion" to num(2))) { h ->
             integrity(h.entries.keys.filter { it.startsWith("policy/") }.toSet()==setOf("policy/format.json","policy/admission.json"))
             integrity(AdmissionPolicy.decode(h.file("policy/admission.json") ?: fail(StoreProblem.INTEGRITY)).formatVersion==2)
@@ -260,6 +383,62 @@ internal class H1Application private constructor(private val storeId: UUID,priva
             throw AppAccessFault(AppAccessProblem.FORBIDDEN)
         CoordinationCapture(state.basis,controller,state.work[project] ?: WorkState.empty(project))
     }
+    /** Inspect only the original canonical reservation receipt at the captured current H. Missing,
+     * success, non-retryable rejection or fingerprint mismatch holds. This does not mint an attempt,
+     * authorize new terms, remove claims, or treat an unknown external outcome as absent. */
+    @Synchronized internal fun reservationRetryEligibility(token:String,project:UUID,controller:UUID,original:ByteArray):ReservationRetryEligibility {
+        val key=CredentialVerifier.parse(token) ?: throw AppAccessFault(AppAccessProblem.UNAUTHENTICATED)
+        return key.use { presented ->
+            val codec=WorkCodec();val command=codec.decodeCommand(original)
+            if(command.projectId!=project || command.operation !is CReserveAssignmentOperation ||
+                command.operation.value.intendedExecution.controllerId!=controller)throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+            var identity:dev.writhelm.core.store.CommandIdentity?=null
+            store.read(project,ReadAccess { snapshot,_ ->
+                val state=cache.load(snapshot)
+                val admission=reduction.authorizeWork(state,command,presented) ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+                if(admission.mode!=AdmissionMode.EVALUATE || admission.scope!=CredentialScope.Controller(controller))throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+                identity=dev.writhelm.core.store.CommandIdentity(admission.identity.principalId,project,command.operation.name,command.requestKey)
+                true
+            }) { snapshot ->
+                val expected=checkNotNull(identity)
+                if(definitiveReservationRefusal(snapshot,storeId,expected.principalId,command))
+                    ReservationRetryEligibility.DEFINITIVE_REFUSAL else ReservationRetryEligibility.HOLD
+            }
+        }
+    }
+    /** MISSING is an observation at this published head, only under current evaluate admission.
+     * It is NOT a new-effect permit or proof that an unknown external effect was absent. */
+    @Synchronized internal fun originalResultReceipt(token:String,project:UUID,controller:UUID,host:UUID,original:ByteArray):OriginalResultReceipt {
+        val key=CredentialVerifier.parse(token) ?: throw AppAccessFault(AppAccessProblem.UNAUTHENTICATED)
+        return key.use { presented ->
+            val codec=WorkCodec();val command=codec.decodeCommand(original)
+            val data=(command.operation as? CSubmitResultOperation)?.value?.data ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+            if(command.projectId!=project)throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+            var admission:WorkAdmission?=null
+            store.read(project,ReadAccess { snapshot,_ ->
+                val state=cache.load(snapshot)
+                val current=reduction.authorizeWork(state,command,presented) ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+                val scope=current.scope as? CredentialScope.Assignment ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+                val delegation=state.authority.delegations[scope.delegationId] ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+                val assignment=state.work.getValue(project).assignment(data.assignment.assignmentId)
+                if(delegation.binding.controllerId!=controller || assignment.intendedExecution.nativeHostId!=host ||
+                    delegation.binding.assignmentId!=data.assignment.assignmentId || delegation.binding.executionGeneration!=data.assignment.generation)
+                    throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+                admission=current;true
+            }) { snapshot ->
+                val current=checkNotNull(admission)
+                val identity=dev.writhelm.core.store.CommandIdentity(current.identity.principalId,project,"submit_result",command.requestKey)
+                val bytes=snapshot.file(identity.path) ?: return@read if(current.mode==AdmissionMode.EVALUATE)
+                    OriginalResultReceipt.MISSING else OriginalResultReceipt.HOLD
+                val receipt=JournalCodec.decode(bytes,identity.path)
+                val state=cache.load(snapshot)
+                val originalCredential=state.authority.retainedCredential(receipt.authenticatedByCredentialId,project)
+                if(receipt.identity==identity && receipt.storeId==storeId && receipt.fingerprintVersion==3 &&
+                    receipt.fingerprint==codec.fingerprint(command).hex && originalCredential?.scope==current.scope &&
+                    originalCredential.credential.principalId==current.identity.principalId)OriginalResultReceipt.MATCH else OriginalResultReceipt.HOLD
+            }
+        }
+    }
     @Synchronized internal fun continuationPermit(token: String,project: UUID,subject: WAssignmentSubject,binding: WorkReference): Unit=capture(token) { state,key ->
         val c=state.authority.authenticate(key,project) ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
         if((c.scope as? CredentialScope.Controller)?.controllerId!=state.work.getValue(project).assignment(subject.assignmentId).intendedExecution.controllerId ||
@@ -285,8 +464,69 @@ internal class H1Application private constructor(private val storeId: UUID,priva
     }
     @Synchronized internal fun nativeWorkerContext(token: String,project: UUID,controller: UUID,host: UUID): JsonValue=
         capture(token) { state,key -> NativeWorkerContext.read(state,key,project,controller,host,options.nativeSafety) }
+    @Synchronized internal fun nativeRetentionPermit(token:String,project:UUID,controller:UUID,host:UUID,
+        subject:WAssignmentSubject,execution:UUID,result:WSnapshot):JsonValue=
+        capture(token) { state,key ->
+            val permit=NativeRuntimeAccess(controller,host).retentionPermit(state,key,project,subject,execution,result)
+            if(!options.retentionEffectQualification.qualified(state,project,subject,execution,result))throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+            permit
+        }
     @Synchronized internal fun nativeControllerContext(token: String,project: UUID,controller: UUID,profile: WorkKey.Profile): JsonValue=
         capture(token) { state,key -> NativeControllerContext.read(state,key,project,controller,profile,options.controllerSafety) }
+    /** A same-head proposal only: these commands are not published, and their later submission
+     * must not be mistaken for a same-head validation of future-result uniqueness or closure. */
+    @Synchronized internal fun nativeDispatchMaterialization(token:String,project:UUID,controller:UUID,host:UUID,
+        planId:UUID,task:WorkKey.TaskRevision,newTask:WorkKey.TaskRevision,newPlan:WorkKey.Revision,newManifest:WorkKey.Id,
+        taskRequest:UUID,manifestRequest:UUID):JsonValue=capture(token) { state,key ->
+        val credential=state.authority.authenticate(key,project) ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        if(credential.scope!=CredentialScope.Controller(controller) || !state.authority.allows(credential,project,Capability.READ) ||
+            !state.authority.workAllows(credential,project,WorkPermission.TASK_PLAN) ||
+            !state.authority.workAllows(credential,project,WorkPermission.TASK_DISPATCH))throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        NativeRuntimeAccess(controller,host).sourceIdentity(state,key,project)
+        val work=state.work[project] ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        if(work.modelVersion!=4 || taskRequest==manifestRequest)throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        val planKey=WorkKey.Id(project,planId)
+        val plan=(work.record(WorkFamily.DISPATCH_PLANS,planKey).payload as? WDispatchPlanPayload)?.value
+            ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        if(plan.controllerId!=controller)throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        val proposal=materializeDispatchDependency(work,work.reference(WorkFamily.DISPATCH_PLANS,planKey),task,newTask,newPlan,newManifest)
+        val codec=WorkCodec()
+        obj("formatVersion" to num(1),"basis" to state.basis.json(),"kind" to str("unpublished-proposal"),
+            "taskCommandJSON" to str(codec.encodeCommand(WorkCommand(taskRequest,project,CCreateTaskRevisionOperation(proposal.task))).decodeToString()),
+            "manifestCommandJSON" to str(codec.encodeCommand(WorkCommand(manifestRequest,project,CPinInputManifestOperation(proposal.manifest))).decodeToString()))
+    }
+    /** Controller-only current-H projection for one exact immutable dispatch plan. It supplies
+     * inputs, not readiness, authority to start, capacity, or permission to retry a new attempt. */
+    @Synchronized internal fun nativeDispatchContext(token:String,project:UUID,controller:UUID,host:UUID,planId:UUID):JsonValue=
+        capture(token) { state,key ->
+            val c=state.authority.authenticate(key,project) ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+            if(c.scope!=CredentialScope.Controller(controller) || !state.authority.allows(c,project,Capability.READ) ||
+                !state.authority.workAllows(c,project,WorkPermission.TASK_DISPATCH))throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+            NativeRuntimeAccess(controller,host).sourceIdentity(state,key,project)
+            val work=state.work[project] ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+            if(work.modelVersion!=4)throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+            val row=work.record(WorkFamily.DISPATCH_PLANS,WorkKey.Id(project,planId))
+            val plan=(row.payload as? WDispatchPlanPayload)?.value ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+            if(plan.controllerId!=controller)throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+            val codec=WorkCodec(modelVersion=4)
+            val claims=work.records.values.mapNotNull { row ->
+                (row.payload as? WClaimsPayload)?.value?.let { (row.identity.key as WorkKey.Resource) to it }
+            }.toMap()
+            val entries=plan.entries.map { e -> obj("preparationId" to uuid(e.preparationId),"startId" to uuid(e.startId),
+                "taskJSON" to str(codec.encodeRecord(work.record(WorkFamily.TASK_REVISIONS,e.task),true).decodeToString()),
+                "selectionJSON" to str(dispatchPreparationSelection(work,e).decodeToString()),
+                "claimsAvailable" to JBoolean(e.resources.all { resource -> claims.entries.none { (other,claim) ->
+                    claim.state!="free" && (other==resource || resource in claim.incompatible || other in claims[resource]?.incompatible.orEmpty()) } }),
+                "futureReady" to JBoolean(e.futureDependencies.isNotEmpty() && e.futureDependencies.all { chooseDispatchResult(work,it) is DispatchResultChoice.Selected })) }
+            val active=work.records.values.filter { (it.payload as? WAssignmentsPayload)?.value?.let { a ->
+                a.intendedExecution.controllerId==controller && a.state !in setOf("completed","replaced") }==true }
+            workRequire(active.size<=256,WorkProblem.INCOMPLETE_HANDOFF)
+            val attempts=work.records.values.filter { (it.payload as? WDispatchAttemptPayload)?.value?.plan?.identity==row.identity }
+            workRequire(attempts.size<=1024,WorkProblem.INCOMPLETE_HANDOFF)
+            obj("formatVersion" to num(1),"basis" to state.basis.json(),"planJSON" to str(codec.encodeRecord(row,true).decodeToString()),
+                "entries" to JArray(entries),"activeAssignments" to JArray(active.map { str(codec.encodeRecord(it,true).decodeToString()) }),
+                "attemptsJSON" to JArray(attempts.map { str(codec.encodeRecord(it,true).decodeToString()) }))
+        }
     @Synchronized internal fun nativePreparationContext(token:String,project:UUID,controller:UUID,host:UUID,subject:WAssignmentSubject):JsonValue=
         capture(token) { state,key -> NativePreparationContext.read(state,key,project,controller,host,subject,options.nativeSafety) }
     @Synchronized internal fun nativeInitialContext(token:String,project:UUID,controller:UUID,host:UUID,subject:WAssignmentSubject,binding:WorkReference,intent:UUID):JsonValue=
@@ -297,14 +537,14 @@ internal class H1Application private constructor(private val storeId: UUID,priva
             // Other service OS targets require separately qualified adapters, not POSIX fallbacks.
             if(System.getProperty("os.name")!="Linux")fail(StoreProblem.UNSUPPORTED)
             val app=H1Application(storeId,options)
-            val validated=H1BoundState.checked(storeId,GitOid("sha1","0".repeat(40)),genesis.core,genesis.auth,genesis.work,options.app.limits)
+            val validated=H1BoundState.checked(storeId,GitOid("sha1","0".repeat(40)),genesis.core,genesis.auth,genesis.work,options.app.limits,options.workModelVersion)
             val files=ArrayList<StoreFile>()
             CoreSnapshotCodec().export(validated.core) { files.add(StoreFile(it.path,it.bytes())) }
             Auth2SnapshotCodec().export(validated.authority).forEach { files.add(StoreFile(it.first,it.second)) }
-            files.add(StoreFile("work/format.json",StrictJson.encode(obj("formatVersion" to num(1),"modelVersion" to num(2)))))
+            files.add(StoreFile("work/format.json",StrictJson.encode(obj("formatVersion" to num(1),"modelVersion" to num(options.workModelVersion)))))
             val bodies=HashSet<Digest>()
             validated.work.values.forEach { work ->
-                work.records.values.forEach { files.add(StoreFile(identityCodec.recordPath(it.identity),WorkCodec().encodeRecord(it,true))) }
+                work.records.values.forEach { files.add(StoreFile(identityCodec.recordPath(it.identity),WorkCodec(modelVersion=options.workModelVersion).encodeRecord(it,true))) }
                 work.bodies.forEach { (digest,body) -> if(bodies.add(digest))files.add(StoreFile("work/bodies/${digest.hex.take(2)}/${digest.hex}.txt",body.bytes())) }
             }
             files.add(StoreFile("policy/format.json",StrictJson.encode(obj("formatVersion" to num(2)))))

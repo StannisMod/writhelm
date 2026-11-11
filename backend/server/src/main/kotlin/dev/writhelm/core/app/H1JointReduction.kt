@@ -14,16 +14,156 @@ import dev.writhelm.core.auth2.WorkOperation as AuthorityOperation
  * A real publisher binding must validate and publish all changes + one receipt together. */
 internal class H1JointCandidate internal constructor(val before: H1BoundState,val core: ApprovalWorkflow,
     val authority: Auth2State,val work: Map<java.util.UUID,WorkState>,val evaluation: Evaluation)
+internal data class H1DispatchPlanCandidate(val effect:WorkEffect,val change:RecordChange)
 
 internal class H1JointReduction {
     private val authCodec=Auth2RecordCodec(auth2Admission())
     private val workCodec=WorkCodec()
+    /** Current-H admission for the prospective combined operation, not a publication or a grant
+     * to reuse an earlier proposal. The controller is derived from the exact canonical plan. */
+    fun authorizeDispatchMaterialization(base:H1BoundState,original:DispatchMaterializationCommand,
+        presented:PresentedCredential):WorkAdmission? {
+        val codec=DispatchMaterializationCommandCodec();val command=codec.decode(codec.encode(original))
+        val work=base.work[command.task.projectId] ?: return null
+        if(work.modelVersion!=4)return null
+        val plan=try { (work.resolve(command.plan).payload as? WDispatchPlanPayload)?.value } catch(_:WorkFault) { null } ?: return null
+        if(plan.entries.none { it.task==command.task && it.futureDependencies.isNotEmpty() })return null
+        val call=WorkInvocation(command.task.projectId,AuthorityOperation.MATERIALIZE_DISPATCH_DEPENDENCY,
+            command.requestKey,null,plan.controllerId,null)
+        return Auth2Policy(base.authority,base.projection).authorizeWork(presented,call)?.takeIf {
+            it.mode==AdmissionMode.EVALUATE && it.binding==null && it.scope==CredentialScope.Controller(plan.controllerId)
+        }
+    }
+    /** Current authority for a closure candidate. Controller identity comes from the retained
+     * materialization's plan, never from the command or an assessment assertion. This does not
+     * qualify the assessor, admit the effect or bypass the separate same-head guard. */
+    fun authorizeDispatchClosure(base:H1BoundState,original:DispatchClosureCommand,presented:PresentedCredential):WorkAdmission? {
+        val codec=DispatchClosureCommandCodec();val command=codec.decode(codec.encode(original))
+        val work=base.work[command.manifest.projectId] ?: return null
+        if(work.modelVersion!=4)return null
+        val materialization=try { (work.resolve(command.materialization).payload as? WDispatchMaterializationPayload)?.value }
+            catch(_:WorkFault) { null } ?: return null
+        val plan=try { (work.resolve(materialization.plan).payload as? WDispatchPlanPayload)?.value }
+            catch(_:WorkFault) { null } ?: return null
+        val call=WorkInvocation(command.manifest.projectId,AuthorityOperation.CLOSE_DISPATCH_INPUTS,command.requestKey,null,plan.controllerId,null)
+        return Auth2Policy(base.authority,base.projection).authorizeWork(presented,call)?.takeIf {
+            it.mode==AdmissionMode.EVALUATE && it.binding==null && it.scope==CredentialScope.Controller(plan.controllerId)
+        }
+    }
+    /** Historian only: recheck retained original credential against H and the plan-derived
+     * controller. This establishes authority, not the assessment's provenance or validity. */
+    fun validateDispatchClosureAuthority(before:H1BoundState,command:DispatchClosureCommand,principal:java.util.UUID,credential:java.util.UUID) {
+        val work=before.work[command.manifest.projectId] ?: fail(StoreProblem.INTEGRITY)
+        val materialization=try { (work.resolve(command.materialization).payload as? WDispatchMaterializationPayload)?.value }
+            catch(_:WorkFault) { null } ?: fail(StoreProblem.INTEGRITY)
+        val plan=try { (work.resolve(materialization.plan).payload as? WDispatchPlanPayload)?.value }
+            catch(_:WorkFault) { null } ?: fail(StoreProblem.INTEGRITY)
+        val call=WorkInvocation(command.manifest.projectId,AuthorityOperation.CLOSE_DISPATCH_INPUTS,command.requestKey,null,plan.controllerId,null)
+        val admission=Auth2Policy(before.authority,before.projection).authorizeHistoricalWork(credential,call) ?: fail(StoreProblem.INTEGRITY)
+        integrity(work.modelVersion==4 && admission.identity.principalId==principal && admission.mode==AdmissionMode.EVALUATE &&
+            admission.binding==null && admission.scope==CredentialScope.Controller(plan.controllerId))
+    }
+    /** Reconstruct a closure's graph and original-H receipt attribution without invoking an
+     * external assessor. This is necessary historical provenance, not assessor qualification. */
+    fun validateDispatchClosureHistory(before:H1BoundState,after:H1BoundState,result:WorkKey.Id,
+        principal:java.util.UUID,credential:java.util.UUID,fingerprint:Digest) {
+        integrity(before.storeId==after.storeId)
+        val h=before.work[result.projectId] ?: fail(StoreProblem.INTEGRITY)
+        val c=after.work[result.projectId] ?: fail(StoreProblem.INTEGRITY)
+        val record=try { c.record(WorkFamily.DISPATCH_CLOSURES,result) } catch(_:WorkFault) { fail(StoreProblem.INTEGRITY) }
+        val retained=record.payload as? WDispatchClosurePayload ?: fail(StoreProblem.INTEGRITY)
+        val command=retained.value
+        integrity(command.requestKey==result.id && command.manifest.projectId==result.projectId &&
+            DispatchClosureCommandCodec().fingerprint(command)==fingerprint)
+        validateDispatchClosureAuthority(before,command,principal,credential)
+        val materialization=try { (h.resolve(command.materialization).payload as? WDispatchMaterializationPayload)?.value }
+            catch(_:WorkFault) { null } ?: fail(StoreProblem.INTEGRITY)
+        val inventory=try {
+            val task=h.task(materialization.newTask)
+            PrebindingInputInventory(h.reference(WorkFamily.TASK_REVISIONS,materialization.newTask),
+                h.reference(WorkFamily.INPUT_MANIFESTS,materialization.manifest),
+                task.dependencies.map { it.selectedResult ?: fail(StoreProblem.INTEGRITY) })
+        } catch(_:WorkFault) { fail(StoreProblem.INTEGRITY) }
+        integrity(closureAttributionMatches(before,result.projectId,inventory,principal,retained))
+        try { validateDispatchClosureEdge(h,c,WorkGitOid(before.basis.algorithm,before.basis.hex),command) }
+        catch(_:WorkFault) { fail(StoreProblem.INTEGRITY) }
+    }
+    /** Unpublished candidate only. No service endpoint installs a qualification provider yet.
+     * The caller must publish and audit all changes and the receipt atomically at this same H. */
+    fun dispatchClosure(base:H1BoundState,original:DispatchClosureCommand,presented:PresentedCredential,
+        observations:H1ObservedFacts,qualification:ClosureAssessmentQualification):WorkEffect {
+        val command=DispatchClosureCommandCodec().let { it.decode(it.encode(original)) }
+        val admission=authorizeDispatchClosure(base,command,presented) ?: fail(StoreProblem.DENIED)
+        workRequire(observations.basis==base.basis,WorkProblem.STALE_GENERATION)
+        val assessment=verifiedDispatchClosureAssessment(base,command,observations.facts,admission.identity.principalId,qualification)
+            ?: throw WorkFault(WorkProblem.BLOCKED_INPUT)
+        val work=base.work.getValue(command.manifest.projectId)
+        val materialization=(work.resolve(command.materialization).payload as WDispatchMaterializationPayload).value
+        val plan=(work.resolve(materialization.plan).payload as WDispatchPlanPayload).value
+        val actor=WorkExecutionInput(admission.identity.principalId,admission.credentialId,plan.controllerId,null,null)
+        return reduceDispatchClosure(work,WorkGitOid(base.basis.algorithm,base.basis.hex),actor,observations.facts,command,assessment)
+    }
+    /** Model4 candidate only: current-H credential/grants are checked before constructing an
+     * effect. Not registered as a wire command, journal operation or production publisher. */
+    fun dispatchPlan(base:H1BoundState,original:DispatchPlanCommand,presented:PresentedCredential):H1DispatchPlanCandidate {
+        val codec=DispatchPlanCommandCodec();val command=codec.decode(codec.encode(original));val plan=command.plan
+        val call=WorkInvocation(plan.projectId,AuthorityOperation.RECORD_DISPATCH_PLAN,command.requestKey,null,plan.controllerId,null)
+        val admission=Auth2Policy(base.authority,base.projection).authorizeWork(presented,call) ?: fail(StoreProblem.DENIED)
+        integrity(admission.mode==AdmissionMode.EVALUATE && admission.binding==null)
+        val state=base.work[plan.projectId] ?: fail(StoreProblem.DENIED)
+        val actor=WorkExecutionInput(admission.identity.principalId,admission.credentialId,plan.controllerId,null,null)
+        val effect=recordDispatchPlan(state,actor,plan)
+        val work=frozenMap(base.work+(plan.projectId to effect.after))
+        Auth2State.checked(base.storeId,headBasis(base.basis),base.authority.records(),base.authority.policy,h1WorkProjection(base.basis,work,4))
+        val record=effect.after.records.getValue(effect.result)
+        val recordCodec=WorkCodec(modelVersion=4)
+        val change=RecordChange(RecordKey("work",record.identity.family.tag,StrictJson.decode(identityCodec.encodeKey(record.identity.key))),recordCodec.encodeRecord(record))
+        return H1DispatchPlanCandidate(effect,change)
+    }
+    fun dispatchAttempt(base:H1BoundState,original:DispatchAttemptCommand,presented:PresentedCredential):H1DispatchPlanCandidate {
+        val codec=DispatchAttemptCommandCodec();val command=codec.decode(codec.encode(original));val attempt=command.attempt
+        val reserve=(attempt.reservation.operation as CReserveAssignmentOperation).value
+        val call=WorkInvocation(attempt.reservation.projectId,AuthorityOperation.BIND_DISPATCH_ATTEMPT,command.requestKey,null,reserve.intendedExecution.controllerId,null)
+        val admission=Auth2Policy(base.authority,base.projection).authorizeWork(presented,call) ?: fail(StoreProblem.DENIED)
+        val originalAdmission=authorizeWork(base,attempt.reservation,presented) ?: fail(StoreProblem.DENIED)
+        integrity(admission.mode==AdmissionMode.EVALUATE && originalAdmission.mode==AdmissionMode.EVALUATE &&
+            admission.identity.principalId==originalAdmission.identity.principalId && admission.credentialId==originalAdmission.credentialId)
+        val state=base.work[attempt.reservation.projectId] ?: fail(StoreProblem.DENIED)
+        val actor=WorkExecutionInput(admission.identity.principalId,admission.credentialId,reserve.intendedExecution.controllerId,null,null)
+        val effect=bindDispatchAttempt(state,actor,attempt)
+        val record=effect.after.records.getValue(effect.result)
+        val change=RecordChange(RecordKey("work",record.identity.family.tag,StrictJson.decode(identityCodec.encodeKey(record.identity.key))),WorkCodec(modelVersion=4).encodeRecord(record))
+        return H1DispatchPlanCandidate(effect,change)
+    }
+    /** Historical graph-edge validation for the future publisher. Reconstruct exact command
+     * semantics from C and recheck the retained original credential at H; this does not
+     * establish publication or replace Git's receipt/write-descriptor validation. */
+    fun validateDispatchPlanEdge(before:H1BoundState,after:H1BoundState,principalId:java.util.UUID,requestKey:java.util.UUID,
+        credentialId:java.util.UUID,fingerprint:Digest,result:WorkKey.Id) {
+        val h=before.work[result.projectId] ?: fail(StoreProblem.INTEGRITY)
+        val c=after.work[result.projectId] ?: fail(StoreProblem.INTEGRITY)
+        integrity(h.modelVersion==4 && c.modelVersion==4 && before.storeId==after.storeId)
+        val record=c.record(WorkFamily.DISPATCH_PLANS,result)
+        val plan=(record.payload as? WDispatchPlanPayload)?.value ?: fail(StoreProblem.INTEGRITY)
+        val command=DispatchPlanCommand(requestKey,plan)
+        integrity(DispatchPlanCommandCodec().fingerprint(command)==fingerprint)
+        val call=WorkInvocation(result.projectId,AuthorityOperation.RECORD_DISPATCH_PLAN,requestKey,null,plan.controllerId,null)
+        val admission=Auth2Policy(before.authority,before.projection).authorizeHistoricalWork(credentialId,call) ?: fail(StoreProblem.INTEGRITY)
+        integrity(admission.identity.principalId==principalId && admission.mode==AdmissionMode.EVALUATE && admission.binding==null)
+        val actor=WorkExecutionInput(principalId,credentialId,plan.controllerId,null,null)
+        val expected=try { recordDispatchPlan(h,actor,plan) } catch(_:WorkFault) { fail(StoreProblem.INTEGRITY) }
+        integrity(expected.result==record.identity && expected.after.records==c.records && expected.after.bodies==c.bodies)
+    }
     /** Actual closed codecs, not generic StoreCommand admission or a new binding per request. */
     fun canonicalize(bytes: ByteArray): ByteArray {
         val value=StrictJson.decodeWorkCommand(bytes,JsonLimits(bytes=2*1024*1024,stringBytes=65536,depth=32,collection=1024,tokens=100000),1024*1024)
         val f=value.fields("formatVersion","requestKey","projectId","operation","payload")
         if(f.getValue("formatVersion").long()!=3L)fail(StoreProblem.UNSUPPORTED)
-        return if(f.getValue("operation").string() in H1Catalog.authOperations) Auth3CommandCodec().let { it.encode(it.decode(bytes)) }
+        return if(f.getValue("operation").string()=="close_dispatch_inputs") DispatchClosureCommandCodec().let { it.encode(it.decode(bytes)) }
+        else if(f.getValue("operation").string()=="materialize_dispatch_dependency") DispatchMaterializationCommandCodec().let { it.encode(it.decode(bytes)) }
+        else if(f.getValue("operation").string()=="bind_dispatch_attempt") DispatchAttemptCommandCodec().let { it.encode(it.decode(bytes)) }
+        else if(f.getValue("operation").string()=="record_dispatch_plan") DispatchPlanCommandCodec().let { it.encode(it.decode(bytes)) }
+        else if(f.getValue("operation").string() in H1Catalog.authOperations) Auth3CommandCodec().let { it.encode(it.decode(bytes)) }
         else workCodec.encodeCommand(workCodec.decodeCommand(bytes))
     }
     fun invocation(command: WorkCommand): WorkInvocation {
@@ -178,14 +318,15 @@ internal class H1JointReduction {
                         enrollment.expectedAssignmentGeneration,enrollment.assignment.executionGeneration,a.task,a.intendedExecution,a.reviewSubjects,enrollment.delegationId))
                     integrity(effect.before===before)
                     work=frozenMap(work+(e.projectId to effect.after))
-                    enrollment.verifyApplied(corePolicy(core.snapshot(8192)),h1WorkProjection(base.basis,work))
+                    enrollment.verifyApplied(corePolicy(core.snapshot(8192)),h1WorkProjection(base.basis,work,before.modelVersion))
                     changes+=workChanges(effect)
                     val grant=obj("principalId" to uuid(e.principalId),"projectId" to uuid(e.projectId))
                     changes+=RecordChange(RecordKey("core","grants",grant),StrictJson.encode(CoreRecordCodec.envelope("grants",grant,
                         obj("capabilities" to JArray(listOf(str("READ")))))))
                 }
                 integrity((command.payload is Auth3Payload.RegisterDelegation)==(transition.enrollmentEffects!=null))
-                val authority=Auth2State.checked(base.storeId,headBasis(base.basis),transition.candidate.records(),corePolicy(core.snapshot(8192)),h1WorkProjection(base.basis,work))
+                val authority=Auth2State.checked(base.storeId,headBasis(base.basis),transition.candidate.records(),corePolicy(core.snapshot(8192)),
+                    h1WorkProjection(base.basis,work,work[command.projectId]?.modelVersion ?: 2))
                 changes+=authChanges(base.authority,authority)
                 val outcome=Auth3OutcomeCodec.decode(Auth3OutcomeCodec.encode(transition)) as Auth3Outcome.Success
                 val result=if(outcome.replacedCredentialId==null)uuid(outcome.resultId) else obj("credentialId" to uuid(outcome.resultId),"replacedCredentialId" to uuid(outcome.replacedCredentialId))
@@ -348,7 +489,7 @@ internal class H1JointReduction {
                 }
             }
             val work=frozenMap(base.work+(command.projectId to effect.after))
-            val authority=Auth2State.checked(base.storeId,headBasis(base.basis),auth.records(),base.authority.policy,h1WorkProjection(base.basis,work))
+            val authority=Auth2State.checked(base.storeId,headBasis(base.basis),auth.records(),base.authority.policy,h1WorkProjection(base.basis,work,state.modelVersion))
             val result=effect.after.records.getValue(effect.result)
             val resultKey=StrictJson.decode(identityCodec.encodeKey(result.identity.key))
             val outcome=LogicalOutcome.Success(command.operation.name,obj("key" to resultKey,
@@ -377,7 +518,7 @@ internal class H1ObservedFacts(val basis: GitOid,facts: WorkExternalFacts,qualif
     init {
         var entries=qualifiedProfiles.size.toLong()+facts.knowledgeSources.size+facts.approvedDecisions.size+facts.retainedSnapshots.size+
             facts.native.size+facts.sourceCuts.size+facts.targets.size+facts.completedAssignments.size+facts.isolatedAssignments.size+
-            facts.verifiedPackets.size+facts.registeredExecutions.size+facts.integrations.size+facts.submittedDiffs.size
+            facts.verifiedPackets.size+facts.prebindingClosures.size+facts.registeredExecutions.size+facts.integrations.size+facts.submittedDiffs.size
         if(entries>16384)refuse(CodecProblem.RESOURCE_UNAVAILABLE)
         fun add(n: Int) { if(n>16384-entries)refuse(CodecProblem.RESOURCE_UNAVAILABLE);entries+=n }
         facts.native.values.forEach { add(it.sources.size) }
@@ -395,7 +536,7 @@ internal class H1ObservedFacts(val basis: GitOid,facts: WorkExternalFacts,qualif
         retainedSnapshots=frozenSet(facts.retainedSnapshots),native=frozenMap(facts.native.mapValues { it.value.copy(sources=frozenList(it.value.sources)) }),
         sourceCuts=frozenMap(facts.sourceCuts.mapValues { it.value.copy(messages=frozenList(it.value.messages)) }),targets=frozenSet(facts.targets),
         completedAssignments=frozenSet(facts.completedAssignments),isolatedAssignments=frozenSet(facts.isolatedAssignments),
-        verifiedPackets=frozenSet(facts.verifiedPackets),registeredExecutions=frozenMap(facts.registeredExecutions),
+        verifiedPackets=frozenSet(facts.verifiedPackets),prebindingClosures=frozenSet(facts.prebindingClosures),registeredExecutions=frozenMap(facts.registeredExecutions),
         integrations=frozenMap(facts.integrations.mapValues { (_,v) -> v.copy(evidence=frozenList(v.evidence),observations=frozenList(v.observations),pending=frozenList(v.pending)) }),
         submittedDiffs=frozenSet(facts.submittedDiffs.map { it.copy(artifacts=frozenList(it.artifacts)) }),
         model2=facts.model2.copy(controllers=frozenMap(facts.model2.controllers),observedEvidence=frozenSet(facts.model2.observedEvidence),

@@ -13,7 +13,11 @@ internal enum class WorkOperation(val tag: String, val permission: WorkPermissio
     CREATE_TASK_REVISION("create_task_revision",WorkPermission.TASK_PLAN), SET_TASK_HEAD("set_task_head",WorkPermission.TASK_PLAN),
     PIN_INPUT_MANIFEST("pin_input_manifest",WorkPermission.TASK_PLAN), CREATE_PROFILE("create_profile",WorkPermission.TASK_PLAN),
     REVISE_VERIFICATION_PLAN("revise_verification_plan",WorkPermission.TASK_PLAN), REVISE_APPLICABILITY("revise_applicability",WorkPermission.TASK_PLAN),
-    UPDATE_PLAN("update_plan",WorkPermission.TASK_PLAN), RESERVE_ASSIGNMENT("reserve_assignment",WorkPermission.TASK_DISPATCH),
+    UPDATE_PLAN("update_plan",WorkPermission.TASK_PLAN), RECORD_DISPATCH_PLAN("record_dispatch_plan",WorkPermission.TASK_PLAN),
+    BIND_DISPATCH_ATTEMPT("bind_dispatch_attempt",WorkPermission.TASK_PLAN),
+    MATERIALIZE_DISPATCH_DEPENDENCY("materialize_dispatch_dependency",WorkPermission.TASK_PLAN),
+    CLOSE_DISPATCH_INPUTS("close_dispatch_inputs",WorkPermission.TASK_PLAN),
+    RESERVE_ASSIGNMENT("reserve_assignment",WorkPermission.TASK_DISPATCH),
     BIND_ASSIGNMENT("bind_assignment",WorkPermission.TASK_DISPATCH), REQUEST_NATIVE_TRANSITION("request_native_transition",WorkPermission.TASK_DISPATCH),
     OBSERVE_NATIVE_TRANSITION("observe_native_transition",WorkPermission.TASK_DISPATCH), RECORD_RECOVERY("record_recovery",WorkPermission.TASK_DISPATCH),
     REBIND_ASSIGNMENT("rebind_assignment",WorkPermission.TASK_DISPATCH), COMPLETE_ASSIGNMENT("complete_assignment",WorkPermission.TASK_DISPATCH),
@@ -70,6 +74,9 @@ internal class Auth2Policy(private val state: Auth2State, private val work: Auth
                 (state.controller(c,call.projectId)!=call.controllerId || call.controllerId==null || call.assignment!=null)) return null
             if(call.operation==WorkOperation.RESERVE_ASSIGNMENT &&
                 (call.controllerId==null || state.controller(c,call.projectId)!=call.controllerId)) return null
+            if(call.operation in setOf(WorkOperation.RECORD_DISPATCH_PLAN,WorkOperation.BIND_DISPATCH_ATTEMPT,WorkOperation.MATERIALIZE_DISPATCH_DEPENDENCY,WorkOperation.CLOSE_DISPATCH_INPUTS) &&
+                (call.controllerId==null || call.assignment!=null || state.controller(c,call.projectId)!=call.controllerId ||
+                    !state.workAllows(c,call.projectId,WorkPermission.TASK_DISPATCH))) return null
             // A planner's task plan has null owner; cannot adopt a worker's plan through TASK_PLAN.
             if(call.operation==WorkOperation.UPDATE_PLAN && call.planOwner!=null) return null
             return admission(c,call,AdmissionMode.EVALUATE,null)

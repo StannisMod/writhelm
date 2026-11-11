@@ -9,7 +9,10 @@ import * as fs from "node:fs/promises"
 const invalid = (): never => { throw new Error("invalid exact work JSON/origin") }
 const exact = (raw: string) => exactJSON(raw, invalid)
 
-export interface WorkRequestCustody { retain(bindingIdentity: string, requestKey: string, raw: string): Promise<string> }
+export interface WorkRequestCustody {
+  retain(bindingIdentity: string, requestKey: string, raw: string): Promise<string>
+  retainWithStatus?(bindingIdentity:string,requestKey:string,raw:string):Promise<{raw:string;fresh:boolean}>
+}
 /** Operational original-command custody, not canonical work/authority. Explicit Linux adapter;
  * never installs a profile or selects a default directory. Raw bearer secrets are not stored. */
 export class LinuxWorkRequestCustody implements WorkRequestCustody {
@@ -19,6 +22,9 @@ export class LinuxWorkRequestCustody implements WorkRequestCustody {
   }
   async requireOutside(work: string): Promise<void> { await this.storage.requireOutside(work) }
   async retain(bindingIdentity: string, requestKey: string, raw: string): Promise<string> {
+    return (await this.retainWithStatus(bindingIdentity,requestKey,raw)).raw
+  }
+  async retainWithStatus(bindingIdentity:string,requestKey:string,raw:string):Promise<{raw:string;fresh:boolean}> {
     if (!/^[0-9a-f-]{36}$/.test(requestKey)) throw new Error("unqualified request custody")
     await this.storage.initialize()
     // Do not interpret an older retained layout as an empty new store and dispatch again.
@@ -27,8 +33,8 @@ export class LinuxWorkRequestCustody implements WorkRequestCustody {
       throw new Error("unrecognized or unresolved request custody layout")
     // Private operational format only. Retain exact command bytes under an unambiguous scoped
     // identity; shared storage enforces ancestor/owner/link rules before any publication.
-    await this.storage.retain("work-request", JSON.stringify([bindingIdentity, requestKey]), raw)
-    return raw
+    const fresh=await this.storage.retain("work-request", JSON.stringify([bindingIdentity, requestKey]), raw)
+    return {raw,fresh}
   }
 }
 
@@ -38,7 +44,7 @@ export class LinuxWorkRequestCustody implements WorkRequestCustody {
 export interface BoundWorkChannel {
   readonly projectID: string
   readonly scope: "controller" | "assignment"
-  send(route: "commands" | "reads", rawJSON: string, signal: AbortSignal): Promise<string>
+  send(route: "commands" | "reads", rawJSON: string, signal: AbortSignal, beforeDispatch?:(raw:string,fresh:boolean)=>Promise<void>): Promise<string>
 }
 export interface NativeWorkCredentialResolver {
   resolve(actual: Pick<ToolContext, "sessionID" | "messageID" | "id" | "signal">): Promise<BoundWorkChannel | undefined>
@@ -70,6 +76,18 @@ export function boundedDelegationEnrollmentChannel(projectID:string,origin:strin
   return boundedChannel(projectID,"controller",origin,token,4*1024*1024,custody,bindingIdentity,
     new Set(["register_delegation"]),new Set(),"3",fetcher)
 }
+/** Private controller-owned plan attempt binding; never exposed as a generic model tool. */
+export function boundedDispatchAttemptChannel(projectID:string,origin:string,token:string,custody:WorkRequestCustody,
+  bindingIdentity:string,fetcher:typeof fetch=fetch):BoundWorkChannel {
+  return boundedChannel(projectID,"controller",origin,token,4*1024*1024,custody,bindingIdentity,
+    new Set(["bind_dispatch_attempt"]),new Set(),"3",fetcher)
+}
+/** Internal controller-only atomic materialization; not a generic model tool. */
+export function boundedDispatchMaterializationChannel(projectID:string,origin:string,token:string,custody:WorkRequestCustody,
+  bindingIdentity:string,fetcher:typeof fetch=fetch):BoundWorkChannel {
+  return boundedChannel(projectID,"controller",origin,token,4*1024*1024,custody,bindingIdentity,
+    new Set(["materialize_dispatch_dependency"]),new Set(),"3",fetcher)
+}
 
 function boundedChannel(projectID: string, scope: "controller" | "assignment", origin: string, token: string,
   maxReplyBytes: number, custody: WorkRequestCustody, bindingIdentity: string, commands: ReadonlySet<string>,reads: ReadonlySet<string>,
@@ -77,13 +95,18 @@ function boundedChannel(projectID: string, scope: "controller" | "assignment", o
   exactLoopback(origin, invalid)
   if (!["controller", "assignment"].includes(scope) || !token.startsWith("wh1.") || maxReplyBytes < 1024 || maxReplyBytes > 4 * 1024 * 1024)
     throw new Error("unqualified bounded work channel")
-  return Object.freeze({ projectID, scope, async send(route: "commands" | "reads", rawJSON: string, signal: AbortSignal) {
+  return Object.freeze({ projectID, scope, async send(route: "commands" | "reads", rawJSON: string, signal: AbortSignal,beforeDispatch?:(raw:string,fresh:boolean)=>Promise<void>) {
     if (signal.aborted) throw new Error("work request cancelled before dispatch")
     const parsed = exact(rawJSON)
     if (parsed.projectId !== projectID || !(route === "commands" ? commands : reads).has(parsed.operation)) throw new Error("work channel scope mismatch")
     if (route === "commands") {
       if (!isLosslessNumber(parsed.formatVersion) || parsed.formatVersion.value !== commandVersion || typeof parsed.requestKey !== "string") throw new Error("closed command version required")
-      rawJSON = await custody.retain(bindingIdentity + ":" + parsed.operation, parsed.requestKey, rawJSON)
+      if(beforeDispatch){
+        if(!custody.retainWithStatus)throw new Error("original custody status unavailable")
+        const retained=await custody.retainWithStatus(bindingIdentity+":"+parsed.operation,parsed.requestKey,rawJSON)
+        rawJSON=retained.raw
+        await beforeDispatch(rawJSON,retained.fresh)
+      }else rawJSON = await custody.retain(bindingIdentity + ":" + parsed.operation, parsed.requestKey, rawJSON)
     }
     const response = await fetcher(origin + "/api/v1/" + route, { method: "POST", redirect: "error", credentials: "omit",
       headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: rawJSON,
@@ -106,7 +129,8 @@ function boundedChannel(projectID: string, scope: "controller" | "assignment", o
 
 /** Source-qualified actual native work tools. Catalog is convenience only: service current-H policy
  * still denies captured stale executables/credentials. No extra MCP or owner-key tool is registered. */
-export async function registerConnectedWorkTools(ctx: Plugin.Context, resolver: NativeWorkCredentialResolver) {
+export async function registerConnectedWorkTools(ctx: Plugin.Context, resolver: NativeWorkCredentialResolver,
+  beforeResult?:(raw:string,fresh:boolean,actual:ToolContext)=>Promise<void>) {
   const registration = await ctx.tool.transform(editor => {
     for (const [name, route, allowed, version, cap] of [
       ["writhelm_work_command", "commands", connectedCommands, "3", 2 * 1024 * 1024],
@@ -125,7 +149,9 @@ export async function registerConnectedWorkTools(ctx: Plugin.Context, resolver: 
           const channel = await resolver.resolve(actual)
           if (!channel || !["controller", "assignment"].includes(channel.scope) || parsed.projectId !== channel.projectID)
             throw new Error("unbound/stale native work scope")
-          const reply = await channel.send(route, raw, actual.signal)
+          const before=route==="commands"&&parsed.operation==="submit_result"&&beforeResult
+            ? (retained:string,fresh:boolean)=>beforeResult(retained,fresh,actual) : undefined
+          const reply = await channel.send(route, raw, actual.signal,before)
           return { content: reply }
         } catch { return { content: '{"kind":"error","code":"WORK_UNAVAILABLE_OR_FORBIDDEN"}' } } // no secret-bearing exception text
       }, options: { codemode: false } })

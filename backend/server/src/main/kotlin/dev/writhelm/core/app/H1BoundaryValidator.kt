@@ -39,9 +39,33 @@ internal class H1BoundaryValidator(private val cache: H1SnapshotCache) {
         } else cache.load(candidateC) // bounded historical cold restore, never normal-body rescanning
         validateAuthPreservation(before,after,receipt)
         validateRecordedActors(after,receipt)
+        if(receipt.identity.operation=="bind_dispatch_attempt" && receipt.outcome is LogicalOutcome.Success)
+            validateDispatchAttempt(parentH,before,after,receipt)
         if(receipt.identity.operation in H1Catalog.workOperations)validateWork(before,after,credential,receipt)
         else validateAuthority(before,after,credential,receipt)
         cache.remember(after)
+    }
+    private fun validateDispatchAttempt(parent:StoreSnapshot,h:H1BoundState,c:H1BoundState,r:Receipt) {
+        val result=H1Catalog.result(r.identity.operation,(r.outcome as LogicalOutcome.Success).result)
+        val key=identityCodec.decodeKey(WorkFamily.DISPATCH_ATTEMPTS,StrictJson.encode(result.key)) as WorkKey.Id
+        val after=c.work.getValue(r.identity.projectId)
+        val attempt=(after.record(WorkFamily.DISPATCH_ATTEMPTS,key).payload as? WDispatchAttemptPayload)?.value ?: fail(StoreProblem.INTEGRITY)
+        val command=DispatchAttemptCommand(r.identity.requestKey,attempt)
+        integrity(DispatchAttemptCommandCodec().fingerprint(command).hex==r.fingerprint)
+        val reserve=attempt.reservation
+        val ctl=(reserve.operation as CReserveAssignmentOperation).value.intendedExecution.controllerId
+        val originalCall=WorkInvocation(r.identity.projectId,AuthorityOperation.RESERVE_ASSIGNMENT,reserve.requestKey,null,ctl,null)
+        val original=Auth2Policy(h.authority,h.projection).authorizeHistoricalWork(r.authenticatedByCredentialId,originalCall) ?: fail(StoreProblem.INTEGRITY)
+        integrity(original.identity.principalId==r.identity.principalId && original.mode==AdmissionMode.EVALUATE)
+        val reservationIdentity=dev.writhelm.core.store.CommandIdentity(r.identity.principalId,r.identity.projectId,"reserve_assignment",reserve.requestKey)
+        integrity(parent.file(reservationIdentity.path)==null && r.writes.size==1 && r.writes.single().path==result.path)
+        attempt.previous?.let { ref ->
+            val previous=(h.work.getValue(r.identity.projectId).resolve(ref).payload as? WDispatchAttemptPayload)?.value ?: fail(StoreProblem.INTEGRITY)
+            integrity(definitiveReservationRefusal(parent,h.storeId,r.identity.principalId,previous.reservation))
+        }
+        val actor=WorkExecutionInput(r.identity.principalId,r.authenticatedByCredentialId,ctl,null,null)
+        val expected=try { bindDispatchAttempt(h.work.getValue(r.identity.projectId),actor,attempt) } catch(_:WorkFault) { fail(StoreProblem.INTEGRITY) }
+        integrity(expected.result==WorkRecordIdentity(WorkFamily.DISPATCH_ATTEMPTS,key) && expected.after.records==after.records && expected.after.bodies==after.bodies)
     }
     private fun validateRecordedActors(c: H1BoundState,r: Receipt) {
         val actor=r.identity.principalId
@@ -134,6 +158,42 @@ internal class H1BoundaryValidator(private val cache: H1SnapshotCache) {
             val key=identityCodec.decodeKey(family,StrictJson.encode(result.key))
             c.work.getValue(r.identity.projectId).record(family,key)
         }
+        if(operation==AuthorityOperation.RECORD_DISPATCH_PLAN && record!=null) {
+            integrity(r.writes.size==1 && r.writes.single().path==identityCodec.recordPath(record.identity))
+            H1JointReduction().validateDispatchPlanEdge(h,c,r.identity.principalId,r.identity.requestKey,r.authenticatedByCredentialId,
+                Digest.parse(r.fingerprint),record.identity.key as WorkKey.Id)
+        }
+        if(operation==AuthorityOperation.MATERIALIZE_DISPATCH_DEPENDENCY && record!=null) {
+            val command=(record.payload as? WDispatchMaterializationPayload)?.value ?: fail(StoreProblem.INTEGRITY)
+            integrity(command.requestKey==r.identity.requestKey && DispatchMaterializationCommandCodec().fingerprint(command).hex==r.fingerprint)
+            val paths=setOf(record.identity,WorkRecordIdentity(WorkFamily.TASK_REVISIONS,command.newTask),
+                WorkRecordIdentity(WorkFamily.VERIFICATION_PLANS,command.verificationPlan),WorkRecordIdentity(WorkFamily.INPUT_MANIFESTS,command.manifest))
+                .map { identityCodec.recordPath(it) }.toSet()
+            integrity(r.writes.map { it.path }.toSet()==paths && r.writes.all { it.beforeDigest==null && it.afterDigest!=null })
+            try { validateDispatchMaterializationEdge(h.work.getValue(r.identity.projectId),c.work.getValue(r.identity.projectId),command) }
+            catch(_:WorkFault) { fail(StoreProblem.INTEGRITY) }
+            val task=h.work.getValue(r.identity.projectId).task(command.task)
+            integrity(task.approvedDesign.all { h.core.validationDecisionApproved(it) })
+        }
+        if(operation==AuthorityOperation.PIN_INPUT_MANIFEST && record!=null && h.work.getValue(r.identity.projectId).modelVersion==4) {
+            val manifest=(record.payload as? WInputManifestsPayload)?.value ?: fail(StoreProblem.INTEGRITY)
+            if(manifest.knownGaps.isEmpty())integrity(h.work.getValue(r.identity.projectId).records.values.none {
+                (it.payload as? WDispatchMaterializationPayload)?.value?.newTask==manifest.task
+            })
+        }
+        // No successful closure is admitted until independent qualification provenance has a
+        // durable historical verifier. Rejected receipts remain auditable through normal policy.
+        if(operation==AuthorityOperation.CLOSE_DISPATCH_INPUTS) {
+            if(record!=null) {
+                val key=record.identity.key as WorkKey.Id
+                integrity(key.id==r.identity.requestKey && r.writes.map { it.path }.toSet()==setOf(
+                    identityCodec.recordPath(record.identity),identityCodec.recordPath(WorkRecordIdentity(WorkFamily.INPUT_MANIFESTS,
+                        (record.payload as? WDispatchClosurePayload)?.value?.manifest ?: fail(StoreProblem.INTEGRITY)))) &&
+                    r.writes.all { it.beforeDigest==null && it.afterDigest!=null })
+                H1JointReduction().validateDispatchClosureHistory(h,c,key,r.identity.principalId,r.authenticatedByCredentialId,Digest.parse(r.fingerprint))
+            }
+            integrity(record==null && r.writes.isEmpty())
+        }
         if(record!=null && operation in setOf(AuthorityOperation.REQUEST_NATIVE_TRANSITION,AuthorityOperation.OBSERVE_NATIVE_TRANSITION)) {
             val write=r.writes.single { it.path==identityCodec.recordPath(record.identity) }
             integrity((write.beforeDigest==null)==(operation==AuthorityOperation.REQUEST_NATIVE_TRANSITION))
@@ -193,7 +253,7 @@ internal class H1BoundaryValidator(private val cache: H1SnapshotCache) {
         val subject=delegated?.let { AssignmentSubject(it.projectId,it.assignmentId,it.executionGeneration) }
         if(owner!=null)integrity(owner==subject || delegated==null && operation!=AuthorityOperation.UPDATE_PLAN)
         val controller=(record?.identity?.key as? WorkKey.ControllerContinuation)?.controllerId
-            ?: if(operation in setOf(AuthorityOperation.RESERVE_ASSIGNMENT,AuthorityOperation.RECORD_CONTROLLER_CONTINUATION))
+            ?: if(operation in setOf(AuthorityOperation.RESERVE_ASSIGNMENT,AuthorityOperation.RECORD_CONTROLLER_CONTINUATION,AuthorityOperation.RECORD_DISPATCH_PLAN,AuthorityOperation.BIND_DISPATCH_ATTEMPT,AuthorityOperation.MATERIALIZE_DISPATCH_DEPENDENCY,AuthorityOperation.CLOSE_DISPATCH_INPUTS))
                 (actor.scope as? CredentialScope.Controller)?.controllerId else null
         val call=WorkInvocation(r.identity.projectId,operation,r.identity.requestKey,subject,controller,
             if(operation==AuthorityOperation.UPDATE_PLAN)owner else null)

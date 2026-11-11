@@ -166,8 +166,11 @@ Given an ordinary user task involving multiple related design and implementation
 4. The planner assembles the applicable results in its own candidate branch, preserving unrelated
    changes and surfacing conflicts. There is no manual copying of diffs or conversation transcripts.
    The exact assembled candidate is distinguishable from a formally accepted or published result.
-5. All required implementation tasks finish and the applicable tests pass on that assembled
-   candidate. Only then does a fresh-context independent non-author review the complete relevant
+5. All required implementation tasks finish and the harness automatically runs the applicable planned
+   tests on the assembled candidate, without manual launches or copying results. The system links each
+   actual run, command, outcome and artifact to that exact candidate. Failed or unknown runs do not
+   pass; safe reruns retain their own identities and do not erase prior outcomes. Only after the
+   applicable tests pass does a fresh-context independent non-author review the complete relevant
    change set against the formed contracts. Any requirement-linked blocking finding is handled;
    changed subjects receive appropriate verification rather than inherited approval.
 

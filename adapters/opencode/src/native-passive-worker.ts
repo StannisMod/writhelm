@@ -178,4 +178,29 @@ export class NativePassiveWorkers {
       nativeJSON:contextJSON({sessionID:native.id,directory:native.location.directory,parentID:native.parentID??null,
         fork:native.fork??null,revert:native.revert??null,agent:native.agent,model:native.model,permissions:native.permissions,metadata:native.metadata})}
   }
+  /** Private read-only observation from the original retained worktree identity. The requested
+   * result is a selector, never authority or proof of retention; no service callback occurs here. */
+  async resultDiffProof(assignmentId:string,generation:string,resultJSON:string,signal:AbortSignal){
+    if(!uuidPattern.test(assignmentId)||generation!=="0"||typeof resultJSON!=="string"||signal.aborted)nativeUnavailable()
+    const raw=await this.custody.read("worker-preparation",contextJSON([assignmentId,generation]))
+    if(raw===undefined)return null
+    const job=closedObject(parse(raw),["formatVersion","assignmentId","generation","intentId","workspaceId","intendedExecution","taskJSON","profileJSON",
+      "baseJSON","snapshotJSON","artifactLocatorId","epoch","directory","agent","model"])
+    if(job.formatVersion?.value!=="1"||job.assignmentId!==assignmentId||job.generation!==generation||
+      !uuidPattern.test(job.workspaceId)||job.directory!==path.join(this.config.worktreeParent,job.workspaceId)||
+      job.intendedExecution?.controllerId!==this.config.controllerId||job.intendedExecution?.nativeHostId!==this.config.hostId||
+      job.intendedExecution?.template!=="executor-v1"||typeof job.baseJSON!=="string"||typeof job.taskJSON!=="string")nativeUnavailable()
+    const base=parse(job.baseJSON) as GitSnapshot,result=parse(resultJSON) as GitSnapshot
+    if(base.repositoryId!==this.config.repositoryId||result.repositoryId!==this.config.repositoryId||!uuidPattern.test(result.retainedLocatorId))nativeUnavailable()
+    const observed=await this.git.observeDiff(job.directory,this.config.sourceRoot,base,result,signal)
+    return {formatVersion:1,preparationJSON:raw,resultJSON:contextJSON(result),diffSha256:observed.sha256,diffByteLength:observed.byteLength}
+  }
+  /** Observation for a retention attempt, not authority or proof of writer fencing. */
+  async resultRetentionWorktree(assignmentId:string,generation:string,executionId:string,resultJSON:string,signal:AbortSignal):Promise<boolean>{
+    if(!uuidPattern.test(executionId))nativeUnavailable()
+    const proof=await this.resultDiffProof(assignmentId,generation,resultJSON,signal)
+    if(!proof)return false
+    const job=parse(proof.preparationJSON)
+    return job.intendedExecution?.executionId===executionId && proof.resultJSON===contextJSON(parse(resultJSON))
+  }
 }

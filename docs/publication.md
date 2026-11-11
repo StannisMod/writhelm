@@ -694,3 +694,21 @@ The validator checks original identities, generation edges, claimed actor/contro
 not a Git journal auditor: actual receipts, historical/current authority, readiness and native
 capture/fencing facts still require separate original-H verification before model3 publication.
 No store writer, service route or primary applying tool is enabled; no new paths or private data.
+
+## H1 dispatcher and result checkpoint scope P37 — local commit requested
+
+For the owner's requested local checkpoint of current H1 work, admit only these two newly authored
+Writhelm source paths and their exact ignore exceptions, alongside changes to already admitted source,
+synthetic tests and existing documentation:
+
+```text
+adapters/opencode/src/native-result-retention.ts
+backend/server/src/main/kotlin/dev/writhelm/core/work/CandidateInputs.kt
+```
+
+They are AGPL-3.0-only project code: an unqualified native result-retention coordinator and a
+read-only candidate-input selector. Their purpose is to keep the dependent checkpoint source complete;
+neither is evidence of production retention, candidate assembly or H1 acceptance. No external source,
+private task or session history, runtime store, actual result/worktree, credentials, logs, generated
+output or toolchain is admitted. Local task records remain ignored. This is not authorization for a
+public push, live model call, installed host or pilot. Exact staged contents require review.

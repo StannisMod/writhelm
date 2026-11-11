@@ -11,14 +11,14 @@ import dev.writhelm.core.workflow.*
 import java.util.UUID
 
 /** Actual CORE-derived authority facts. This is never another persisted work registry. */
-internal fun h1WorkProjection(basis: GitOid, projects: Map<UUID,WorkState>): AuthWorkProjection {
+internal fun h1WorkProjection(basis: GitOid, projects: Map<UUID,WorkState>,expectedWorkModel:Int=2): AuthWorkProjection {
+    integrity(expectedWorkModel in setOf(2,4))
     val facts=ArrayList<AssignmentAuthorityFacts>()
     projects.forEach { (project,work) ->
         integrity(work.projectId==project)
-        // H1 AUTH2 projection is frozen for native model2 assignments. Model3 mechanical
-        // controller authority/author closure is not a native delegation and cannot be silently
-        // skipped, cast, or published through this legacy projection.
-        integrity(work.modelVersion==2)
+        // Model4 adds dispatch-plan metadata but keeps native model2 assignments. Model3
+        // mechanical authority is different and must not be silently projected as native.
+        integrity(work.modelVersion==expectedWorkModel)
         work.records.values.filter { it.identity.family==WorkFamily.ASSIGNMENTS }.forEach { record ->
             val assignmentId=(record.identity.key as WorkKey.Id).id
             val current=work.assignmentProjection(assignmentId)
@@ -122,7 +122,7 @@ private fun validateWorkCore(snapshot: WorkflowSnapshot,records: Sequence<WorkRe
     records.forEach { record ->
         val start=edges
         val project=record.identity.key.projectId
-        workRecordFacts(record).knowledge.forEach { reference ->
+        workRecordFacts(record,if(record.payload is WDispatchPlanPayload || record.payload is WDispatchAttemptPayload || record.payload is WDispatchMaterializationPayload || record.payload is WDispatchClosurePayload)4 else 2).knowledge.forEach { reference ->
             charge()
             integrity(reference.revision.document.projectId==project)
             integrity(when(reference) { is ClauseReference -> catalog.read(reference) is ReadResult.Found;is ContextReference -> catalog.read(reference) is ReadResult.Found })
@@ -152,7 +152,8 @@ internal class H1BoundState private constructor(val storeId: UUID,val basis: Git
          * Validating C does not establish that C was published. */
         internal fun validatedCandidate(candidate: H1JointCandidate,basis: GitOid,entryBytes: Long,limits: AppLimits,receipt: Receipt): H1BoundState {
             if(entryBytes !in 1..limits.entryBytes)fail(StoreProblem.UNAVAILABLE)
-            val projection=h1WorkProjection(basis,candidate.work)
+            val versions=candidate.work.values.map { it.modelVersion }.toSet();integrity(versions.size<=1)
+            val projection=h1WorkProjection(basis,candidate.work,versions.singleOrNull() ?: 2)
             val snapshot=candidate.core.snapshot(limits.coreRecords)
             val changed=candidate.evaluation.changes.asSequence().filter { it.key.namespace=="work" && it.key.family!="bodies" }.map { change ->
                 val family=H1Catalog.family(change.key.family)
@@ -172,8 +173,8 @@ internal class H1BoundState private constructor(val storeId: UUID,val basis: Git
             return H1BoundState(candidate.before.storeId,basis,candidate.core,authority,candidate.work,projection,entryBytes,frozenMap(evidence),coreLinkCosts)
         }
         fun checked(store: UUID,basis: GitOid,core: ApprovalWorkflow,auth: Collection<Auth2Record>,work: Map<UUID,WorkState>,
-            limits: AppLimits=AppLimits()): H1BoundState {
-            val projection=h1WorkProjection(basis,work)
+            limits: AppLimits=AppLimits(),expectedWorkModel:Int=2): H1BoundState {
+            val projection=h1WorkProjection(basis,work,expectedWorkModel)
             val snapshot=core.snapshot(limits.coreRecords)
             val coreLinkCosts=validateWorkCore(snapshot,work.values.asSequence().flatMap { it.records.values.asSequence() },limits)
             val authority=Auth2State.checked(store,headBasis(basis),auth,corePolicy(snapshot),projection)
@@ -189,7 +190,7 @@ internal class H1BoundState private constructor(val storeId: UUID,val basis: Git
             fun add(n: Long) { if(n>limits.entryBytes-bytes)fail(StoreProblem.UNAVAILABLE);bytes+=n }
             CoreSnapshotCodec().export(core) { add(it.bytes().size.toLong()) }
             add(codec.header().size.toLong());auth.forEach { add(codec.encode(it).size.toLong()) }
-            add(StrictJson.encode(obj("formatVersion" to num(1),"modelVersion" to num(2))).size.toLong())
+            add(StrictJson.encode(obj("formatVersion" to num(1),"modelVersion" to num(expectedWorkModel))).size.toLong())
             // WorkState's per-project count includes bodies. Charge shared content only once globally.
             val bodies=HashSet<Digest>();var records=0L
             work.values.forEach { s ->
@@ -203,7 +204,8 @@ internal class H1BoundState private constructor(val storeId: UUID,val basis: Git
         }
         /** Full cold restore only. Ordinary publication must carry forward its validated candidate;
          * do not invoke this loader for every command or rescan historical bodies. */
-        fun restore(store: UUID,snapshot: StoreSnapshot,limits: AppLimits=AppLimits()): H1BoundState {
+        fun restore(store: UUID,snapshot: StoreSnapshot,limits: AppLimits=AppLimits(),expectedWorkModel:Int=2): H1BoundState {
+            integrity(expectedWorkModel in setOf(2,4))
             var consumed=0L
             fun read(path: String): ByteArray {
                 val bytes=snapshot.file(path) ?: fail(StoreProblem.INTEGRITY)
@@ -218,8 +220,8 @@ internal class H1BoundState private constructor(val storeId: UUID,val basis: Git
                 if(auth.size>=limits.authRecords)fail(StoreProblem.UNAVAILABLE);auth.add(authCodec.decode(read(path),path))
             }
             val workHeader=StrictJson.decode(read("work/format.json")).fields("formatVersion","modelVersion")
-            version(workHeader.getValue("formatVersion"));integrity(workHeader.getValue("modelVersion").long()==2L)
-            val records=ArrayList<WorkRecord>();val bodies=LinkedHashMap<Digest,Utf8Content>();val codec=WorkCodec()
+            version(workHeader.getValue("formatVersion"));integrity(workHeader.getValue("modelVersion").long()==expectedWorkModel.toLong())
+            val records=ArrayList<WorkRecord>();val bodies=LinkedHashMap<Digest,Utf8Content>();val codec=WorkCodec(modelVersion=expectedWorkModel)
             snapshot.entries.keys.filter { it.startsWith("work/") && it!="work/format.json" }.sorted().forEach { path ->
                 val bytes=read(path)
                 if(path.startsWith("work/bodies/")) {
@@ -243,9 +245,9 @@ internal class H1BoundState private constructor(val storeId: UUID,val basis: Git
             val approvals=historicalCoreApprovals(core.snapshot(limits.coreRecords),limits.affectedEdges)
             val projects=enrolledProjects.associateWith { project ->
                 WorkState.restore(project,grouped[project].orEmpty(),bodies.values,WorkGraphBudget(aggregateBytes=limits.entryBytes),
-                    approvedPlanChanges=approvals.filter { it.revision.document.projectId==project }.toSet())
+                    approvedPlanChanges=approvals.filter { it.revision.document.projectId==project }.toSet(),modelVersion=expectedWorkModel)
             }
-            val valid=checked(store,snapshot.oid,core,auth,projects,limits)
+            val valid=checked(store,snapshot.oid,core,auth,projects,limits,expectedWorkModel)
             val evidence=LinkedHashMap<WorkRecordIdentity,H1EvidenceAttribution>();var receipts=0
             snapshot.entries.keys.filter { it.startsWith("commands/receipts/") }.sorted().forEach { path ->
                 if(++receipts>4096)fail(StoreProblem.UNAVAILABLE)
@@ -262,9 +264,9 @@ internal class H1BoundState private constructor(val storeId: UUID,val basis: Git
 }
 /** Derived validated states only. A caller must supply an actual store-captured snapshot, never an
  * arbitrary OID label; cache membership is neither publication proof nor request authorization. */
-internal class H1SnapshotCache(private val store: UUID,private val limits: AppLimits=AppLimits()) {
+internal class H1SnapshotCache(private val store: UUID,private val limits: AppLimits=AppLimits(),private val modelVersion:Int=2) {
     private val states=LinkedHashMap<GitOid,H1BoundState>(4,0.75f,true)
-    fun load(snapshot: StoreSnapshot): H1BoundState = states[snapshot.oid] ?: H1BoundState.restore(store,snapshot,limits).also { remember(it) }
+    fun load(snapshot: StoreSnapshot): H1BoundState = states[snapshot.oid] ?: H1BoundState.restore(store,snapshot,limits,modelVersion).also { remember(it) }
     internal fun remember(state: H1BoundState) {
         integrity(state.storeId==store)
         states[state.basis]=state

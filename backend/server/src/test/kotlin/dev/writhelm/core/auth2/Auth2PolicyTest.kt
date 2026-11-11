@@ -38,8 +38,16 @@ class Auth2PolicyTest {
         val current=Path.of(requireNotNull(System.getenv("WRITHELM_COORDINATION_READY_ROOT")))
         val matrix=(StrictJson.decode(Files.readAllBytes(current.resolve("operation-role-state-matrix.json")),
             JsonLimits(bytes=8*1024*1024,collection=4096,tokens=500000)) as JObject).entries
+        val additions=setOf(WorkOperation.RECORD_DISPATCH_PLAN,WorkOperation.BIND_DISPATCH_ATTEMPT,
+            WorkOperation.MATERIALIZE_DISPATCH_DEPENDENCY,WorkOperation.CLOSE_DISPATCH_INPUTS)
+        assertTrue(matrix.keys.containsAll(WorkOperation.entries.filter { it !in additions }.map { it.tag }))
         return DelegationTemplate.entries.flatMap { template -> AssignmentPhase.entries.flatMap { phase -> WorkOperation.entries.map { op ->
             dynamicTest("${template.tag}-${phase.name}-${op.tag}") {
+                if(op in additions) {
+                    val f=Fixture(template);val s=f.registered(phase)
+                    assertNull(token(workerKey) { Auth2Policy(s,f.work(phase,1,true)).authorizeWork(it,f.call(op)) })
+                    return@dynamicTest
+                }
                 val row=matrix.getValue(op.tag)
                 val allowed=template.tag in row.member("assignmentTemplates").list().map { it.string() }
                 val evaluates=phase.name.lowercase() in row.member("assignmentNewEffectStates").list().map { it.string() }

@@ -3,11 +3,12 @@ import * as fs from "node:fs/promises"
 import path from "node:path"
 import { createHash } from "node:crypto"
 import { execFile } from "node:child_process"
-import { nativeUnavailable } from "./native-runtime-client.js"
+import { nativeUnavailable, uuidPattern } from "./native-runtime-client.js"
 
 export type GitObject = Readonly<{algorithm:"sha1"|"sha256";hex:string}>
 export type GitSnapshot = Readonly<{repositoryId:string;commit:GitObject;tree:GitObject;dirtyContentDigest:null;retainedLocatorId:string}>
 export type GitExecutable = Readonly<{path:string;sha256:string}>
+export type GitDiffObservation = Readonly<{base:GitSnapshot;result:GitSnapshot;sha256:string;byteLength:number;bytes:Buffer}>
 
 /** Explicit Linux READ-only Git/work-area witness, not a portable executable default or a writer
  * fence. No checkout/reset/clean, shell, filters, credentials or source-tree mutation here. */
@@ -38,6 +39,30 @@ export class LinuxGitWitness {
     const text=async(args:string[])=>(await this.run(source,args,signal)).toString("utf8").trim()
     if(await text(["rev-parse","--show-object-format"])!==snapshot.commit.algorithm||
       await text(["rev-parse","--verify",snapshot.commit.hex+"^{tree}"])!==snapshot.tree.hex)nativeUnavailable()
+  }
+  /** Checks one locator-specific ref and exact commit/tree. Observation alone is neither an
+   * authorized retention operation nor a durability, assignment-binding or fencing guarantee. */
+  async verifyRetainedRef(source:string,snapshot:GitSnapshot,signal:AbortSignal):Promise<void>{
+    if(!uuidPattern.test(snapshot.retainedLocatorId))nativeUnavailable()
+    await this.qualifySource(source,snapshot,signal)
+    const ref=`refs/writhelm/results/${snapshot.retainedLocatorId}`
+    const actual=(await this.run(source,["show-ref","--verify","--hash",ref],signal)).toString("utf8").trim()
+    if(actual!==snapshot.commit.hex)nativeUnavailable()
+    await this.qualifySource(source,snapshot,signal)
+    const after=(await this.run(source,["show-ref","--verify","--hash",ref],signal)).toString("utf8").trim()
+    if(after!==actual)nativeUnavailable()
+  }
+  /** Low-level, uninstalled one-shot effect. The caller MUST first durably record the exact
+   * authorized operation and MUST NOT retry this effect after dispatch, including on error or
+   * timeout. A read of the ref alone is not an operation receipt. Does not establish retention,
+   * assignment authority, synchronization, process fencing or recovery qualification. */
+  async pinRetainedRefOnce(source:string,snapshot:GitSnapshot,signal:AbortSignal):Promise<void>{
+    if(!uuidPattern.test(snapshot.retainedLocatorId)||signal.aborted)nativeUnavailable()
+    await this.qualifySource(source,snapshot,signal)
+    const ref=`refs/writhelm/results/${snapshot.retainedLocatorId}`
+    const zero="0".repeat(snapshot.commit.algorithm==="sha1"?40:64)
+    await this.run(source,["update-ref",ref,snapshot.commit.hex,zero],signal)
+    await this.verifyRetainedRef(source,snapshot,signal)
   }
   async verify(directory:string,source:string,snapshot:GitSnapshot,signal:AbortSignal):Promise<void>{
     if(await fs.realpath(directory)!==directory||await fs.realpath(source)!==source||snapshot.dirtyContentDigest!==null||!snapshot.commit)nativeUnavailable()
@@ -96,5 +121,22 @@ export class LinuxGitWitness {
     await walk("");if(expected.size)nativeUnavailable()
     if(await text(directory,["rev-parse","--verify","HEAD^{commit}"])!==snapshot.commit.hex||
       await text(directory,["rev-parse","--verify","HEAD^{tree}"])!==snapshot.tree.hex)nativeUnavailable()
+  }
+  /** Linux read-only observation of a clean worktree and the exact Git-generated binary diff.
+   * This is not writer fencing, a service fact, result acceptance, or proof of semantic scope. */
+  async observeDiff(directory:string,source:string,base:GitSnapshot,result:GitSnapshot,signal:AbortSignal):Promise<GitDiffObservation>{
+    const capture=(s:GitSnapshot):GitSnapshot=>Object.freeze({...s,commit:Object.freeze({...s.commit}),tree:Object.freeze({...s.tree})})
+    base=capture(base);result=capture(result)
+    if(base.repositoryId!==result.repositoryId||base.commit.algorithm!==result.commit.algorithm||
+      base.dirtyContentDigest!==null||result.dirtyContentDigest!==null)nativeUnavailable()
+    await this.qualifySource(source,base,signal)
+    await this.qualifySource(source,result,signal)
+    await this.verify(directory,source,result,signal)
+    await this.run(directory,["merge-base","--is-ancestor",base.commit.hex,result.commit.hex],signal)
+    const bytes=await this.run(directory,["diff","--no-ext-diff","--no-textconv","--no-color","--binary","--full-index",
+      base.commit.hex,result.commit.hex,"--"],signal)
+    await this.verify(directory,source,result,signal)
+    const captured=Buffer.from(bytes),sha256=createHash("sha256").update(captured).digest("hex")
+    return Object.freeze({base,result,sha256,byteLength:captured.length,get bytes(){return Buffer.from(captured)}})
   }
 }

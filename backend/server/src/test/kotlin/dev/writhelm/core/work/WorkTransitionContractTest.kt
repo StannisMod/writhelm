@@ -74,6 +74,36 @@ private class WorkFixture {
 }
 
 class WorkTransitionContractTest {
+    @Test fun `model4 attempt binds exact original reservation to its plan`() {
+        val f=WorkFixture();val graph=WorkState.restore(f.project,f.state.records.values,f.state.bodies.values,modelVersion=4)
+        val entry=DispatchPlanEntry(f.taskKey,f.manifest,f.profileKey,listOf(f.resource),uid(300),uid(301))
+        val plan=DispatchPlanCandidate(f.project,uid(302),f.controller,listOf(entry))
+        val planned=recordDispatchPlan(graph,f.actor,plan).after
+        val planRef=planned.reference(WorkFamily.DISPATCH_PLANS,WorkKey.Id(f.project,plan.planId))
+        val reserve=CReserveAssignment(f.assignmentId,f.taskKey,f.manifest,f.profileKey,f.workspace,listOf(CReserveAssignmentResourcesItem(f.resource,null)),
+            emptyList(),f.intentId,uid(23),emptyList(),f.executionIntent)
+        val command=f.command(CReserveAssignmentOperation(reserve))
+        val attempt=DispatchAttempt(planRef,entry.preparationId,command)
+        val row=WorkRecord(WorkRecordIdentity(WorkFamily.DISPATCH_ATTEMPTS,WorkKey.Id(f.project,entry.preparationId)),WDispatchAttemptPayload(attempt))
+        val codec=WorkCodec(modelVersion=4);val bytes=codec.encodeRecord(row)
+        assertEquals(row,codec.decodeRecord(bytes));assertFailsWith<CodecFault> { WorkCodec().decodeRecord(bytes) }
+        assertEquals(WorkProblem.INVALID_BINDING,assertFailsWith<WorkFault> { bindDispatchAttempt(planned,f.worker,attempt) }.problem)
+        val bound=bindDispatchAttempt(planned,f.actor,attempt).after
+        assertEquals(attempt,(bound.records.getValue(row.identity).payload as WDispatchAttemptPayload).value)
+        val anotherPlan=plan.copy(planId=uid(305),entries=listOf(entry.copy(preparationId=uid(306),startId=uid(307))))
+        val otherGraph=recordDispatchPlan(bound,f.actor,anotherPlan).after
+        val otherRef=otherGraph.reference(WorkFamily.DISPATCH_PLANS,WorkKey.Id(f.project,anotherPlan.planId))
+        val reused=attempt.copy(plan=otherRef,preparationId=uid(306))
+        assertEquals(WorkProblem.INVALID_REFERENCE,assertFailsWith<WorkFault> { bindDispatchAttempt(otherGraph,f.actor,reused) }.problem)
+        val reserved=f.reducer.reduce(bound,command,f.actor,f.facts)
+        assertEquals("held",(reserved.after.record(WorkFamily.CLAIMS,f.resource).payload as WClaimsPayload).value.state)
+        assertEquals(attempt,(WorkState.restore(f.project,reserved.after.records.values,reserved.after.bodies.values,modelVersion=4).records.getValue(row.identity).payload as WDispatchAttemptPayload).value)
+        val tampered=attempt.copy(reservation=command.copy(operation=CReserveAssignmentOperation(reserve.copy(workspaceId=uid(303),profile=f.profileKey.copy(profileId=uid(304))))))
+        val bad=row.copy(payload=WDispatchAttemptPayload(tampered))
+        assertFailsWith<CodecFault> { WorkState.restore(f.project,planned.records.values+bad,planned.bodies.values,modelVersion=4) }
+        val already=f.reducer.reduce(planned,command,f.actor,f.facts).after
+        assertEquals(WorkProblem.INVALID_TRANSITION,assertFailsWith<WorkFault> { bindDispatchAttempt(already,f.actor,attempt) }.problem)
+    }
     @Test fun `WORK S09 S10 reserve register passive bind start are separate atomic effects`() {
         val f=WorkFixture();val effect=f.reserve()
         assertEquals(3,effect.changedRecords.size)
@@ -128,6 +158,223 @@ class WorkTransitionContractTest {
         assertEquals(CodecProblem.INVALID_GRAPH,assertFailsWith<CodecFault> { restore(missing) }.problem)
         assertEquals(CodecProblem.INVALID_GRAPH,assertFailsWith<CodecFault> { restore(missing.copy(dependencies=listOf(WDependency(f.taskKey,"implemented",null,emptyList(),"cycle")))) }.problem)
         assertEquals(CodecProblem.INVALID_SHAPE,assertFailsWith<CodecFault> { restore(f.task.copy(executionProfile=f.profileKey.copy(projectId=uid(99)))) }.problem)
+    }
+    @Test fun `unselected dependency does not become selected when producer result arrives`() {
+        val f=WorkFixture();f.active();val result=f.result()
+        fun make(revision:Long,selected:WorkReference?):Pair<WorkState,WorkReference> {
+            val task=f.taskKey.copy(taskId=uid(191),revision=revision)
+            val plan=WorkKey.Revision(f.project,uid(192),revision)
+            val manifest=WorkKey.Id(f.project,uid(193+revision.toInt()))
+            val dependency=WDependency(f.taskKey,"implemented",selected,emptyList(),"explicit producer selection")
+            fun record(key:WorkKey,payload:WorkPayload)=WorkRecord(WorkRecordIdentity(payloadFamily(payload),key),payload)
+            val mr=record(manifest,WInputManifestsPayload(WInputManifests(task,f.base,f.appKey,listOf(WManifestItem(f.source,true,"exact input",emptyList())),f.source,emptyList())))
+            val ref=WorkReference(mr.identity,f.codec.digest(mr))
+            val rows=f.state.records.values+listOf(record(task,WTaskRevisionsPayload(f.task.copy(dependencies=listOf(dependency),verificationPlan=plan))),
+                record(plan,WVerificationPlansPayload(f.plan.copy(task=task))),mr)
+            return WorkState.restore(f.project,rows,f.state.bodies.values) to ref
+        }
+        fun reserve(state:WorkState,manifest:WorkReference):WorkEffect {
+            val task=(state.resolve(manifest).payload as WInputManifestsPayload).value.task
+            val cmd=CReserveAssignment(uid(197),task,manifest,f.profileKey,uid(198),listOf(CReserveAssignmentResourcesItem(WorkKey.Resource(f.project,uid(199)),null)),
+                emptyList(),uid(200),uid(201),emptyList(),f.executionIntent.copy(executionId=uid(202),nativeSessionId="ses_dependent"))
+            return f.reducer.reduce(state,f.command(CReserveAssignmentOperation(cmd)),f.actor,f.facts.copy(verifiedPackets=f.facts.verifiedPackets+manifest))
+        }
+        val (unselected,missing)=make(0,null)
+        assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> { reserve(unselected,missing) }.problem)
+        val (selectedLegacy,selectedManifest)=make(1,result)
+        val selected4=WorkState.restore(f.project,selectedLegacy.records.values,selectedLegacy.bodies.values,modelVersion=4)
+        val selectedTask=(selected4.resolve(selectedManifest).payload as WInputManifestsPayload).value.task
+        val reservation=CReserveAssignment(uid(197),selectedTask,selectedManifest,f.profileKey,uid(198),
+            listOf(CReserveAssignmentResourcesItem(WorkKey.Resource(f.project,uid(199)),null)),emptyList(),uid(200),uid(201),emptyList(),
+            f.executionIntent.copy(executionId=uid(202),nativeSessionId="ses_dependent"))
+        val reserveCommand=f.command(CReserveAssignmentOperation(reservation));val fingerprint=f.codec.fingerprint(reserveCommand)
+        val early=WorkPrebindingClosure(selectedTask,selectedManifest,f.profileKey,fingerprint)
+        val inputOnly=f.facts.copy(verifiedPackets=emptySet(),prebindingClosures=setOf(early))
+        assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> {
+            f.reducer.reduce(selected4,reserveCommand,f.actor,inputOnly.copy(prebindingClosures=emptySet()))
+        }.problem)
+        assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> {
+            f.reducer.reduce(selected4,reserveCommand,f.actor,inputOnly.copy(prebindingClosures=setOf(early.copy(fingerprint=Digest.of(byteArrayOf(7))))))
+        }.problem)
+        assertEquals("reserved",f.reducer.reduce(selected4,reserveCommand,f.actor,inputOnly).after.assignment(reservation.assignmentId).state)
+        // The early proof is reservation-only. Binding/start still requires the existing full packet.
+        assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> {
+            WorkTransaction(selected4,f.actor,inputOnly,reserveCommand.requestKey,fingerprint).taskReady(selectedTask,selectedManifest,f.profileKey)
+        }.problem)
+        assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> {
+            f.reducer.reduce(selectedLegacy,reserveCommand,f.actor,inputOnly)
+        }.problem)
+        val model4=WorkState.restore(f.project,unselected.records.values,unselected.bodies.values,modelVersion=4)
+        val consumer=(model4.resolve(missing).payload as WInputManifestsPayload).value.task
+        val entry=DispatchPlanEntry(consumer,missing,f.profileKey,listOf(WorkKey.Resource(f.project,uid(199))),uid(203),uid(204),
+            listOf(DispatchFutureDependency(f.taskKey,"implemented")))
+        val planned=DispatchPlanCandidate(f.project,uid(205),f.controller,listOf(entry))
+        val effect=recordDispatchPlan(model4,f.actor,planned)
+        assertEquals(DispatchResultChoice.Selected(result),chooseDispatchResult(effect.after,entry.futureDependencies.single()))
+        val planRef=effect.after.reference(WorkFamily.DISPATCH_PLANS,WorkKey.Id(f.project,planned.planId))
+        val newTask=consumer.copy(revision=1);val verify=WorkKey.Revision(f.project,uid(210),0);val newManifest=WorkKey.Id(f.project,uid(211))
+        val codec=DispatchMaterializationCommandCodec()
+        val command=DispatchMaterializationCommand(uid(212),planRef,consumer,newTask,verify,newManifest)
+        val encoded=codec.encode(command)
+        assertEquals(command,codec.decode(encoded));assertContentEquals(encoded,codec.encode(codec.decode(encoded)))
+        assertEquals(codec.fingerprint(command),codec.fingerprint(command.copy(requestKey=uid(213))))
+        assertNotEquals(codec.fingerprint(command),codec.fingerprint(command.copy(manifest=WorkKey.Id(f.project,uid(214)))))
+        assertFailsWith<CodecFault> { codec.encode(command.copy(newTask=consumer.copy(revision=2))) }
+        assertFailsWith<CodecFault> { codec.encode(command.copy(manifest=WorkKey.Id(uid(999),uid(211)))) }
+        assertFailsWith<CodecFault> { WorkCodec().decodeCommand(encoded) }
+        val materialized=materializeDispatchDependency(effect.after,planRef,consumer,newTask,verify,newManifest)
+        assertEquals(result,materialized.task.data.dependencies.single().selectedResult)
+        assertEquals(f.base,materialized.task.data.base)
+        assertTrue(materialized.manifest.data.knownGaps.any { it.contains("closure assessment") })
+        assertTrue(materialized.manifest.data.items.any { it.mandatory && (it.source as? WSourceVariant2Value)?.value?.reference==result })
+        val revised=f.reducer.reduce(effect.after,f.command(CCreateTaskRevisionOperation(materialized.task)),f.actor,f.facts)
+        val pinned=f.reducer.reduce(revised.after,f.command(CPinInputManifestOperation(materialized.manifest)),f.actor,f.facts)
+        val atomic=reduceDispatchMaterialization(effect.after,f.actor,f.facts,planRef,consumer,newTask,verify,newManifest,uid(212))
+        val withProvenance=reduceDispatchMaterialization(effect.after,f.actor,f.facts,codec.decode(encoded))
+        assertEquals(atomic.after.records,withProvenance.after.records-withProvenance.result)
+        val provenance=withProvenance.after.records.getValue(withProvenance.result)
+        assertEquals(command,(provenance.payload as WDispatchMaterializationPayload).value)
+        val inventory=prebindingMaterializedInputs(withProvenance.after,command.requestKey,f.facts)
+        assertEquals(withProvenance.after.reference(WorkFamily.TASK_REVISIONS,newTask),inventory.task)
+        assertEquals(withProvenance.after.reference(WorkFamily.INPUT_MANIFESTS,newManifest),inventory.manifest)
+        assertEquals(listOf(result),inventory.dependencies)
+        val applicabilityRecord=withProvenance.after.record(WorkFamily.APPLICABILITY,f.appKey)
+        val applicabilityData=(applicabilityRecord.payload as WApplicabilityPayload).value
+        val missingSource=WSourceVariant1Value(WSourceVariant1("artifact",f.snapshot.copy(retainedLocatorId=uid(222))))
+        val changedApplicability=applicabilityRecord.copy(payload=WApplicabilityPayload(applicabilityData.copy(
+            entries=listOf(WApplicabilityEntry(missingSource,emptyList(),emptyList(),"applicable","required")))))
+        val missingInput=WorkState.restore(f.project,withProvenance.after.records.values.filter { it.identity!=changedApplicability.identity }+
+            changedApplicability,withProvenance.after.bodies.values,modelVersion=4)
+        assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> {
+            prebindingMaterializedInputs(missingInput,command.requestKey,f.facts.copy(retainedSnapshots=f.facts.retainedSnapshots+missingSource.value.artifact))
+        }.problem)
+        assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> { reserve(withProvenance.after,inventory.manifest) }.problem)
+        assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> {
+            prebindingMaterializedInputs(withProvenance.after,command.requestKey,f.facts.copy(retainedSnapshots=emptySet()))
+        }.problem)
+        assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> {
+            prebindingMaterializedInputs(withProvenance.after,command.requestKey,f.facts.copy(submittedDiffs=emptySet()))
+        }.problem)
+        assertFailsWith<WorkFault> { prebindingMaterializedInputs(withProvenance.after,uid(999),f.facts) }
+        // Explicitly synthetic independent assessment: this only exercises construction of an
+        // unpublished proposal; it is not a qualified assessment or authorization to publish.
+        val assessmentSnapshot=f.snapshot.copy(retainedLocatorId=uid(218))
+        val assessmentSource=WSourceVariant1Value(WSourceVariant1("artifact",assessmentSnapshot))
+        val closureFacts=f.facts.copy(retainedSnapshots=f.facts.retainedSnapshots+assessmentSnapshot)
+        val basis=WorkGitOid("sha1","a".repeat(40));val closedKey=WorkKey.Id(f.project,uid(219))
+        val proof=PrebindingClosureAssessment(basis,command.requestKey,inventory,assessmentSource,uid(224),uid(225))
+        assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> {
+            proposeClosedMaterializedManifest(missingInput,basis,command.requestKey,closedKey,
+                closureFacts.copy(retainedSnapshots=closureFacts.retainedSnapshots+missingSource.value.artifact),proof)
+        }.problem)
+        val closureCodec=DispatchClosureCommandCodec()
+        val materializationRef=withProvenance.after.reference(WorkFamily.DISPATCH_MATERIALIZATIONS,WorkKey.Id(f.project,command.requestKey))
+        val closureCommand=DispatchClosureCommand(uid(220),materializationRef,basis,assessmentSource,closedKey)
+        val closureBytes=closureCodec.encode(closureCommand)
+        assertEquals(closureCommand,closureCodec.decode(closureBytes))
+        assertContentEquals(closureBytes,closureCodec.encode(closureCodec.decode(closureBytes)))
+        assertEquals(closureCodec.fingerprint(closureCommand),closureCodec.fingerprint(closureCommand.copy(requestKey=uid(221))))
+        assertNotEquals(closureCodec.fingerprint(closureCommand),closureCodec.fingerprint(closureCommand.copy(expectedHead=WorkGitOid("sha1","b".repeat(40)))))
+        assertFailsWith<CodecFault> { closureCodec.encode(closureCommand.copy(manifest=WorkKey.Id(uid(999),uid(219)))) }
+        assertFailsWith<CodecFault> { WorkCodec().decodeCommand(closureBytes) } // not registered or published
+        val proposal=proposeClosedMaterializedManifest(withProvenance.after,basis,command.requestKey,closedKey,closureFacts,proof)
+        assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> {
+            f.reducer.reduce(withProvenance.after,f.command(CPinInputManifestOperation(proposal)),f.actor,closureFacts)
+        }.problem) // ordinary pin must not bypass the dedicated closure operation
+        val stillGapped=proposal.copy(data=proposal.data.copy(knownGaps=listOf("independent assessment still required")))
+        assertEquals(closedKey,f.reducer.reduce(withProvenance.after,f.command(CPinInputManifestOperation(stillGapped)),f.actor,closureFacts).result.key)
+        assertEquals(newTask,proposal.data.task);assertTrue(proposal.data.knownGaps.isEmpty())
+        assertEquals(assessmentSource,proposal.data.declaredClosureAssessment)
+        assertTrue((withProvenance.after.resolve(inventory.manifest).payload as WInputManifestsPayload).value.knownGaps.isNotEmpty())
+        assertFailsWith<WorkFault> { proposeClosedMaterializedManifest(withProvenance.after,basis,command.requestKey,closedKey,closureFacts,
+            proof.copy(basis=WorkGitOid("sha1","b".repeat(40)))) }
+        assertFailsWith<WorkFault> { proposeClosedMaterializedManifest(withProvenance.after,basis,command.requestKey,closedKey,closureFacts,
+            proof.copy(inputs=inventory.copy(dependencies=emptyList()))) }
+        assertFailsWith<WorkFault> { proposeClosedMaterializedManifest(withProvenance.after,basis,command.requestKey,closedKey,f.facts,proof) }
+        assertEquals(WorkProblem.STALE_GENERATION,assertFailsWith<WorkFault> {
+            reduceDispatchClosure(withProvenance.after,WorkGitOid("sha1","b".repeat(40)),f.actor,closureFacts,closureCommand,proof)
+        }.problem)
+        assertEquals(WorkProblem.INVALID_BINDING,assertFailsWith<WorkFault> {
+            reduceDispatchClosure(withProvenance.after,basis,f.worker,closureFacts,closureCommand,proof)
+        }.problem)
+        val closedEffect=reduceDispatchClosure(withProvenance.after,basis,f.actor,closureFacts,closureCommand,proof)
+        val closureRow=closedEffect.after.records.getValue(closedEffect.result)
+        assertEquals(closureCommand,(closureRow.payload as WDispatchClosurePayload).value)
+        assertEquals(proof.assessor,(closureRow.payload as WDispatchClosurePayload).assessor)
+        assertEquals(proof.delegation,(closureRow.payload as WDispatchClosurePayload).delegation)
+        val model4Codec=WorkCodec(modelVersion=4)
+        assertEquals(closureRow,model4Codec.decodeRecord(model4Codec.encodeRecord(closureRow)))
+        assertFailsWith<CodecFault> { WorkCodec().decodeRecord(model4Codec.encodeRecord(closureRow)) }
+        validateDispatchClosureEdge(withProvenance.after,closedEffect.after,basis,closureCommand)
+        assertFailsWith<WorkFault> { validateDispatchClosureEdge(withProvenance.after,closedEffect.after,
+            WorkGitOid("sha1","b".repeat(40)),closureCommand) }
+        assertFailsWith<WorkFault> { validateDispatchClosureEdge(withProvenance.after,closedEffect.after,basis,
+            closureCommand.copy(requestKey=uid(223))) }
+        val changedManifest=closedEffect.after.record(WorkFamily.INPUT_MANIFESTS,closedKey)
+        assertFailsWith<CodecFault> {
+            WorkState.restore(f.project,closedEffect.after.records.values.filter { it.identity!=changedManifest.identity }+
+                changedManifest.copy(payload=WInputManifestsPayload(proposal.data.copy(knownGaps=listOf("unexpected")))),
+                closedEffect.after.bodies.values,modelVersion=4)
+        }
+        val closedRef=closedEffect.after.reference(WorkFamily.INPUT_MANIFESTS,closedKey)
+        val nextReservation=reservation.copy(task=newTask,manifest=closedRef)
+        val nextCommand=f.command(CReserveAssignmentOperation(nextReservation))
+        val nextFingerprint=f.codec.fingerprint(nextCommand)
+        val verifiedInputs=closureFacts.copy(verifiedPackets=emptySet(),
+            prebindingClosures=setOf(WorkPrebindingClosure(newTask,closedRef,f.profileKey,nextFingerprint)))
+        assertEquals("reserved",f.reducer.reduce(closedEffect.after,nextCommand,f.actor,verifiedInputs).after.assignment(nextReservation.assignmentId).state)
+        assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> {
+            WorkTransaction(closedEffect.after,f.actor,verifiedInputs,nextCommand.requestKey,nextFingerprint).taskReady(newTask,closedRef,f.profileKey)
+        }.problem) // separate full packet is still mandatory after binding
+        validateDispatchMaterializationEdge(effect.after,withProvenance.after,command)
+        val v4=WorkCodec(modelVersion=4);val bytes=v4.encodeRecord(provenance)
+        assertEquals(provenance,v4.decodeRecord(bytes));assertFailsWith<CodecFault> { WorkCodec().decodeRecord(bytes) }
+        assertEquals(withProvenance.after.records,WorkState.restore(f.project,withProvenance.after.records.values,withProvenance.after.bodies.values,modelVersion=4).records)
+        assertEquals(pinned.after.records,atomic.after.records)
+        assertEquals(setOf(WorkFamily.TASK_REVISIONS,WorkFamily.VERIFICATION_PLANS,WorkFamily.INPUT_MANIFESTS),atomic.changedRecords.map { it.identity.family }.toSet())
+        assertEquals(WorkProblem.INVALID_BINDING,assertFailsWith<WorkFault> {
+            reduceDispatchMaterialization(effect.after,f.worker,f.facts,planRef,consumer,newTask,verify,newManifest,uid(212))
+        }.problem)
+        assertEquals(WorkProblem.DUPLICATE_ID,assertFailsWith<WorkFault> {
+            reduceDispatchMaterialization(effect.after,f.actor,f.facts,planRef,consumer,newTask,verify,missing.identity.key as WorkKey.Id,uid(212))
+        }.problem)
+        assertFalse(WorkRecordIdentity(WorkFamily.TASK_REVISIONS,newTask) in effect.after.records)
+        val another=f.result(120)
+        val extra=f.state.records.values.filter { it.identity !in effect.after.records }
+        assertTrue(extra.any { it.identity==another.identity })
+        val ambiguous=WorkState.restore(f.project,effect.after.records.values+extra,effect.after.bodies.values,modelVersion=4)
+        assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> {
+            validateDispatchMaterializationEdge(ambiguous,withProvenance.after,command)
+        }.problem)
+        // A later producer result cannot retroactively invalidate an already recorded exact choice.
+        assertEquals(withProvenance.after.records.size+extra.size,
+            WorkState.restore(f.project,withProvenance.after.records.values+extra,withProvenance.after.bodies.values,modelVersion=4).records.size)
+        assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> {
+            reduceDispatchMaterialization(ambiguous,f.actor,f.facts,codec.decode(encoded))
+        }.problem)
+        assertFalse(WorkRecordIdentity(WorkFamily.TASK_REVISIONS,newTask) in ambiguous.records)
+        assertEquals(WorkProblem.INVALID_REFERENCE,assertFailsWith<WorkFault> {
+            validateDispatchMaterializationEdge(effect.after,withProvenance.after,command.copy(requestKey=uid(215)))
+        }.problem)
+        val newRef=pinned.after.reference(WorkFamily.INPUT_MANIFESTS,newManifest)
+        assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> { reserve(pinned.after,newRef) }.problem)
+        assertEquals(WorkProblem.INVALID_SUBJECT,assertFailsWith<WorkFault> {
+            materializeDispatchDependency(effect.after,planRef,consumer,consumer.copy(revision=2),verify,newManifest)
+        }.problem)
+        val wrong=planned.copy(planId=uid(206),entries=listOf(entry.copy(futureDependencies=listOf(DispatchFutureDependency(consumer,"implemented")))))
+        assertEquals(WorkProblem.INVALID_REFERENCE,assertFailsWith<WorkFault> { recordDispatchPlan(model4,f.actor,wrong) }.problem)
+        val (selected,exact)=make(1,result)
+        assertEquals("reserved",(reserve(selected,exact).after.assignment(uid(197))).state)
+    }
+    @Test fun `future dependency chooses only a unique exact producer result`() {
+        val f=WorkFixture();val rule=DispatchFutureDependency(f.taskKey,"implemented")
+        assertEquals(DispatchResultChoice.Pending,chooseDispatchResult(f.state,rule))
+        f.active();val first=f.result(110)
+        assertEquals(DispatchResultChoice.Selected(first),chooseDispatchResult(f.state,rule))
+        f.result(120)
+        assertEquals(DispatchResultChoice.Ambiguous,chooseDispatchResult(f.state,rule))
+        assertEquals(WorkProblem.INVALID_SUBJECT,assertFailsWith<WorkFault> { chooseDispatchResult(f.state,rule.copy(readiness="accepted")) }.problem)
+        assertEquals(WorkProblem.INVALID_SUBJECT,assertFailsWith<WorkFault> { chooseDispatchResult(f.state,rule.copy(producer=f.taskKey.copy(projectId=uid(999)))) }.problem)
     }
     @Test fun `WORK S04 S35 exact missing body attachments not upload or reupload`() {
         val f=WorkFixture();f.active()

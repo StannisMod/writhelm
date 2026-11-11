@@ -16,7 +16,7 @@ import java.util.Base64
  * only by trusted startup and its separate retained proof, never a command/tool argument. Effects
  * are never retried here. Immutable reconcile deliberately does NOT first retain/re-authorize the
  * envelope: application runtime-facts capture can own the monitor during that call. */
-internal class HttpConnectedNativeControl(origin: String,proof: ByteArray): ConnectedNativeControl,NativeSourceProofControl,NativePreparationProofControl,NativeInitialProofControl,AutoCloseable {
+internal class HttpConnectedNativeControl(origin: String,proof: ByteArray): ConnectedNativeControl,NativeSourceProofControl,NativePreparationProofControl,NativeInitialProofControl,NativeResultDiffRawControl,NativeResultRetentionRawControl,AutoCloseable {
     private val origin=HttpProfile(origin).origin
     private val proof=proof.copyOf().also { require(it.size==32) }
     private val client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER).build()
@@ -52,6 +52,14 @@ internal class HttpConnectedNativeControl(origin: String,proof: ByteArray): Conn
     }catch(_:Exception){null}
     override fun initialProof(intent:java.util.UUID):JsonValue?=try {
         call("initial-proof","intentId" to uuid(intent),maximum=1024*1024,stringMaximum=512*1024)
+    }catch(_:Exception){null}
+    override fun resultDiffProof(assignment:java.util.UUID,generation:Long,result:WSnapshot):JsonValue?=try {
+        call("result-diff-proof","assignmentId" to uuid(assignment),"executionGeneration" to str(generation.toString()),
+            "resultJSON" to str(StrictJson.encode(encodeWSnapshot(result)).decodeToString()),maximum=2*1024*1024,stringMaximum=1024*1024)
+    }catch(_:Exception){null}
+    override fun retentionProof(assignment:java.util.UUID,generation:Long,execution:java.util.UUID,result:WSnapshot):JsonValue?=try {
+        call("result-retention-proof","assignmentId" to uuid(assignment),"executionGeneration" to str(generation.toString()),
+            "executionId" to uuid(execution),"snapshotJSON" to str(StrictJson.encode(encodeWSnapshot(result)).decodeToString()),maximum=65536,stringMaximum=32768)
     }catch(_:Exception){null}
     private fun envelopeCall(operation: String,e: ConnectedEnvelope)=call(operation,"key" to str(key(e)),"digest" to digest(Digest.of(e.bytes())))
     /** Trusted packet provisioner seam for the dependent context stage. Current service digest and

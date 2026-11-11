@@ -150,8 +150,14 @@ The planner checks the bearing factual claims in those reports against the relev
 requirements and targeted evidence; a worker's success assertion alone is not proof. The planner
 brings the applicable results together in its own candidate branch, preserving unrelated work and
 surfacing conflicts. Candidate assembly is not formal acceptance or publication. Once all required
-implementation tasks are done and applicable tests pass on the assembled candidate, a fresh-context
-independent non-author reviews the complete relevant change set against the formed contracts.
+implementation tasks are done, the harness automatically runs the applicable planned tests on the
+assembled candidate, like CI jobs, without requiring the owner to launch or transcribe each run. It
+links the actual commands, outcomes and artifacts to the exact candidate and run; a failed or unknown
+outcome does not count as a pass. Tests can be rerun when their execution is safe to repeat, retaining
+the original outcome and the new run rather than relabelling old evidence. Existing authority,
+external-effect recovery and platform gates still apply; a test name alone does not establish that
+its side effects are repeatable. After applicable tests pass, a fresh-context independent non-author
+reviews the complete relevant change set against the formed contracts.
 Blocking findings require remediation and appropriate verification of the changed subject. A prior
 required gate cannot be moved or waived merely to fit this sequence; final acceptance and integration
 remain separate exact-result decisions under H1-06/07 and the applicable verification plan.

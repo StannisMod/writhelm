@@ -68,12 +68,12 @@ internal class WorkCodec(
     private val bodyBytes: Int=1024*1024,
     internal val modelVersion:Int=2,
 ) {
-    init { require(ordinaryStringBytes>0 && bodyBytes in 1..1024*1024 && modelVersion in setOf(2,3)) }
+    init { require(ordinaryStringBytes>0 && bodyBytes in 1..1024*1024 && modelVersion in setOf(2,3,4)) }
     // Parser/construction ceilings must accommodate either class. The field-sensitive pass below
     // applies the ordinary cap separately; a custom ordinary cap cannot preempt a legal body.
     private val commandParsingLimits=commandLimits.copy(stringBytes=maxOf(ordinaryStringBytes,bodyBytes))
     fun decodeCommand(bytes: ByteArray): WorkCommand {
-        shape(modelVersion==2) // command4 admission is not implemented by this candidate record reader
+        shape(modelVersion in setOf(2,4)) // model4 reuses unchanged legacy commands; no new service admission
         val parsed=StrictJson.decode(bytes,commandParsingLimits)
         fun strings(v: JsonValue,attachment: Boolean=false) {
             when(v) {
@@ -113,6 +113,24 @@ internal class WorkCodec(
     fun decodeRecord(bytes: ByteArray, historical: Boolean=false): WorkRecord {
         val f=StrictJson.decode(bytes,if(historical)historicalLimits else metadataLimits,unavailable=historical)
             .fields("formatVersion","family","key","payload")
+        if(modelVersion==4 && f.getValue("formatVersion").long()==3L) {
+            val family=WorkFamily.entries.firstOrNull { it.tag==f.getValue("family").string() && it in setOf(WorkFamily.DISPATCH_PLANS,WorkFamily.DISPATCH_ATTEMPTS,WorkFamily.DISPATCH_MATERIALIZATIONS,WorkFamily.DISPATCH_CLOSURES) } ?: refuse(CodecProblem.INVALID_SHAPE)
+            val key=identityCodec.decodeKey(family,StrictJson.encode(f.getValue("key"))) as WorkKey.Id
+            val payload=if(family==WorkFamily.DISPATCH_PLANS) {
+                val plan=DispatchPlanCandidateCodec().decode(StrictJson.encode(f.getValue("payload")))
+                shape(plan.projectId==key.projectId && plan.planId==key.id);WDispatchPlanPayload(plan)
+            } else if(family==WorkFamily.DISPATCH_ATTEMPTS) {
+                val attempt=DispatchAttemptCodec().decode(StrictJson.encode(f.getValue("payload")))
+                shape(attempt.reservation.projectId==key.projectId && attempt.preparationId==key.id);WDispatchAttemptPayload(attempt)
+            } else if(family==WorkFamily.DISPATCH_MATERIALIZATIONS) {
+                val command=DispatchMaterializationCommandCodec().decode(StrictJson.encode(f.getValue("payload")))
+                shape(command.task.projectId==key.projectId && command.requestKey==key.id);WDispatchMaterializationPayload(command)
+            } else {
+                val record=decodeDispatchClosureRecord(f.getValue("payload"))
+                shape(record.value.manifest.projectId==key.projectId && record.value.requestKey==key.id);record
+            }
+            return WorkRecord(WorkRecordIdentity(family,key),payload)
+        }
         if(modelVersion==3 && f.getValue("formatVersion").long()==2L) {
             // Candidate model3 admits explicit mechanical shapes only. No arbitrary record2
             // passthrough, descriptor map overlay or implicit upgrade of a legacy selected reader.
@@ -142,6 +160,13 @@ internal class WorkCodec(
         return WorkRecord(id,p)
     }
     fun encodeRecord(v: WorkRecord, historical: Boolean=false): ByteArray {
+        if(v.payload is WDispatchPlanPayload || v.payload is WDispatchAttemptPayload || v.payload is WDispatchMaterializationPayload || v.payload is WDispatchClosurePayload) {
+            shape(modelVersion==4)
+            val lim=if(historical)historicalLimits else metadataLimits
+            val bytes=StrictJson.encode(obj("formatVersion" to JNumber(3),"family" to str(v.identity.family.tag),
+                "key" to StrictJson.decode(identityCodec.encodeKey(v.identity.key)),"payload" to encodeWorkPayload(v.payload)),lim.bytes,unavailable=historical,maxDepth=lim.depth)
+            decodeRecord(bytes,historical);return bytes
+        }
         if(v.payload is WMechanicalProfilesPayload) {
             shape(modelVersion==3)
             val bytes=ExecutionDescriptorCodec().encodeProfile(MechanicalProfileDescriptor(v.identity.key as WorkKey.Profile,v.payload.value),historical)
@@ -178,10 +203,12 @@ internal class WorkCodec(
         if(name=="read_work_body") {
             val b=s.fields("digest","record"); val r=b.getValue("record") as? JObject ?: refuse(CodecProblem.INVALID_SHAPE)
             val family=WorkFamily.entries.firstOrNull { it.tag==r.entries["family"]?.string() } ?: refuse(CodecProblem.INVALID_SHAPE)
+            shape(family !in setOf(WorkFamily.DISPATCH_PLANS,WorkFamily.DISPATCH_ATTEMPTS,WorkFamily.DISPATCH_MATERIALIZATIONS,WorkFamily.DISPATCH_CLOSURES))
             val selector=exact(project,family,r,withFamily=true)
             return WorkRead.Body(project,dev.writhelm.core.codec.digest(b.getValue("digest")),selector)
         }
         val family=WorkFamily.entries.firstOrNull { "read_"+it.tag.replace('-','_')==name } ?: refuse(CodecProblem.INVALID_SHAPE)
+        shape(family !in setOf(WorkFamily.DISPATCH_PLANS,WorkFamily.DISPATCH_ATTEMPTS,WorkFamily.DISPATCH_MATERIALIZATIONS,WorkFamily.DISPATCH_CLOSURES))
         return exact(project,family,s,withFamily=false)
     }
     fun encodeRead(v: WorkRead): ByteArray {

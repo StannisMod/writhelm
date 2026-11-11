@@ -39,7 +39,8 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
         if(ports.h1!=null) {
             integrity(ports.namespaces.keys==setOf("auth","policy","work"))
             if(!StrictJson.encode(ports.namespaces.getValue("auth").header).contentEquals(StrictJson.encode(obj("formatVersion" to num(2),"profileVersion" to num(2)))))fail(StoreProblem.UNSUPPORTED)
-            if(!StrictJson.encode(ports.namespaces.getValue("work").header).contentEquals(StrictJson.encode(obj("formatVersion" to num(1),"modelVersion" to num(2)))))fail(StoreProblem.UNSUPPORTED)
+            val header=ports.namespaces.getValue("work").header
+            if(listOf(2,4).none { StrictJson.encode(header).contentEquals(StrictJson.encode(obj("formatVersion" to num(1),"modelVersion" to num(it))) ) })fail(StoreProblem.UNSUPPORTED)
         }
     }
     private fun header(): JsonValue=obj("formatVersion" to num(1),"storeId" to uuid(storeId),"gitObjectFormat" to str("sha1"),"namespaces" to JObject(expectedNamespaces))
@@ -429,7 +430,9 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
             val value=StrictJson.decode(bytes,limits,true)
             integrity(bytes.contentEquals(StrictJson.encode(value,limits.bytes,maxDepth=limits.depth)))
             val f=value.fields("formatVersion","family","key","payload")
-            integrity(f.getValue("formatVersion").int()==if(key.namespace=="auth")2 else 1)
+            val expected=if(key.namespace=="auth")2 else if(key.family in setOf("dispatch-plans","dispatch-attempts","dispatch-materializations") &&
+                (ports.namespaces.getValue("work").header as JObject).entries.getValue("modelVersion").int()==4)3 else 1
+            integrity(f.getValue("formatVersion").int()==expected)
             integrity(f.getValue("family").string()==key.family && StrictJson.encode(f.getValue("key")).contentEquals(StrictJson.encode(key.key)))
             return f.getValue("payload")
         }
@@ -482,6 +485,9 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
                 "reserve_assignment","bind_assignment","rebind_assignment","complete_assignment" -> obj("projectId" to uuid(c.projectId),"id" to payload.getValue("assignmentId"))
                 "request_native_transition","observe_native_transition" -> obj("projectId" to uuid(c.projectId),"id" to payload.getValue("intentId"))
                 "observe_integration" -> payload.getValue("intent")
+                "record_dispatch_plan" -> obj("projectId" to uuid(c.projectId),"id" to payload.getValue("planId"))
+                "bind_dispatch_attempt" -> obj("projectId" to uuid(c.projectId),"id" to payload.getValue("preparationId"))
+                "materialize_dispatch_dependency","close_dispatch_inputs" -> obj("projectId" to uuid(c.projectId),"id" to uuid(c.requestKey))
                 else -> payload.getValue("key")
             }
             integrity(StrictJson.encode(key.key).contentEquals(StrictJson.encode(expected))); return

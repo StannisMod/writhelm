@@ -22,7 +22,7 @@ import java.net.http.HttpResponse
 
 /** Actual portable CORE/AUTH composition. All external/native observations are explicitly synthetic;
  * no qualified native runtime, source custody, model or physical completion is implied. */
-private class JointFixture {
+internal class JointFixture(val snapshot:WSnapshot=WSnapshot(id(80),WorkGitOid("sha1","2".repeat(40)),WorkGitOid("sha1","3".repeat(40)),null,id(81))) {
     val head=GitOid("sha1","1".repeat(40));val controller=id(60);val assignment=id(61);val delegation=id(62)
     val worker=id(63);val workerKey=id(64);val workspace=id(65);val resource=WorkKey.Resource(project,id(66))
     val intent=id(67);val correlation=id(68);val task=WorkKey.TaskRevision(project,id(69),0)
@@ -30,11 +30,11 @@ private class JointFixture {
     val applicability=WorkKey.Revision(project,id(72),0);val manifestKey=WorkKey.Id(project,id(73))
     val intended=WExecutionIntent(controller,id(74),"executor-v1",id(75),"ses_joint_fixture")
     val bridge=H1JointReduction();val codec=WorkCodec();var base: H1BoundState
-    val snapshot=WSnapshot(id(80),WorkGitOid("sha1","2".repeat(40)),WorkGitOid("sha1","3".repeat(40)),null,id(81))
     val source=WSourceVariant1Value(WSourceVariant1("artifact",snapshot))
     val manifest: WorkReference
     val observations: H1ObservedFacts
     lateinit var runtimeFacts: WorkExternalFacts
+    var capturedRuntimeState:H1BoundState?=null
     init {
         val g=genesis();var core=g.workflow;val revision=revision(90)
         core=value(core.propose(Actor(planner),revision)).state
@@ -87,9 +87,11 @@ private class JointFixture {
         val observe=WorkCommand(id(114),project,CObserveNativeTransitionOperation(CObserveNativeTransition(assignment,3,startId,0,"confirmed",listOf(source),emptyList())))
         install(key(plannerKey) { bridge.work(base,observe,it,H1ObservedFacts(head,observations.facts.copy(native=mapOf(startId to start)),observations.qualifiedProfiles)) })
     }
-    fun publishedActiveApp(onCapture: ()->Unit={},publication: PublicationDriver=PublicationDriver.Native): H1Application {
-        val options=H1Options(H1RuntimeFacts { state,_ -> onCapture();H1ObservedFacts(state.basis,runtimeFacts,observations.qualifiedProfiles) },AppOptions(admission=AdmissionPolicy(formatVersion=2),publication=publication))
-        val app=H1Application.initialize(directory(),storeId,H1Genesis(base.core,base.authority.records(),base.work),options)
+    fun publishedActiveApp(onCapture: ()->Unit={},publication: PublicationDriver=PublicationDriver.Native,modelVersion:Int=2,root:java.nio.file.Path=directory(),diffControl:NativeResultDiffProofControl?=null): H1Application {
+        val baseFacts=H1RuntimeFacts { state,_ -> capturedRuntimeState=state;onCapture();H1ObservedFacts(state.basis,runtimeFacts,observations.qualifiedProfiles) }
+        val options=H1Options(if(diffControl==null)baseFacts else NativeResultDiffFacts(baseFacts,diffControl),AppOptions(admission=AdmissionPolicy(formatVersion=2),publication=publication),workModelVersion=modelVersion)
+        val work=if(modelVersion==2)base.work else base.work.mapValues { (_,w)->WorkState.restore(w.projectId,w.records.values,w.bodies.values,modelVersion=modelVersion) }
+        val app=H1Application.initialize(root,storeId,H1Genesis(base.core,base.authority.records(),work),options)
         fun publish(command: WorkCommand) {
             val result=assertIs<CommandResult.Settled>(app.execute(plannerToken,codec.encodeCommand(command)))
             assertIs<LogicalOutcome.Success>(result.receipt.outcome)
@@ -107,6 +109,606 @@ private class JointFixture {
 }
 
 class H1JointBindingTest {
+    @Test fun `worker report needs matching observed facts and planner reads exact retained result`() {
+        val f=JointFixture();f.publishedActiveApp().use { app ->
+            val service=WrithelmService(app);val worker=token(f.workerKey);val subject=WAssignmentSubject(f.assignment,0)
+            val retro=WorkCommand(id(6100),project,CRecordRetrospectiveOperation(CRecordRetrospective(WorkKey.Id(project,id(6101)),
+                CRecordRetrospectiveData(f.task,subject,null,"no-significant-new-findings",emptyList()),emptyList())))
+            val retroReply=service.command(worker,f.codec.encodeCommand(retro))
+            assertEquals(200,retroReply.status)
+            val retroOutcome=(retroReply.value as JObject).entries.getValue("outcome") as JObject
+            val retroData=retroOutcome.entries.getValue("result").fields("key","generation","digest")
+            val retrospective=WorkReference(WorkRecordIdentity(WorkFamily.RETROSPECTIVES,
+                identityCodec.decodeKey(WorkFamily.RETROSPECTIVES,StrictJson.encode(retroData.getValue("key")))),digest(retroData.getValue("digest")))
+            val text=Utf8Content.fromText("synthetic worker claim, not an independently verified diff")
+            val body=WorkBodyReference(text.digest,text.sizeBytes)
+            val result=WorkCommand(id(6102),project,CSubmitResultOperation(CSubmitResult(WorkKey.Id(project,id(6103)),
+                CSubmitResultData(f.task,subject,f.manifest,listOf(f.snapshot),body,listOf(id(96)),emptyList(),retrospective,emptyList()),
+                listOf(CSubmitResultBodiesItem(text.digest,text.text())))))
+            val rejected=service.command(worker,f.codec.encodeCommand(result))
+            assertEquals(409,rejected.status)
+            assertEquals("INVALID_SUBJECT",((rejected.value as JObject).entries.getValue("outcome") as JObject).entries.getValue("code").string())
+            assertFalse(WorkRecordIdentity(WorkFamily.RESULTS,WorkKey.Id(project,id(6103))) in app.coordinationCapture(plannerToken,project).work.records)
+            // Explicit synthetic trusted observation; this is not an installed Git/diff observer.
+            f.runtimeFacts=f.runtimeFacts.copy(submittedDiffs=setOf(WorkSubmittedDiff(f.task,listOf(f.snapshot),body)))
+            val replay=service.command(worker,f.codec.encodeCommand(result))
+            assertEquals(409,replay.status);assertEquals(JBoolean(true),(replay.value as JObject).entries.getValue("commandReplayed"))
+            val accepted=service.command(worker,f.codec.encodeCommand(result.copy(requestKey=id(6104))))
+            assertEquals(200,accepted.status)
+            val outcome=((accepted.value as JObject).entries.getValue("outcome") as JObject).entries.getValue("result").fields("key","generation","digest")
+            val reference=WorkReference(WorkRecordIdentity(WorkFamily.RESULTS,identityCodec.decodeKey(WorkFamily.RESULTS,StrictJson.encode(outcome.getValue("key")))),digest(outcome.getValue("digest")))
+            val selector=WorkRead.Exact(project,reference.identity,reference.digest,null)
+            val read=service.read(plannerToken,f.codec.encodeRead(selector));assertEquals(200,read.status)
+            val report=service.read(plannerToken,f.codec.encodeRead(WorkRead.Body(project,text.digest,selector)))
+            assertEquals(200,report.status)
+            assertEquals(text.text(),((report.value as JObject).entries.getValue("data") as JObject).entries.getValue("body").string())
+            val state=app.coordinationCapture(plannerToken,project).work
+            assertTrue(state.records.values.none { it.payload is WAcceptancesPayload || it.payload is WIntegrationsPayload })
+        }
+    }
+    @Test fun `concurrent independent reservations and conflicting claims survive cold Git reopen`() {
+        val f=JointFixture();val original=f.base.work.getValue(project);val codec=WorkCodec()
+        val baseTask=original.task(f.task)
+        val basePlan=(original.record(WorkFamily.VERIFICATION_PLANS,f.plan).payload as WVerificationPlansPayload).value
+        val baseManifest=(original.resolve(f.manifest).payload as WInputManifestsPayload).value
+        fun row(key:WorkKey,payload:WorkPayload)=WorkRecord(WorkRecordIdentity(payloadFamily(payload),key),payload)
+        val second=f.task.copy(taskId=id(5901));val third=f.task.copy(taskId=id(5902))
+        val p2=f.plan.copy(id=id(5903));val p3=f.plan.copy(id=id(5904))
+        val m2=WorkKey.Id(project,id(5905));val m3=WorkKey.Id(project,id(5906))
+        val rows=listOf(row(second,WTaskRevisionsPayload(baseTask.copy(verificationPlan=p2))),row(third,WTaskRevisionsPayload(baseTask.copy(verificationPlan=p3))),
+            row(p2,WVerificationPlansPayload(basePlan.copy(task=second))),row(p3,WVerificationPlansPayload(basePlan.copy(task=third))),
+            row(m2,WInputManifestsPayload(baseManifest.copy(task=second))),row(m3,WInputManifestsPayload(baseManifest.copy(task=third))))
+        val work=WorkState.restore(project,original.records.values+rows,original.bodies.values,modelVersion=4)
+        val manifests=listOf(f.manifest,work.reference(WorkFamily.INPUT_MANIFESTS,m2),work.reference(WorkFamily.INPUT_MANIFESTS,m3))
+        f.runtimeFacts=f.runtimeFacts.copy(verifiedPackets=manifests.toSet())
+        val options=H1Options(H1RuntimeFacts { state,_ ->H1ObservedFacts(state.basis,f.runtimeFacts,f.observations.qualifiedProfiles) },workModelVersion=4)
+        val root=directory();val shared=f.resource;val independent=WorkKey.Resource(project,id(5907))
+        fun reserve(index:Int,task:WorkKey.TaskRevision,manifest:WorkReference,resource:WorkKey.Resource):WorkCommand {
+            val n=5910+index*10
+            return WorkCommand(id(n),project,CReserveAssignmentOperation(CReserveAssignment(id(n+1),task,manifest,f.profile,id(n+2),
+                listOf(CReserveAssignmentResourcesItem(resource,null)),emptyList(),id(n+3),id(n+4),emptyList(),
+                f.intended.copy(executionId=id(n+5),nativeSessionId="ses_parallel_fixture_$index"))))
+        }
+        val commands=listOf(reserve(0,f.task,manifests[0],shared),reserve(1,second,manifests[1],shared),reserve(2,third,manifests[2],independent))
+        H1Application.initialize(root,storeId,H1Genesis(f.base.core,f.base.authority.records(),mapOf(project to work)),options).use { app ->
+            val pool=java.util.concurrent.Executors.newFixedThreadPool(3)
+            try {
+                val gate=java.util.concurrent.CountDownLatch(1)
+                val pending=commands.map { command ->pool.submit<CommandResult> { gate.await();app.execute(plannerToken,codec.encodeCommand(command)) } }
+                gate.countDown()
+                val outcomes=pending.map { assertIs<CommandResult.Settled>(it.get(60,java.util.concurrent.TimeUnit.SECONDS)) }
+                assertEquals(1,outcomes.take(2).count { it.receipt.outcome is LogicalOutcome.Success })
+                assertEquals(1,outcomes.take(2).count { (it.receipt.outcome as? LogicalOutcome.Rejected)?.code=="STALE_GENERATION" })
+                assertIs<LogicalOutcome.Success>(outcomes[2].receipt.outcome)
+                val loser=outcomes.take(2).indexOfFirst { it.receipt.outcome is LogicalOutcome.Rejected }
+                val previous=commands[loser];val payload=(previous.operation as CReserveAssignmentOperation).value
+                val fresh=previous.copy(requestKey=id(5990),operation=CReserveAssignmentOperation(payload.copy(
+                    resources=listOf(CReserveAssignmentResourcesItem(shared,0)))))
+                val conflict=assertIs<CommandResult.Settled>(app.execute(plannerToken,codec.encodeCommand(fresh)))
+                assertEquals("CLAIM_CONFLICT",assertIs<LogicalOutcome.Rejected>(conflict.receipt.outcome).code)
+                assertTrue(conflict.receipt.writes.isEmpty())
+                assertEquals(2,app.coordinationCapture(plannerToken,project).work.records.values.count { it.payload is WAssignmentsPayload })
+                outcomes.forEachIndexed { i,receipt ->
+                    val replay=assertIs<CommandResult.Settled>(app.execute(plannerToken,codec.encodeCommand(commands[i])))
+                    assertTrue(replay.commandReplayed);assertEquals(receipt.receipt.fingerprint,replay.receipt.fingerprint)
+                }
+            } finally { pool.shutdownNow() }
+        }
+        H1Application.open(root,storeId,options).use { app ->
+            assertEquals(2,app.coordinationCapture(plannerToken,project).work.records.values.count { it.payload is WAssignmentsPayload })
+            commands.forEach { assertTrue(assertIs<CommandResult.Settled>(app.execute(plannerToken,codec.encodeCommand(it))).commandReplayed) }
+        }
+    }
+    @Test fun `materialization publishes four records atomically and cold audits original head`() {
+        val f=JointFixture();val root=directory();var seq=5600;lateinit var heldClosureBytes:ByteArray
+        f.publishedActiveApp(modelVersion=4,root=root).use { app ->
+            fun publish(op:dev.writhelm.core.work.WorkOperation,token:String=plannerToken):CommandResult.Settled {
+                val reply=app.execute(token,f.codec.encodeCommand(WorkCommand(id(seq++),project,op)))
+                if(reply is CommandResult.Refused)error("refused ${reply.problem}")
+                val settled=assertIs<CommandResult.Settled>(reply);assertIs<LogicalOutcome.Success>(settled.receipt.outcome);return settled
+            }
+            fun ref(receipt:CommandResult.Settled):WorkReference {
+                val o=receipt.receipt.outcome as LogicalOutcome.Success;val key=H1Catalog.result(o.operation,o.result)
+                return WorkReference(WorkRecordIdentity(H1Catalog.family(key.family),identityCodec.decodeKey(H1Catalog.family(key.family),StrictJson.encode(key.key))),
+                    digest(o.result.fields("key","generation","digest").getValue("digest")))
+            }
+            val subject=WAssignmentSubject(f.assignment,0);val worker=token(f.workerKey)
+            val retro=ref(publish(CRecordRetrospectiveOperation(CRecordRetrospective(WorkKey.Id(project,id(5650)),
+                CRecordRetrospectiveData(f.task,subject,null,"no-significant-new-findings",emptyList()),emptyList())),worker))
+            val text=Utf8Content.fromText("synthetic producer result");val body=WorkBodyReference(text.digest,text.sizeBytes)
+            f.runtimeFacts=f.runtimeFacts.copy(submittedDiffs=f.runtimeFacts.submittedDiffs+WorkSubmittedDiff(f.task,listOf(f.snapshot),body))
+            val result=ref(publish(CSubmitResultOperation(CSubmitResult(WorkKey.Id(project,id(5651)),
+                CSubmitResultData(f.task,subject,f.manifest,listOf(f.snapshot),body,listOf(id(96)),emptyList(),retro,emptyList()),
+                listOf(CSubmitResultBodiesItem(text.digest,text.text())))),worker))
+            val task=f.task.copy(taskId=id(5652));val verification=f.plan.copy(id=id(5653));val manifest=WorkKey.Id(project,id(5654))
+            val template=f.base.work.getValue(project);val old=template.task(f.task)
+            val oldPlan=(template.record(WorkFamily.VERIFICATION_PLANS,f.plan).payload as WVerificationPlansPayload).value
+            val terms=old.copy(verificationPlan=verification,dependencies=listOf(WDependency(f.task,"implemented",null,emptyList(),"exact future result")))
+            publish(CCreateTaskRevisionOperation(CCreateTaskRevision(task,terms,CCreateTaskRevisionNewVerificationPlan(verification,oldPlan.copy(task=task)),emptyList())))
+            val original=(template.resolve(f.manifest).payload as WInputManifestsPayload).value
+            val manifestRef=ref(publish(CPinInputManifestOperation(CPinInputManifest(manifest,original.copy(task=task),emptyList()))))
+            val plan=DispatchPlanCandidate(project,id(5655),f.controller,listOf(DispatchPlanEntry(task,manifestRef,f.profile,listOf(f.resource),id(5656),id(5657),listOf(DispatchFutureDependency(f.task,"implemented")))))
+            val planReply=assertIs<CommandResult.Settled>(app.execute(plannerToken,DispatchPlanCommandCodec().encode(DispatchPlanCommand(id(5658),plan))))
+            val planRef=ref(planReply)
+            val command=DispatchMaterializationCommand(id(5659),planRef,task,task.copy(revision=1),verification.copy(id=id(5660)),WorkKey.Id(project,id(5661)))
+            val bytes=DispatchMaterializationCommandCodec().encode(command)
+            assertIs<CommandResult.Denied>(app.execute(ownerToken,bytes))
+            val outcome=app.execute(plannerToken,bytes)
+            if(outcome is CommandResult.Refused)error("materialization refused ${outcome.problem}")
+            val receipt=assertIs<CommandResult.Settled>(outcome)
+            assertIs<LogicalOutcome.Success>(receipt.receipt.outcome)
+            assertEquals(setOf("dispatch-materializations","task-revisions","verification-plans","input-manifests"),receipt.receipt.writes.map { it.record.family }.toSet())
+            assertTrue(assertIs<CommandResult.Settled>(app.execute(plannerToken,bytes)).commandReplayed)
+            val state=app.coordinationCapture(plannerToken,project).work
+            val materializationRef=state.reference(WorkFamily.DISPATCH_MATERIALIZATIONS,WorkKey.Id(project,command.requestKey))
+            val closure=DispatchClosureCommand(id(5674),materializationRef,WorkGitOid(f.head.algorithm,f.head.hex),f.source,WorkKey.Id(project,id(5675)))
+            f.activateWithAttributedFixtureObservations()
+            val bound=H1BoundState.checked(storeId,f.head,f.base.core,f.base.authority.records(),mapOf(project to state),expectedWorkModel=4)
+            f.key(plannerKey) { assertNotNull(f.bridge.authorizeDispatchClosure(bound,closure,it)) }
+            f.key(ownerKey) { assertNull(f.bridge.authorizeDispatchClosure(bound,closure,it)) }
+            var qualificationCalls=0
+            val qualification=ClosureAssessmentQualification { _,_,_,_->qualificationCalls++;null }
+            assertNull(verifiedDispatchClosureAssessment(bound,closure,f.runtimeFacts,planner,qualification))
+            val unretained=closure.copy(assessment=WSourceVariant2Value(WSourceVariant2("work",f.manifest)))
+            assertNull(verifiedDispatchClosureAssessment(bound,unretained,f.runtimeFacts,planner,qualification))
+            assertNull(verifiedDispatchClosureAssessment(bound,closure.copy(expectedHead=WorkGitOid("sha1","f".repeat(40))),f.runtimeFacts,planner,qualification))
+            assertEquals(0,qualificationCalls) // never ask a provider to bless missing attribution or a stale H
+            val observed=H1ObservedFacts(bound.basis,f.runtimeFacts,emptySet())
+            f.key(plannerKey) { key ->
+                assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> {
+                    f.bridge.dispatchClosure(bound,closure,key,observed,qualification)
+                }.problem)
+                assertEquals(WorkProblem.STALE_GENERATION,assertFailsWith<WorkFault> {
+                    f.bridge.dispatchClosure(bound,closure,key,H1ObservedFacts(GitOid("sha1","f".repeat(40)),f.runtimeFacts,emptySet()),qualification)
+                }.problem)
+            }
+            f.key(ownerKey) { key -> assertFailsWith<StoreFault> { f.bridge.dispatchClosure(bound,closure,key,observed,qualification) } }
+            // A synthetic graph candidate is not enough for historical authority: an artifact
+            // assertion has no receipt-derived independent evidence attribution at original H.
+            val inventory=prebindingMaterializedInputs(state,command.requestKey,f.runtimeFacts)
+            val fakeSource=WSourceVariant1Value(WSourceVariant1("artifact",f.snapshot.copy(retainedLocatorId=id(5677))))
+            val fakeCommand=closure.copy(assessment=fakeSource)
+            val fakeFacts=f.runtimeFacts.copy(retainedSnapshots=f.runtimeFacts.retainedSnapshots+fakeSource.value.artifact)
+            val fakeProof=PrebindingClosureAssessment(fakeCommand.expectedHead,command.requestKey,inventory,fakeSource,f.worker,f.delegation)
+            val effect=reduceDispatchClosure(state,fakeCommand.expectedHead,WorkExecutionInput(planner,plannerKey,f.controller,null,null),fakeFacts,fakeCommand,fakeProof)
+            val fakeAfter=H1BoundState.checked(storeId,f.head,bound.core,bound.authority.records(),mapOf(project to effect.after),expectedWorkModel=4)
+            assertFailsWith<StoreFault> { f.bridge.validateDispatchClosureHistory(bound,fakeAfter,effect.result.key as WorkKey.Id,
+                planner,plannerKey,DispatchClosureCommandCodec().fingerprint(fakeCommand)) }
+            f.bridge.validateDispatchClosureAuthority(bound,closure,planner,plannerKey)
+            assertFailsWith<StoreFault> { f.bridge.validateDispatchClosureAuthority(bound,closure,owner,ownerKey) }
+            assertFailsWith<StoreFault> { f.bridge.validateDispatchClosureAuthority(bound,closure,owner,plannerKey) }
+            for(removed in listOf(WorkPermission.TASK_PLAN,WorkPermission.TASK_DISPATCH)) {
+                val restricted=bound.authority.records().map { row ->
+                    if(row is Auth2Record.WorkGrants && row.value.enrollment.principalId==planner)
+                        Auth2Record.WorkGrants(WorkGrant(row.value.enrollment,row.value.generation,row.value.permissions-removed)) else row
+                }
+                val other=H1BoundState.checked(storeId,f.head,bound.core,restricted,bound.work,expectedWorkModel=4)
+                f.key(plannerKey) { assertNull(f.bridge.authorizeDispatchClosure(other,closure,it)) }
+                assertFailsWith<StoreFault> { f.bridge.validateDispatchClosureAuthority(other,closure,planner,plannerKey) }
+            }
+            f.key(plannerKey) { assertNull(f.bridge.authorizeDispatchClosure(bound,closure.copy(materialization=materializationRef.copy(digest=Digest.of(byteArrayOf(9)))),it)) }
+            val capturedHead=app.coordinationCapture(plannerToken,project).basis
+            val heldCommand=closure.copy(expectedHead=WorkGitOid(capturedHead.algorithm,capturedHead.hex))
+            val heldBytes=DispatchClosureCommandCodec().encode(heldCommand)
+            heldClosureBytes=heldBytes
+            assertIs<CommandResult.Denied>(app.execute(ownerToken,heldBytes))
+            val noAssessor=assertIs<CommandResult.Settled>(app.execute(plannerToken,heldBytes))
+            assertEquals("BLOCKED_INPUT",assertIs<LogicalOutcome.Rejected>(noAssessor.receipt.outcome).code)
+            assertTrue(noAssessor.receipt.writes.isEmpty())
+            val staleCommand=heldCommand.copy(requestKey=id(5676))
+            val stale=assertIs<CommandResult.Settled>(app.execute(plannerToken,DispatchClosureCommandCodec().encode(staleCommand)))
+            assertEquals("STALE_GENERATION",assertIs<LogicalOutcome.Rejected>(stale.receipt.outcome).code)
+            assertTrue(stale.receipt.writes.isEmpty())
+            assertTrue(assertIs<CommandResult.Settled>(app.execute(plannerToken,heldBytes)).commandReplayed)
+            assertEquals(state.records,app.coordinationCapture(plannerToken,project).work.records)
+            val gapped=(state.record(WorkFamily.INPUT_MANIFESTS,command.manifest).payload as WInputManifestsPayload).value
+            val bypass=WorkCommand(id(5678),project,CPinInputManifestOperation(CPinInputManifest(WorkKey.Id(project,id(5679)),
+                gapped.copy(knownGaps=emptyList()),emptyList())))
+            val rejectedBypass=assertIs<CommandResult.Settled>(app.execute(plannerToken,f.codec.encodeCommand(bypass)))
+            assertEquals("BLOCKED_INPUT",assertIs<LogicalOutcome.Rejected>(rejectedBypass.receipt.outcome).code)
+            assertTrue(rejectedBypass.receipt.writes.isEmpty())
+            assertEquals(result,state.task(command.newTask).dependencies.single().selectedResult)
+            assertTrue((state.record(WorkFamily.INPUT_MANIFESTS,command.manifest).payload as WInputManifestsPayload).value.knownGaps.isNotEmpty())
+            val newManifest=state.reference(WorkFamily.INPUT_MANIFESTS,command.manifest)
+            f.runtimeFacts=f.runtimeFacts.copy(verifiedPackets=f.runtimeFacts.verifiedPackets+newManifest)
+            val existing=(f.reserveCommand().operation as CReserveAssignmentOperation).value
+            val reserve=WorkCommand(id(5667),project,CReserveAssignmentOperation(existing.copy(assignmentId=id(5668),task=command.newTask,
+                manifest=newManifest,workspaceId=id(5669),intentId=id(5670),correlationId=id(5671),
+                resources=listOf(CReserveAssignmentResourcesItem(WorkKey.Resource(project,id(5672)),null)),
+                intendedExecution=existing.intendedExecution.copy(executionId=id(5673),nativeSessionId="ses_materialized_held"))))
+            val gated=assertIs<CommandResult.Settled>(app.execute(plannerToken,f.codec.encodeCommand(reserve)))
+            assertEquals("BLOCKED_INPUT",assertIs<LogicalOutcome.Rejected>(gated.receipt.outcome).code)
+            assertTrue(gated.receipt.writes.isEmpty())
+
+            // Separate, synthetic assessor assignment with actual service-issued identity and
+            // receipt. The qualification callback below is deliberately a test double, not a
+            // production assessor or proof of semantic completeness.
+            val assessTask=f.task.copy(taskId=id(6000));val assessPlan=f.plan.copy(id=id(6001))
+            val assessedTask=state.reference(WorkFamily.TASK_REVISIONS,command.newTask)
+            fun workSource(reference:WorkReference)=WSourceVariant2Value(WSourceVariant2("work",reference))
+            publish(CCreateTaskRevisionOperation(CCreateTaskRevision(assessTask,old.copy(verificationPlan=assessPlan),
+                CCreateTaskRevisionNewVerificationPlan(assessPlan,oldPlan.copy(task=assessTask)),emptyList())))
+            val assessmentItems=original.items+listOf(assessedTask,newManifest,result).map { WManifestItem(workSource(it),true,"assessment input",emptyList()) }
+            val assessManifest=ref(publish(CPinInputManifestOperation(CPinInputManifest(WorkKey.Id(project,id(6002)),
+                original.copy(task=assessTask,items=assessmentItems),emptyList()))))
+            f.runtimeFacts=f.runtimeFacts.copy(verifiedPackets=f.runtimeFacts.verifiedPackets+assessManifest)
+            val assessAssignment=id(6003);val assessDelegation=id(6004);val assessor=id(6005);val assessorKey=id(6006)
+            val assessWorkspace=id(6007);val assessIntent=id(6008);val assessCorrelation=id(6009)
+            val assessExecution=id(6010);val assessHost=id(6011);val assessSession="ses_closure_assessor"
+            val intended=WExecutionIntent(f.controller,assessExecution,"executor-v1",assessHost,assessSession)
+            publish(CReserveAssignmentOperation(existing.copy(assignmentId=assessAssignment,task=assessTask,manifest=assessManifest,
+                workspaceId=assessWorkspace,intentId=assessIntent,correlationId=assessCorrelation,
+                resources=listOf(CReserveAssignmentResourcesItem(WorkKey.Resource(project,id(6012)),null)),intendedExecution=intended)))
+            val registration=Auth3Command(id(6013),project,Auth3Payload.RegisterDelegation(assessDelegation,
+                DelegationBinding(f.controller,project,assessor,assessorKey,assessTask.taskId,assessAssignment,assessExecution,0,
+                    DelegationTemplate.EXECUTOR,emptyList()),0,
+                CredentialVerifier.digest(storeId,project,assessor,assessorKey,secret(assessorKey.leastSignificantBits.toInt()))))
+            val enrolled=assertIs<CommandResult.Settled>(app.execute(plannerToken,Auth3CommandCodec().encode(registration)))
+            assertIs<LogicalOutcome.Success>(enrolled.receipt.outcome)
+            val assessSubject=WAssignmentSubject(assessAssignment,0)
+            val execution=WExecution(assessExecution,assessor,assessorKey,assessHost,assessSession,assessWorkspace)
+            val prepare=WorkNativeObservation(assessSubject,assessIntent,assessCorrelation,"prepare","confirmed",listOf(f.source),execution,true,"reserved")
+            f.runtimeFacts=f.runtimeFacts.copy(native=f.runtimeFacts.native+(assessIntent to prepare))
+            publish(CBindAssignmentOperation(CBindAssignment(assessAssignment,1,assessIntent,0,assessHost,assessSession,assessWorkspace,listOf(f.source),emptyList())))
+            val start=id(6014);val startCorrelation=id(6015)
+            publish(CRequestNativeTransitionOperation(CRequestNativeTransition(assessAssignment,2,start,startCorrelation,"start",null,emptyList())))
+            val started=WorkNativeObservation(assessSubject,start,startCorrelation,"start","confirmed",listOf(f.source),execution,false,"bound")
+            f.runtimeFacts=f.runtimeFacts.copy(native=f.runtimeFacts.native+(start to started))
+            publish(CObserveNativeTransitionOperation(CObserveNativeTransition(assessAssignment,3,start,0,"confirmed",listOf(f.source),emptyList())))
+            val report=Utf8Content.fromText("synthetic closure assessment; not a qualified provider")
+            val reportBody=WorkBodyReference(report.digest,report.sizeBytes)
+            val assessmentEvidence=ref(publish(CRecordEvidenceOperation(CRecordEvidence(WorkKey.Id(project,id(6016)),
+                CRecordEvidenceData(listOf(assessedTask,newManifest,result).map(::workSource),emptyList(),"synthetic closure fixture","component",
+                    reportBody,id(6017),"passed",emptyList(),emptyList(),emptyList(),reportBody),
+                listOf(CRecordEvidenceBodiesItem(report.digest,report.text())))),token(assessorKey)))
+            val failedEvidence=ref(publish(CRecordEvidenceOperation(CRecordEvidence(WorkKey.Id(project,id(6024)),
+                CRecordEvidenceData(listOf(assessedTask,newManifest,result).map(::workSource),emptyList(),"synthetic closure fixture","component",
+                    reportBody,id(6025),"failed",emptyList(),emptyList(),emptyList(),reportBody),emptyList())),token(assessorKey)))
+            // Capture the receipt-indexed H without relying on a caller-supplied attribution.
+            app.execute(plannerToken,f.codec.encodeCommand(f.reserveCommand().copy(requestKey=id(6018))))
+            val assessmentH=assertNotNull(f.capturedRuntimeState)
+            val next=closure.copy(requestKey=id(6019),expectedHead=WorkGitOid(assessmentH.basis.algorithm,assessmentH.basis.hex),
+                assessment=workSource(assessmentEvidence),manifest=WorkKey.Id(project,id(6020)))
+            val double=ClosureAssessmentQualification { s,c,inputs,attribution ->
+                QualifiedClosureAssessment(s.basis,c.materialization,inputs,assessmentEvidence,attribution.principalId,attribution.delegationId)
+            }
+            var failedProviderCalls=0
+            val optimistic=ClosureAssessmentQualification { s,c,inputs,attribution ->
+                failedProviderCalls++
+                QualifiedClosureAssessment(s.basis,c.materialization,inputs,failedEvidence,attribution.principalId,attribution.delegationId)
+            }
+            f.key(plannerKey) { key -> assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> {
+                f.bridge.dispatchClosure(assessmentH,next.copy(assessment=workSource(failedEvidence)),key,
+                    H1ObservedFacts(assessmentH.basis,f.runtimeFacts,emptySet()),optimistic)
+            }.problem) }
+            assertEquals(0,failedProviderCalls)
+            val mismatched=ClosureAssessmentQualification { s,c,inputs,attribution ->
+                QualifiedClosureAssessment(s.basis,c.materialization,inputs,assessmentEvidence,attribution.principalId,id(6023))
+            }
+            f.key(plannerKey) { key -> assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> {
+                f.bridge.dispatchClosure(assessmentH,next,key,H1ObservedFacts(assessmentH.basis,f.runtimeFacts,emptySet()),mismatched)
+            }.problem) }
+            val candidate=f.key(plannerKey) { key -> f.bridge.dispatchClosure(assessmentH,next,key,
+                H1ObservedFacts(assessmentH.basis,f.runtimeFacts,emptySet()),double) }
+            val closureRecord=candidate.after.records.getValue(candidate.result).payload as WDispatchClosurePayload
+            assertEquals(assessor,closureRecord.assessor);assertEquals(assessDelegation,closureRecord.delegation)
+            val exactInputs=prebindingMaterializedInputs(assessmentH.work.getValue(project),command.requestKey,f.runtimeFacts)
+            assertFalse(closureAttributionMatches(assessmentH,project,exactInputs,planner,
+                closureRecord.copy(value=next.copy(assessment=workSource(failedEvidence)))))
+            val candidateH=H1BoundState.checked(storeId,assessmentH.basis,assessmentH.core,assessmentH.authority.records(),
+                assessmentH.work+(project to candidate.after),expectedWorkModel=4)
+            f.bridge.validateDispatchClosureHistory(assessmentH,candidateH,candidate.result.key as WorkKey.Id,planner,plannerKey,
+                DispatchClosureCommandCodec().fingerprint(next))
+            val originalClosure=candidate.after.records.getValue(candidate.result)
+            val forgedClosure=originalClosure.copy(payload=closureRecord.copy(assessor=f.worker))
+            val forgedWork=WorkState.restore(project,candidate.after.records.values.filter { it.identity!=candidate.result }+forgedClosure,
+                candidate.after.bodies.values,modelVersion=4)
+            val forgedH=H1BoundState.checked(storeId,assessmentH.basis,assessmentH.core,assessmentH.authority.records(),
+                assessmentH.work+(project to forgedWork),expectedWorkModel=4)
+            assertFailsWith<StoreFault> { f.bridge.validateDispatchClosureHistory(assessmentH,forgedH,candidate.result.key as WorkKey.Id,
+                planner,plannerKey,DispatchClosureCommandCodec().fingerprint(next)) }
+            val candidateManifest=candidate.after.reference(WorkFamily.INPUT_MANIFESTS,next.manifest)
+            assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> {
+                WorkTransaction(candidate.after,WorkExecutionInput(planner,plannerKey,f.controller,null,null),
+                    f.runtimeFacts.copy(verifiedPackets=emptySet()),id(6021),Digest.of(byteArrayOf(1)))
+                    .taskReady(command.newTask,candidateManifest,f.profile)
+            }.problem)
+            // The capture-triggering rejection itself advanced H, so a stale candidate cannot
+            // publish; a fresh command still holds because no qualified provider is installed.
+            val staleCandidate=assertIs<CommandResult.Settled>(app.execute(plannerToken,DispatchClosureCommandCodec().encode(next)))
+            assertEquals("STALE_GENERATION",assertIs<LogicalOutcome.Rejected>(staleCandidate.receipt.outcome).code)
+            val currentHead=app.coordinationCapture(plannerToken,project).basis
+            val fresh=next.copy(requestKey=id(6022),expectedHead=WorkGitOid(currentHead.algorithm,currentHead.hex))
+            val serviceHeld=assertIs<CommandResult.Settled>(app.execute(plannerToken,DispatchClosureCommandCodec().encode(fresh)))
+            assertEquals("BLOCKED_INPUT",assertIs<LogicalOutcome.Rejected>(serviceHeld.receipt.outcome).code)
+            assertTrue(serviceHeld.receipt.writes.isEmpty())
+
+            val secondRetro=ref(publish(CRecordRetrospectiveOperation(CRecordRetrospective(WorkKey.Id(project,id(5662)),
+                CRecordRetrospectiveData(f.task,subject,null,"no-significant-new-findings",emptyList()),emptyList())),worker))
+            publish(CSubmitResultOperation(CSubmitResult(WorkKey.Id(project,id(5663)),
+                CSubmitResultData(f.task,subject,f.manifest,listOf(f.snapshot),body,listOf(id(96)),emptyList(),secondRetro,emptyList()),emptyList())),worker)
+            val changed=command.copy(requestKey=id(5664),verificationPlan=verification.copy(id=id(5665)),manifest=WorkKey.Id(project,id(5666)))
+            val held=assertIs<CommandResult.Settled>(app.execute(plannerToken,DispatchMaterializationCommandCodec().encode(changed)))
+            assertEquals("NOT_READY",assertIs<LogicalOutcome.Rejected>(held.receipt.outcome).code);assertTrue(held.receipt.writes.isEmpty())
+        }
+        val options=H1Options(H1RuntimeFacts { state,_ ->H1ObservedFacts(state.basis,f.runtimeFacts,f.observations.qualifiedProfiles) },workModelVersion=4)
+        H1Application.open(root,storeId,options).use { app ->
+            val current=app.coordinationCapture(plannerToken,project).work
+            assertIs<WDispatchMaterializationPayload>(current.record(WorkFamily.DISPATCH_MATERIALIZATIONS,WorkKey.Id(project,id(5659))).payload)
+            val replay=assertIs<CommandResult.Settled>(app.execute(plannerToken,heldClosureBytes))
+            assertTrue(replay.commandReplayed)
+            assertEquals("BLOCKED_INPUT",assertIs<LogicalOutcome.Rejected>(replay.receipt.outcome).code)
+            assertTrue(replay.receipt.writes.isEmpty())
+        }
+    }
+    @Test fun `future dependency rule is published and restored as an exact hold`() {
+        val f=JointFixture();val original=f.base.work.getValue(project)
+        val task=f.task.copy(taskId=id(5401));val verify=f.plan.copy(id=id(5402));val manifestKey=f.manifestKey.copy(id=id(5403))
+        val taskValue=original.task(f.task).copy(dependencies=listOf(WDependency(f.task,"implemented",null,emptyList(),"wait for unique result")),verificationPlan=verify)
+        val verification=(original.record(WorkFamily.VERIFICATION_PLANS,f.plan).payload as WVerificationPlansPayload).value.copy(task=task)
+        val manifest=(original.resolve(f.manifest).payload as WInputManifestsPayload).value.copy(task=task)
+        fun row(k:WorkKey,p:WorkPayload)=WorkRecord(WorkRecordIdentity(payloadFamily(p),k),p)
+        val manifestRecord=row(manifestKey,WInputManifestsPayload(manifest));val manifestRef=WorkReference(manifestRecord.identity,WorkCodec().digest(manifestRecord))
+        val graph=WorkState.restore(project,original.records.values+listOf(row(task,WTaskRevisionsPayload(taskValue)),row(verify,WVerificationPlansPayload(verification)),manifestRecord),original.bodies.values,modelVersion=4)
+        val rule=DispatchFutureDependency(f.task,"implemented")
+        val entry=DispatchPlanEntry(task,manifestRef,f.profile,listOf(f.resource),id(5404),id(5405),listOf(rule))
+        val plan=DispatchPlanCandidate(project,id(5406),f.controller,listOf(entry));val command=DispatchPlanCommand(id(5407),plan)
+        val root=directory();val options=H1Options(UnavailableH1RuntimeFacts,workModelVersion=4)
+        H1Application.initialize(root,storeId,H1Genesis(f.base.core,f.base.authority.records(),mapOf(project to graph)),options).use { app ->
+            val reply=assertIs<CommandResult.Settled>(app.execute(plannerToken,DispatchPlanCommandCodec().encode(command)))
+            assertIs<LogicalOutcome.Success>(reply.receipt.outcome)
+        }
+        H1Application.open(root,storeId,options).use { app ->
+            val current=app.coordinationCapture(plannerToken,project).work
+            val restored=(current.record(WorkFamily.DISPATCH_PLANS,WorkKey.Id(project,plan.planId)).payload as WDispatchPlanPayload).value
+            assertEquals(plan,restored)
+            assertEquals(DispatchResultChoice.Pending,chooseDispatchResult(current,restored.entries.single().futureDependencies.single()))
+            val ref=current.reference(WorkFamily.DISPATCH_PLANS,WorkKey.Id(project,plan.planId))
+            val bound=H1BoundState.checked(storeId,f.head,f.base.core,f.base.authority.records(),mapOf(project to current),expectedWorkModel=4)
+            val input=DispatchMaterializationCommand(id(5412),ref,task,task.copy(revision=1),verify.copy(id=id(5408)),manifestKey.copy(id=id(5409)))
+            f.key(plannerKey) { assertNotNull(f.bridge.authorizeDispatchMaterialization(bound,input,it)) }
+            f.key(ownerKey) { assertNull(f.bridge.authorizeDispatchMaterialization(bound,input,it)) }
+            for(removed in listOf(WorkPermission.TASK_PLAN,WorkPermission.TASK_DISPATCH)) {
+                val restricted=bound.authority.records().map { row ->
+                    if(row is Auth2Record.WorkGrants && row.value.enrollment.principalId==planner)
+                        Auth2Record.WorkGrants(WorkGrant(row.value.enrollment,row.value.generation,row.value.permissions-removed)) else row
+                }
+                val other=H1BoundState.checked(storeId,f.head,bound.core,restricted,bound.work,expectedWorkModel=4)
+                f.key(plannerKey) { assertNull(f.bridge.authorizeDispatchMaterialization(other,input,it)) }
+            }
+            f.key(plannerKey) { assertNull(f.bridge.authorizeDispatchMaterialization(bound,input.copy(task=f.task,newTask=f.task.copy(revision=1)),it)) }
+            val raw=DispatchMaterializationCommandCodec().encode(input)
+            assertIs<CommandResult.Denied>(app.execute(ownerToken,raw))
+            val held=assertIs<CommandResult.Settled>(app.execute(plannerToken,raw))
+            assertEquals("NOT_READY",assertIs<LogicalOutcome.Rejected>(held.receipt.outcome).code)
+            assertTrue(held.receipt.writes.isEmpty())
+            assertTrue(assertIs<CommandResult.Settled>(app.execute(plannerToken,raw)).commandReplayed)
+            assertEquals(WorkProblem.NOT_READY,assertFailsWith<WorkFault> {
+                materializeDispatchDependency(current,ref,task,task.copy(revision=1),verify.copy(id=id(5408)),manifestKey.copy(id=id(5409)))
+            }.problem)
+            val endpoint=NativeRuntimeEndpoint(app,project,f.controller,f.intended.nativeHostId,ByteArray(32))
+            fun encoded(k:WorkKey)=str(identityCodec.encodeKey(k).decodeToString())
+            val request=StrictJson.encode(obj("formatVersion" to num(1),"operation" to str("dispatch-materialization"),"projectId" to uuid(project),
+                "planId" to uuid(plan.planId),"taskJSON" to encoded(task),"newTaskJSON" to encoded(task.copy(revision=1)),
+                "verificationPlanJSON" to encoded(verify.copy(id=id(5408))),"manifestJSON" to encoded(manifestKey.copy(id=id(5409))),
+                "taskRequestId" to uuid(id(5410)),"manifestRequestId" to uuid(id(5411))))
+            assertFailsWith<ServiceFault> { endpoint.read(ownerToken,request) }
+            assertFailsWith<ServiceFault> { endpoint.read(plannerToken,request) } // no exact result: held, no commands
+            assertEquals(current.records,app.coordinationCapture(plannerToken,project).work.records)
+            endpoint.close()
+        }
+    }
+    @Test fun `dispatch plan service publishes replays and cold reopens through Git`() {
+        val f=JointFixture();val prior=f.base.work.getValue(project)
+        val graph=WorkState.restore(project,prior.records.values,prior.bodies.values,modelVersion=4)
+        var allowSynthetic=false
+        val options=H1Options(H1RuntimeFacts { state,command ->
+            if(!allowSynthetic)UnavailableH1RuntimeFacts.capture(state,command)
+            else H1ObservedFacts(state.basis,f.runtimeFacts,setOf(state.work.getValue(project).reference(WorkFamily.PROFILES,f.profile)))
+        },workModelVersion=4)
+        val entry=DispatchPlanEntry(f.task,f.manifest,f.profile,listOf(f.resource),id(5301),id(5302))
+        val plan=DispatchPlanCandidate(project,id(5303),f.controller,listOf(entry))
+        val command=DispatchPlanCommand(id(5304),plan);val codec=DispatchPlanCommandCodec();val bytes=codec.encode(command)
+        val root=directory()
+        H1Application.initialize(root,storeId,H1Genesis(f.base.core,f.base.authority.records(),mapOf(project to graph)),options).use { app ->
+            assertIs<CommandResult.Denied>(app.execute(ownerToken,bytes))
+            val observed=app.execute(plannerToken,bytes)
+            if(observed is CommandResult.Refused)error("plan publication refused: ${observed.problem}")
+            val first=assertIs<CommandResult.Settled>(observed)
+            assertIs<LogicalOutcome.Success>(first.receipt.outcome);assertFalse(first.commandReplayed)
+            val planRef=app.coordinationCapture(plannerToken,project).work.reference(WorkFamily.DISPATCH_PLANS,WorkKey.Id(project,plan.planId))
+            val attempt=DispatchAttempt(planRef,entry.preparationId,f.reserveCommand())
+            val bind=DispatchAttemptCommand(id(5311),attempt);val bindCodec=DispatchAttemptCommandCodec();val bindBytes=bindCodec.encode(bind)
+            assertIs<CommandResult.Denied>(app.execute(ownerToken,bindBytes))
+            val binding=assertIs<CommandResult.Settled>(app.execute(plannerToken,bindBytes))
+            assertIs<LogicalOutcome.Success>(binding.receipt.outcome);assertFalse(binding.commandReplayed)
+            assertTrue(assertIs<CommandResult.Settled>(app.execute(plannerToken,bindBytes)).commandReplayed)
+            val firstRef=app.coordinationCapture(plannerToken,project).work.reference(WorkFamily.DISPATCH_ATTEMPTS,WorkKey.Id(project,entry.preparationId))
+            val originalPayload=(f.reserveCommand().operation as CReserveAssignmentOperation).value
+            val successorReserve=f.reserveCommand().copy(requestKey=id(5323),operation=CReserveAssignmentOperation(originalPayload.copy(
+                assignmentId=id(5324),workspaceId=id(5325),intentId=id(5326),correlationId=id(5327),
+                intendedExecution=originalPayload.intendedExecution.copy(executionId=id(5328),nativeSessionId="ses_successor"))))
+            val successor=DispatchAttempt(planRef,id(5329),successorReserve,firstRef,entry.preparationId,id(5330))
+            val successorCommand=DispatchAttemptCommand(id(5331),successor);val successorBytes=bindCodec.encode(successorCommand)
+            assertEquals(StoreProblem.DENIED,assertIs<CommandResult.Refused>(app.execute(plannerToken,successorBytes)).problem)
+            val endpoint=NativeRuntimeEndpoint(app,project,f.controller,f.intended.nativeHostId,ByteArray(32))
+            val context=StrictJson.encode(obj("formatVersion" to num(1),"operation" to str("dispatch-context"),"projectId" to uuid(project),"planId" to uuid(plan.planId)))
+            val frame=endpoint.read(plannerToken,context).value as JObject
+            assertEquals(entry.preparationId,uuid(frame.entries.getValue("entries").list().single().member("preparationId")))
+            assertEquals(entry.startId,uuid(frame.entries.getValue("entries").list().single().member("startId")))
+            assertEquals(1,frame.entries.getValue("attemptsJSON").list().size)
+            assertFailsWith<ServiceFault> { endpoint.read(ownerToken,context) }
+            endpoint.close()
+            val replay=assertIs<CommandResult.Settled>(app.execute(plannerToken,bytes));assertTrue(replay.commandReplayed)
+            val changed=command.copy(plan=plan.copy(entries=listOf(entry.copy(startId=id(5305)))))
+            assertIs<CommandResult.IdentityConflict>(app.execute(plannerToken,codec.encode(changed)))
+            val originalReserve=f.reserveCommand();val originalBytes=f.codec.encodeCommand(originalReserve)
+            val retryEndpoint=NativeRuntimeEndpoint(app,project,f.controller,f.intended.nativeHostId,ByteArray(32))
+            fun retryFrame(input:ByteArray)=StrictJson.encode(obj("formatVersion" to num(1),"operation" to str("reservation-retry"),
+                "projectId" to uuid(project),"reservationJSON" to str(input.decodeToString())))
+            assertEquals("hold",retryEndpoint.read(plannerToken,retryFrame(originalBytes)).value.member("kind").string())
+            assertFailsWith<ServiceFault> { retryEndpoint.read(ownerToken,retryFrame(originalBytes)) }
+            assertEquals(ReservationRetryEligibility.HOLD,app.reservationRetryEligibility(plannerToken,project,f.controller,originalBytes))
+            assertFailsWith<AppAccessFault> { app.reservationRetryEligibility(ownerToken,project,f.controller,originalBytes) }
+            val held=assertIs<CommandResult.Settled>(app.execute(plannerToken,f.codec.encodeCommand(f.reserveCommand())))
+            assertEquals("NOT_READY",assertIs<LogicalOutcome.Rejected>(held.receipt.outcome).code)
+            assertTrue(held.receipt.writes.isEmpty())
+            val child=assertIs<CommandResult.Settled>(app.execute(plannerToken,successorBytes))
+            assertIs<LogicalOutcome.Success>(child.receipt.outcome);assertFalse(child.commandReplayed)
+            assertTrue(assertIs<CommandResult.Settled>(app.execute(plannerToken,successorBytes)).commandReplayed)
+            val otherReserve=successorReserve.copy(requestKey=id(5332),operation=CReserveAssignmentOperation(originalPayload.copy(
+                assignmentId=id(5333),workspaceId=id(5334),intentId=id(5335),correlationId=id(5336),
+                intendedExecution=originalPayload.intendedExecution.copy(executionId=id(5337),nativeSessionId="ses_duplicate_successor"))))
+            val sibling=successor.copy(preparationId=id(5338),startId=id(5339),reservation=otherReserve)
+            val siblingReply=assertIs<CommandResult.Settled>(app.execute(plannerToken,bindCodec.encode(DispatchAttemptCommand(id(5340),sibling))))
+            assertEquals("INVALID_REFERENCE",assertIs<LogicalOutcome.Rejected>(siblingReply.receipt.outcome).code)
+            assertTrue(siblingReply.receipt.writes.isEmpty())
+            assertEquals(ReservationRetryEligibility.DEFINITIVE_REFUSAL,app.reservationRetryEligibility(plannerToken,project,f.controller,originalBytes))
+            assertEquals("definitive-refusal",retryEndpoint.read(plannerToken,retryFrame(originalBytes)).value.member("kind").string())
+            val altered=originalReserve.copy(operation=CReserveAssignmentOperation((originalReserve.operation as CReserveAssignmentOperation).value.copy(workspaceId=id(5310))))
+            assertEquals(ReservationRetryEligibility.HOLD,app.reservationRetryEligibility(plannerToken,project,f.controller,f.codec.encodeCommand(altered)))
+            assertEquals("hold",retryEndpoint.read(plannerToken,retryFrame(f.codec.encodeCommand(altered))).value.member("kind").string())
+            val lateEntry=entry.copy(preparationId=id(5313),startId=id(5314))
+            val latePlan=plan.copy(planId=id(5315),entries=listOf(lateEntry))
+            assertIs<LogicalOutcome.Success>(assertIs<CommandResult.Settled>(app.execute(plannerToken,codec.encode(DispatchPlanCommand(id(5316),latePlan)))).receipt.outcome)
+            val lateOriginal=f.reserveCommand()
+            val latePayload=(lateOriginal.operation as CReserveAssignmentOperation).value
+            val lateReserve=lateOriginal.copy(requestKey=id(5317),operation=CReserveAssignmentOperation(latePayload.copy(
+                assignmentId=id(5319),workspaceId=id(5320),intentId=id(5321),
+                intendedExecution=latePayload.intendedExecution.copy(executionId=id(5322),nativeSessionId="ses_late_attempt"))))
+            assertEquals("NOT_READY",assertIs<LogicalOutcome.Rejected>(assertIs<CommandResult.Settled>(app.execute(plannerToken,f.codec.encodeCommand(lateReserve))).receipt.outcome).code)
+            val lateRef=app.coordinationCapture(plannerToken,project).work.reference(WorkFamily.DISPATCH_PLANS,WorkKey.Id(project,latePlan.planId))
+            val lateBind=bindCodec.encode(DispatchAttemptCommand(id(5318),DispatchAttempt(lateRef,lateEntry.preparationId,lateReserve)))
+            assertEquals(StoreProblem.DENIED,assertIs<CommandResult.Refused>(app.execute(plannerToken,lateBind)).problem)
+            allowSynthetic=true
+            val heldAgain=assertIs<CommandResult.Settled>(app.execute(plannerToken,f.codec.encodeCommand(f.reserveCommand())))
+            assertTrue(heldAgain.commandReplayed)
+            assertEquals("NOT_READY",assertIs<LogicalOutcome.Rejected>(heldAgain.receipt.outcome).code)
+            val reserve=successorReserve
+            val assigned=assertIs<CommandResult.Settled>(app.execute(plannerToken,f.codec.encodeCommand(reserve)))
+            assertIs<LogicalOutcome.Success>(assigned.receipt.outcome)
+            assertTrue(assigned.receipt.writes.any { it.record.family=="claims" })
+            val childRef=app.coordinationCapture(plannerToken,project).work.reference(WorkFamily.DISPATCH_ATTEMPTS,WorkKey.Id(project,successor.preparationId))
+            val afterSuccess=sibling.copy(preparationId=id(5341),startId=id(5342),previous=childRef)
+            assertEquals(StoreProblem.DENIED,assertIs<CommandResult.Refused>(app.execute(plannerToken,bindCodec.encode(DispatchAttemptCommand(id(5343),afterSuccess)))).problem)
+            assertEquals(ReservationRetryEligibility.HOLD,app.reservationRetryEligibility(plannerToken,project,f.controller,f.codec.encodeCommand(reserve)))
+            assertEquals("hold",retryEndpoint.read(plannerToken,retryFrame(f.codec.encodeCommand(reserve))).value.member("kind").string())
+            retryEndpoint.close()
+            val changedFrame=app.nativeDispatchContext(plannerToken,project,f.controller,f.intended.nativeHostId,plan.planId) as JObject
+            assertEquals(1,changedFrame.entries.getValue("activeAssignments").list().size)
+            val selection=StrictJson.decode(changedFrame.entries.getValue("entries").list().single().member("selectionJSON").string().toByteArray())
+            assertEquals(0L,selection.member("resources").list().single().member("expectedGeneration").long())
+        }
+        H1Application.open(root,storeId,options).use { app ->
+            val replay=assertIs<CommandResult.Settled>(app.execute(plannerToken,bytes));assertTrue(replay.commandReplayed)
+            val attemptRow=app.coordinationCapture(plannerToken,project).work.record(WorkFamily.DISPATCH_ATTEMPTS,WorkKey.Id(project,entry.preparationId))
+            assertEquals(f.reserveCommand(),(attemptRow.payload as WDispatchAttemptPayload).value.reservation)
+            val rebound=DispatchAttemptCommand(id(5311),(attemptRow.payload as WDispatchAttemptPayload).value)
+            assertTrue(assertIs<CommandResult.Settled>(app.execute(plannerToken,DispatchAttemptCommandCodec().encode(rebound))).commandReplayed)
+            val successorRow=app.coordinationCapture(plannerToken,project).work.record(WorkFamily.DISPATCH_ATTEMPTS,WorkKey.Id(project,id(5329)))
+            val successor=(successorRow.payload as WDispatchAttemptPayload).value
+            assertEquals(entry.preparationId,successor.rootPreparationId);assertEquals(id(5330),successor.startId)
+            assertTrue(assertIs<CommandResult.Settled>(app.execute(plannerToken,DispatchAttemptCommandCodec().encode(DispatchAttemptCommand(id(5331),successor)))).commandReplayed)
+            assertEquals(ReservationRetryEligibility.DEFINITIVE_REFUSAL,app.reservationRetryEligibility(plannerToken,project,f.controller,f.codec.encodeCommand(f.reserveCommand())))
+            val row=app.coordinationCapture(plannerToken,project).work.record(WorkFamily.DISPATCH_PLANS,WorkKey.Id(project,plan.planId))
+            assertEquals(plan,(row.payload as WDispatchPlanPayload).value)
+            val frame=app.nativeDispatchContext(plannerToken,project,f.controller,f.intended.nativeHostId,plan.planId) as JObject
+            assertEquals(entry.preparationId,uuid(frame.entries.getValue("entries").list().single().member("preparationId")))
+            assertEquals(2,frame.entries.getValue("attemptsJSON").list().size)
+        }
+    }
+    @Test fun `model4 plan survives a real Git snapshot cold restore`() {
+        val f=JointFixture();val prior=f.base.work.getValue(project)
+        val graph=WorkState.restore(project,prior.records.values,prior.bodies.values,modelVersion=4)
+        val base=H1BoundState.checked(storeId,f.head,f.base.core,f.base.authority.records(),mapOf(project to graph),expectedWorkModel=4)
+        val entry=DispatchPlanEntry(f.task,f.manifest,f.profile,listOf(f.resource),id(5201),id(5202))
+        val plan=DispatchPlanCandidate(project,id(5203),f.controller,listOf(entry))
+        val candidate=f.key(plannerKey) { f.bridge.dispatchPlan(base,DispatchPlanCommand(id(5204),plan),it) }
+        val files=linkedMapOf<String,ByteArray>()
+        CoreSnapshotCodec().export(base.core) { files[it.path]=it.bytes() }
+        Auth2SnapshotCodec().export(base.authority).forEach { files[it.first]=it.second }
+        files["work/format.json"]=StrictJson.encode(obj("formatVersion" to num(1),"modelVersion" to num(4)))
+        val codec=WorkCodec(modelVersion=4)
+        candidate.effect.after.records.values.forEach { files[identityCodec.recordPath(it.identity)]=codec.encodeRecord(it,true) }
+        candidate.effect.after.bodies.forEach { (d,b) -> files["work/bodies/${d.hex.take(2)}/${d.hex}.txt"]=b.bytes() }
+        val dir=directory()
+        RuntimeOwner.acquire(dir).use { owner ->
+            val git=NativeGit(owner);git.qualify();git.initialize()
+            val objects=files.mapValues { git.blob(it.value) }
+            fun tree(prefix:String):GitOid {
+                val names=objects.keys.filter { it.startsWith(prefix) }.map { it.removePrefix(prefix).substringBefore('/') }.distinct().sorted()
+                val input=names.joinToString("") { name ->
+                    val path=prefix+name;val blob=objects[path]
+                    if(blob==null)"040000 tree ${tree("$path/").hex}\t$name\u0000" else "100644 blob ${blob.hex}\t$name\u0000"
+                }.toByteArray(Charsets.US_ASCII)
+                return git.oid(git.call(listOf("mktree","-z"),input).checked())
+            }
+            git.update(null,git.commit(tree(""),null)).checked()
+        }
+        RuntimeOwner.acquire(dir).use { owner ->
+            val git=NativeGit(owner);git.qualify();git.verifyRepository();val head=git.head()
+            val rows=git.call(listOf("ls-tree","-r","-z","--full-tree",head.hex)).checked().toString(Charsets.UTF_8)
+                .split('\u0000').filter { it.isNotEmpty() }
+            val entries=rows.associate { row ->
+                val (metadata,path)=row.split('\t',limit=2);val fields=metadata.split(' ')
+                assertEquals(listOf("100644","blob"),fields.take(2));path to GitOid("sha1",fields[2])
+            }
+            assertEquals(files.keys,entries.keys)
+            val snapshot=StoreSnapshot(head,entries,git)
+            assertFailsWith<StoreFault> { H1BoundState.restore(storeId,snapshot) }
+            val restored=H1BoundState.restore(storeId,snapshot,expectedWorkModel=4)
+            val record=restored.work.getValue(project).record(WorkFamily.DISPATCH_PLANS,WorkKey.Id(project,plan.planId))
+            val restoredPlan=(record.payload as WDispatchPlanPayload).value
+            assertEquals(plan,restoredPlan)
+            assertEquals(entry.preparationId,restoredPlan.entries.single().preparationId)
+            assertEquals(entry.startId,restoredPlan.entries.single().startId)
+        }
+    }
+    @Test fun `dispatch plan candidate derives Git change only after controller authorization`() {
+        val f=JointFixture()
+        val prior=f.base.work.getValue(project)
+        val graph=WorkState.restore(project,prior.records.values,prior.bodies.values,modelVersion=4)
+        val base=H1BoundState.checked(storeId,f.head,f.base.core,f.base.authority.records(),mapOf(project to graph),expectedWorkModel=4)
+        val entry=DispatchPlanEntry(f.task,f.manifest,f.profile,listOf(f.resource),id(5101),id(5102))
+        val plan=DispatchPlanCandidate(project,id(5103),f.controller,listOf(entry))
+        f.key(ownerKey) { key -> assertEquals(StoreProblem.DENIED,assertFailsWith<StoreFault> { f.bridge.dispatchPlan(base,DispatchPlanCommand(id(5104),plan),key) }.problem) }
+        val result=f.key(plannerKey) { key -> f.bridge.dispatchPlan(base,DispatchPlanCommand(id(5104),plan),key) }
+        val change=result.change
+        assertEquals("dispatch-plans",change.key.family)
+        val record=WorkCodec(modelVersion=4).decodeRecord(requireNotNull(change.bytes()))
+        assertEquals(plan,(record.payload as WDispatchPlanPayload).value)
+        assertFalse(record.identity in base.work.getValue(project).records)
+        assertEquals(record,result.effect.after.record(WorkFamily.DISPATCH_PLANS,record.identity.key))
+        val after=H1BoundState.checked(storeId,f.head,base.core,base.authority.records(),mapOf(project to result.effect.after),expectedWorkModel=4)
+        val fingerprint=DispatchPlanCommandCodec().fingerprint(DispatchPlanCommand(id(5104),plan))
+        f.bridge.validateDispatchPlanEdge(base,after,planner,id(5104),plannerKey,fingerprint,WorkKey.Id(project,plan.planId))
+        assertEquals(StoreProblem.INTEGRITY,assertFailsWith<StoreFault> {
+            f.bridge.validateDispatchPlanEdge(base,after,planner,id(5104),plannerKey,Digest.of("altered".toByteArray()),WorkKey.Id(project,plan.planId))
+        }.problem)
+        assertEquals(StoreProblem.INTEGRITY,assertFailsWith<StoreFault> {
+            f.bridge.validateDispatchPlanEdge(base,after,planner,id(5104),ownerKey,fingerprint,WorkKey.Id(project,plan.planId))
+        }.problem)
+    }
+    @Test fun `dispatch plan authorization binds the actual controller and current grants`() {
+        val f=JointFixture()
+        val policy=Auth2Policy(f.base.authority,f.base.projection)
+        val call=WorkInvocation(project,dev.writhelm.core.auth2.WorkOperation.RECORD_DISPATCH_PLAN,id(5000),null,f.controller,null)
+        f.key(plannerKey) { key ->
+            assertNotNull(policy.authorizeWork(key,call))
+            assertNull(policy.authorizeWork(key,call.copy(controllerId=id(5001))))
+            assertNull(policy.authorizeWork(key,call.copy(controllerId=null)))
+            assertNull(policy.authorizeWork(key,call.copy(assignment=AssignmentSubject(project,f.assignment,0))))
+        }
+        f.key(ownerKey) { key -> assertNull(policy.authorizeWork(key,call)) }
+        for(removed in listOf(WorkPermission.TASK_PLAN,WorkPermission.TASK_DISPATCH)) {
+            val records=f.base.authority.records().map { row ->
+                if(row is Auth2Record.WorkGrants && row.value.enrollment.principalId==planner)
+                    Auth2Record.WorkGrants(WorkGrant(row.value.enrollment,row.value.generation,row.value.permissions-removed)) else row
+            }
+            val restricted=H1BoundState.checked(storeId,f.head,f.base.core,records,f.base.work)
+            f.key(plannerKey) { key -> assertNull(Auth2Policy(restricted.authority,restricted.projection).authorizeWork(key,call)) }
+        }
+    }
     @Test fun linuxPeerProcessObservationChecksActualExecutableAndIncarnation() {
         val pid=ProcessHandle.current().pid();val origin="http://127.0.0.1:43217"
         val executable=Digest.of(java.nio.file.Files.readAllBytes(java.nio.file.Path.of("/proc/self/exe")))
@@ -267,6 +869,157 @@ class H1JointBindingTest {
         error=true
         assertTrue(capture().qualifiedProfiles.isEmpty());assertTrue(capture().facts.verifiedPackets.isEmpty())
         // Synthetic proof control is not an installed native qualification or packet provider.
+    }
+    @Test fun closureGapRefusesEvenExactClaimedPacketProofBeforeProviderIsConsulted() {
+        val f=JointFixture();val original=f.base.work.getValue(project)
+        val source=(original.resolve(f.manifest).payload as WInputManifestsPayload).value
+        val key=WorkKey.Id(project,id(5801))
+        val row=WorkRecord(WorkRecordIdentity(WorkFamily.INPUT_MANIFESTS,key),WInputManifestsPayload(source.copy(
+            knownGaps=listOf("Fresh mandatory-input closure assessment required for selected dependency results"))))
+        val graph=WorkState.restore(project,original.records.values+row,original.bodies.values)
+        val base=H1BoundState.checked(storeId,f.head,f.base.core,f.base.authority.records(),mapOf(project to graph))
+        val manifest=graph.reference(WorkFamily.INPUT_MANIFESTS,key)
+        val reserve=(f.reserveCommand().operation as CReserveAssignmentOperation).value.copy(manifest=manifest)
+        val command=f.reserveCommand().copy(operation=CReserveAssignmentOperation(reserve))
+        var calls=0
+        val control=object:ReservationProofControl {
+            override fun profile(state:H1BoundState,command:WorkCommand):ReservationProfileProof? { calls++;return null }
+            override fun packet(state:H1BoundState,command:WorkCommand):ReservationPacketProof? { calls++;return null }
+        }
+        // Even a mistakenly optimistic upstream synthetic packet fact cannot bypass knownGaps.
+        val optimistic=H1RuntimeFacts { state,_ ->H1ObservedFacts(state.basis,f.observations.facts.copy(verifiedPackets=setOf(manifest)),f.observations.qualifiedProfiles) }
+        val facts=ReservationProofFacts(optimistic,control).capture(base,command)
+        assertEquals(0,calls)
+        val denied=f.key(plannerKey) { f.bridge.work(base,command,it,facts) }
+        assertEquals("BLOCKED_INPUT",assertIs<LogicalOutcome.Rejected>(denied.evaluation.outcome).code)
+        assertTrue(denied.evaluation.changes.isEmpty())
+    }
+    @Test fun prebindingProofIsBoundToCurrentHeadAndExactReservationNotFullPacket() {
+        val f=JointFixture();val original=f.base.work.getValue(project)
+        val work=WorkState.restore(project,original.records.values,original.bodies.values,modelVersion=4)
+        val base=H1BoundState.checked(storeId,f.head,f.base.core,f.base.authority.records(),mapOf(project to work),expectedWorkModel=4)
+        val command=f.reserveCommand();val profile=work.reference(WorkFamily.PROFILES,f.profile)
+        val expected=ReservationInputProof(f.head,project,f.codec.fingerprint(command),f.task,f.manifest,profile)
+        var proof:ReservationInputProof?=expected
+        val control=object:ReservationProofControl {
+            override fun profile(state:H1BoundState,command:WorkCommand):ReservationProfileProof?=null
+            override fun packet(state:H1BoundState,command:WorkCommand):ReservationPacketProof?=null
+            override fun inputs(state:H1BoundState,command:WorkCommand):ReservationInputProof?=proof
+        }
+        val delegate=H1RuntimeFacts { state,_->H1ObservedFacts(state.basis,f.observations.facts.copy(verifiedPackets=emptySet()),f.observations.qualifiedProfiles) }
+        val assessment=PrebindingAssessment(f.head,project,f.codec.fingerprint(command),work.reference(WorkFamily.TASK_REVISIONS,f.task),
+            f.manifest,profile,f.source)
+        var independent:PrebindingAssessment?=assessment
+        val verifier=IndependentPrebindingInputVerifier(delegate,PrebindingAssessmentControl { _,_->independent })
+        assertEquals(expected,verifier.inputs(base,command))
+        independent=assessment.copy(basis=GitOid("sha1","b".repeat(40)))
+        assertNull(verifier.inputs(base,command))
+        independent=assessment.copy(manifest=profile)
+        assertNull(verifier.inputs(base,command))
+        independent=null;assertNull(verifier.inputs(base,command))
+        independent=assessment
+        val noRetained=H1RuntimeFacts { state,_->H1ObservedFacts(state.basis,f.observations.facts.copy(retainedSnapshots=emptySet()),f.observations.qualifiedProfiles) }
+        assertNull(IndependentPrebindingInputVerifier(noRetained,PrebindingAssessmentControl { _,_->independent }).inputs(base,command))
+        val extraSnapshot=f.snapshot.copy(retainedLocatorId=id(5890))
+        val extraSource=WSourceVariant1Value(WSourceVariant1("artifact",extraSnapshot))
+        val applicability=work.record(WorkFamily.APPLICABILITY,f.applicability)
+        val data=(applicability.payload as WApplicabilityPayload).value
+        val changed=applicability.copy(payload=WApplicabilityPayload(data.copy(entries=listOf(WApplicabilityEntry(extraSource,emptyList(),emptyList(),"applicable","required")))))
+        val missingInput=WorkState.restore(project,work.records.values.filter { it.identity!=changed.identity }+changed,work.bodies.values,modelVersion=4)
+        val changedBase=H1BoundState.checked(storeId,f.head,f.base.core,f.base.authority.records(),mapOf(project to missingInput),expectedWorkModel=4)
+        val enoughFacts=H1RuntimeFacts { state,_->H1ObservedFacts(state.basis,f.observations.facts.copy(retainedSnapshots=f.observations.facts.retainedSnapshots+extraSnapshot),f.observations.qualifiedProfiles) }
+        var assessmentCalls=0
+        assertNull(IndependentPrebindingInputVerifier(enoughFacts,PrebindingAssessmentControl { _,_->assessmentCalls++;assessment }).inputs(changedBase,command))
+        assertEquals(0,assessmentCalls) // a trusted assessment cannot replace a missing mandatory input
+        val checkedFacts=ReservationProofFacts(delegate,verifier).capture(base,command)
+        assertEquals(setOf(WorkPrebindingClosure(f.task,f.manifest,f.profile,f.codec.fingerprint(command))),checkedFacts.facts.prebindingClosures)
+        assertTrue(checkedFacts.facts.verifiedPackets.isEmpty())
+        assertIs<LogicalOutcome.Success>(f.key(plannerKey) { f.bridge.work(base,command,it,checkedFacts) }.evaluation.outcome)
+        val provider=ReservationProofFacts(delegate,control)
+        val exact=provider.capture(base,command)
+        assertEquals(setOf(WorkPrebindingClosure(f.task,f.manifest,f.profile,f.codec.fingerprint(command))),exact.facts.prebindingClosures)
+        assertTrue(exact.facts.verifiedPackets.isEmpty())
+        assertIs<LogicalOutcome.Success>(f.key(plannerKey) { f.bridge.work(base,command,it,exact) }.evaluation.outcome)
+        proof=expected.copy(basis=GitOid("sha1","a".repeat(40)))
+        assertTrue(provider.capture(base,command).facts.prebindingClosures.isEmpty())
+        proof=expected.copy(command=Digest.of("other command".toByteArray()))
+        assertTrue(provider.capture(base,command).facts.prebindingClosures.isEmpty())
+    }
+    @Test fun resultDiffFactsRequireExactAssignmentHeadCommandAndObservedBytes() {
+        val f=JointFixture();f.activateWithAttributedFixtureObservations()
+        val subject=WAssignmentSubject(f.assignment,0)
+        val result=f.snapshot.copy(tree=WorkGitOid("sha1","9".repeat(40)),retainedLocatorId=id(5810))
+        val bytes=Utf8Content.fromText("synthetic exact diff bytes\n");val changes=WorkBodyReference(bytes.digest,bytes.sizeBytes)
+        val retroKey=WorkKey.Id(project,id(5811))
+        val retro=WorkCommand(id(5816),project,CRecordRetrospectiveOperation(CRecordRetrospective(retroKey,
+            CRecordRetrospectiveData(f.task,subject,null,"no-significant-new-findings",emptyList()),emptyList())))
+        val prior=f.key(f.workerKey) { f.bridge.work(f.base,retro,it,f.observations) }
+        assertIs<LogicalOutcome.Success>(prior.evaluation.outcome);f.install(prior)
+        val retrospective=f.base.work.getValue(project).reference(WorkFamily.RETROSPECTIVES,retroKey)
+        val data=CSubmitResultData(f.task,subject,f.manifest,listOf(result),changes,listOf(id(96)),emptyList(),retrospective,emptyList())
+        val command=WorkCommand(id(5812),project,CSubmitResultOperation(CSubmitResult(WorkKey.Id(project,id(5813)),data,
+            listOf(CSubmitResultBodiesItem(bytes.digest,bytes.text())))))
+        val expected=NativeResultDiffProof(f.head,project,f.codec.fingerprint(command),subject,f.intended.executionId,
+            f.task,f.manifest,f.snapshot,result,changes)
+        val job=obj("formatVersion" to num(1),"assignmentId" to uuid(f.assignment),"generation" to str("0"),"intentId" to uuid(f.intent),
+            "workspaceId" to uuid(f.workspace),"intendedExecution" to encodeWExecutionIntent(f.intended),
+            "taskJSON" to str(identityCodec.encodeKey(f.task).decodeToString()),"profileJSON" to str("{}"),
+            "baseJSON" to str(StrictJson.encode(encodeWSnapshot(f.snapshot)).decodeToString()),"snapshotJSON" to str("{}"),
+            "artifactLocatorId" to uuid(id(5817)),"epoch" to str("a".repeat(64)),"directory" to str("synthetic"),"agent" to str("synthetic"),"model" to JNull)
+        fun frame(preparation:JObject=job)=obj("formatVersion" to num(1),"preparationJSON" to str(StrictJson.encode(preparation).decodeToString()),
+            "resultJSON" to str(StrictJson.encode(encodeWSnapshot(result)).decodeToString()),"diffSha256" to str(changes.digest.hex),"diffByteLength" to num(changes.byteLength))
+        var host:JsonValue?=frame()
+        val transport=NativeResultDiffTransportProof(NativeResultDiffRawControl { _,_,_->host },"a".repeat(64))
+        assertEquals(expected,transport.observe(f.base,command))
+        host=frame(JObject(job.entries+("epoch" to str("b".repeat(64)))))
+        assertNull(transport.observe(f.base,command))
+        host=null;assertNull(transport.observe(f.base,command))
+        var proof:NativeResultDiffProof?=expected;var calls=0
+        var retained=true
+        val delegate=H1RuntimeFacts { state,_ ->H1ObservedFacts(state.basis,
+            if(retained)f.observations.facts.copy(retainedSnapshots=f.observations.facts.retainedSnapshots+result) else f.observations.facts,
+            f.observations.qualifiedProfiles) }
+        assertFalse(H1Options(delegate).retentionEffectQualification.qualified(f.base,project,subject,f.intended.executionId,result))
+        retained=false
+        val retentionFrame=obj("formatVersion" to num(1),"assignmentId" to uuid(f.assignment),"generation" to str("0"),
+            "executionId" to uuid(f.intended.executionId),"snapshot" to encodeWSnapshot(result))
+        var retentionRaw:JsonValue?=str(StrictJson.encode(retentionFrame).decodeToString());var qualified=false;var retentionCalls=0
+        val retention=NativeResultRetentionFacts(delegate,NativeResultRetentionRawControl { _,_,_,_->retentionCalls++;retentionRaw },
+            ResultRetentionQualification { _,_->qualified })
+        assertFalse(result in retention.capture(f.base,command).facts.retainedSnapshots);assertEquals(0,retentionCalls)
+        qualified=true
+        assertTrue(result in retention.capture(f.base,command).facts.retainedSnapshots)
+        val combined=NativeResultDiffFacts(retention,NativeResultDiffProofControl { _,_->expected })
+        assertEquals(setOf(WorkSubmittedDiff(f.task,listOf(result),changes)),combined.capture(f.base,command).facts.submittedDiffs)
+        assertIs<LogicalOutcome.Success>(f.key(f.workerKey) { f.bridge.work(f.base,command,it,combined.capture(f.base,command)) }.evaluation.outcome)
+        retentionRaw=str(StrictJson.encode(JObject(retentionFrame.entries+("executionId" to uuid(id(5814))))).decodeToString())
+        assertFalse(result in retention.capture(f.base,command).facts.retainedSnapshots)
+        retentionRaw=null;assertFalse(result in retention.capture(f.base,command).facts.retainedSnapshots)
+        retained=true
+        val facts=NativeResultDiffFacts(delegate,NativeResultDiffProofControl { _,_->calls++;proof })
+        fun capture()=facts.capture(f.base,command)
+        assertEquals(setOf(WorkSubmittedDiff(f.task,listOf(result),changes)),capture().facts.submittedDiffs)
+        assertTrue(result in capture().facts.retainedSnapshots)
+        val accepted=f.key(f.workerKey) { f.bridge.work(f.base,command,it,capture()) }
+        assertIs<LogicalOutcome.Success>(accepted.evaluation.outcome)
+        assertTrue(accepted.evaluation.changes.any { it.key.family=="results" })
+        for(bad in listOf(expected.copy(basis=GitOid("sha1","a".repeat(40))),expected.copy(command=Digest.of("different".toByteArray())),
+            expected.copy(executionId=id(5814)),expected.copy(result=result.copy(tree=f.snapshot.tree)),
+            expected.copy(changes=WorkBodyReference(Digest.of("different bytes".toByteArray()),changes.byteLength)))) {
+            proof=bad;assertTrue(capture().facts.submittedDiffs.isEmpty())
+        }
+        proof=null;assertTrue(capture().facts.submittedDiffs.isEmpty())
+        val rejected=f.key(f.workerKey) { f.bridge.work(f.base,command,it,capture()) }
+        assertEquals("INVALID_SUBJECT",assertIs<LogicalOutcome.Rejected>(rejected.evaluation.outcome).code)
+        assertTrue(rejected.evaluation.changes.isEmpty())
+        proof=expected;retained=false
+        val beforeMissing=calls
+        assertTrue(capture().facts.submittedDiffs.isEmpty());assertEquals(beforeMissing,calls)
+        retained=true
+        val previous=calls
+        val forged=command.copy(operation=CSubmitResultOperation((command.operation as CSubmitResultOperation).value.copy(data=data.copy(
+            artifacts=listOf(result.copy(repositoryId=id(5815)))))))
+        assertTrue(facts.capture(f.base,forged).facts.submittedDiffs.isEmpty());assertEquals(previous,calls)
     }
     @Test fun reservationNeedsBothQualifiedProfileAndVerifiedPacketWithoutCreatingClaimsOnRefusal() {
         val f=JointFixture()
@@ -618,7 +1371,20 @@ class H1JointBindingTest {
             assertIs<LogicalOutcome.Rejected>(publish(rejection).receipt.outcome)
             f.runtimeFacts=f.runtimeFacts.copy(submittedDiffs=setOf(WorkSubmittedDiff(f.task,listOf(f.snapshot),report)))
             val resultCommand=command(CSubmitResultOperation(CSubmitResult(WorkKey.Id(project,id(172)),CSubmitResultData(f.task,subject,f.manifest,listOf(f.snapshot),report,listOf(id(96)),emptyList(),retrospective,emptyList()),listOf(CSubmitResultBodiesItem(body.digest,body.text())))))
+            fun receipt(c:WorkCommand,token:String=workerToken)=app.originalResultReceipt(token,project,f.controller,f.intended.nativeHostId,f.codec.encodeCommand(c))
+            assertEquals(OriginalResultReceipt.MISSING,receipt(resultCommand))
+            assertFailsWith<AppAccessFault> { receipt(resultCommand,plannerToken) }
             val outcome=ref(publish(resultCommand))
+            assertEquals(OriginalResultReceipt.MATCH,receipt(resultCommand))
+            // Synthetic observations in this fixture; this verifies only candidate input selection,
+            // not planner assessment, Git assembly, retention qualification or acceptance.
+            val candidateWork=app.coordinationCapture(plannerToken,project).work
+            val inputs=candidateInputs(candidateWork,listOf(outcome),f.runtimeFacts)
+            assertEquals(listOf(outcome),inputs.map { it.reference })
+            assertEquals(f.snapshot,inputs.single().base);assertEquals(f.snapshot,inputs.single().result)
+            assertFailsWith<WorkFault> { candidateInputs(candidateWork,listOf(outcome,outcome),f.runtimeFacts) }
+            assertFailsWith<WorkFault> { candidateInputs(candidateWork,listOf(outcome),f.runtimeFacts.copy(submittedDiffs=emptySet())) }
+            assertFailsWith<WorkFault> { candidateInputs(candidateWork,listOf(outcome),f.runtimeFacts.copy(retainedSnapshots=emptySet())) }
             val digest=Digest.of(byteArrayOf(1));val cut=id(173);val locator=id(174)
             f.runtimeFacts=f.runtimeFacts.copy(sourceCuts=mapOf(locator to WorkRetainedCut(f.intended.nativeHostId,f.intended.nativeSessionId,digest,digest,listOf("fixture-message" to digest))))
             publish(command(CRecordSourceCutOperation(CRecordSourceCut(WorkKey.Id(project,cut),WSourceCuts(f.task,subject,f.intended.nativeHostId,f.intended.nativeSessionId,f.profile,1,digest,digest,locator,listOf(WSourceCutsNativeMessagesItem("fixture-message",digest)),emptyList(),emptyList()),emptyList()))))
@@ -633,11 +1399,14 @@ class H1JointBindingTest {
                 CRecordCheckpointData(f.task,subject,f.manifest,view,cut,plan,0,memory,emptyList(),emptyList(),emptyList(),report,"finished",retro1,outcome,delivery),4,emptyList())))))
             f.runtimeFacts=f.runtimeFacts.copy(completedAssignments=setOf(subject))
             assertIs<LogicalOutcome.Success>(publish(command(CCompleteAssignmentOperation(CCompleteAssignment(f.assignment,5,checkpoint,listOf(f.source),listOf(f.resource),emptyList()))),plannerToken).receipt.outcome)
+            assertEquals(OriginalResultReceipt.MATCH,receipt(resultCommand))
+            assertEquals(OriginalResultReceipt.HOLD,receipt(resultCommand.copy(requestKey=id(181))))
             val before=app.inspectAccess(plannerToken).basis;val calls=captures;val cas=publications
             assertTrue(publish(resultCommand).commandReplayed)
             assertTrue(publish(rejection).commandReplayed)
             assertIs<CommandResult.Denied>(app.execute(workerToken,f.codec.encodeCommand(resultCommand.copy(requestKey=id(181)))))
             val altered=resultCommand.copy(operation=CSubmitResultOperation((resultCommand.operation as CSubmitResultOperation).value.copy(data=(resultCommand.operation as CSubmitResultOperation).value.data.copy(claimedCriteria=listOf(id(96),id(999))))))
+            assertEquals(OriginalResultReceipt.HOLD,receipt(altered))
             assertIs<CommandResult.IdentityConflict>(app.execute(workerToken,f.codec.encodeCommand(altered)))
             assertEquals(before,app.inspectAccess(plannerToken).basis);assertEquals(calls,captures);assertEquals(cas,publications)
             val selector=WorkRead.Exact(project,outcome.identity,outcome.digest,null)
@@ -651,6 +1420,7 @@ class H1JointBindingTest {
             assertTrue(publish(resultCommand).commandReplayed)
             assertFailsWith<AppAccessFault> { app.read2(workerToken,f.codec.encodeRead(selector)) }
             assertIs<CommandResult.Settled>(app.execute(ownerToken,Auth3CommandCodec().encode(Auth3Command(id(183),project,Auth3Payload.RevokeDelegation(f.delegation,0)))))
+            assertFailsWith<AppAccessFault> { receipt(resultCommand) }
             assertIs<CommandResult.Denied>(app.execute(workerToken,f.codec.encodeCommand(resultCommand)))
         }
     }
@@ -804,6 +1574,39 @@ class H1JointBindingTest {
         }
         f.install(f.key(ownerKey) { f.bridge.auth3(f.base,Auth3Command(id(125),project,Auth3Payload.RevokeDelegation(f.delegation,0)),it) })
         f.key(f.workerKey) { key -> assertFailsWith<AppAccessFault> { reads.readClause(f.base,key,revision.x()) } }
+    }
+    @Test fun closureEvidenceAttributionComesFromReceiptAndExactSubjectsNotCallerClaim() {
+        val f=JointFixture()
+        f.publishedActiveApp(modelVersion=4).use { app ->
+            val task=f.base.work.getValue(project).reference(WorkFamily.TASK_REVISIONS,f.task)
+            val inventory=PrebindingInputInventory(task,f.manifest,emptyList())
+            fun source(ref:WorkReference)=WSourceVariant2Value(WSourceVariant2("work",ref))
+            val body=Utf8Content.fromText("component fixture, not a qualified closure assessment")
+            val bodyRef=WorkBodyReference(body.digest,body.sizeBytes)
+            val evidenceId=WorkKey.Id(project,id(5900))
+            val data=CRecordEvidenceData(listOf(source(task),source(f.manifest)),emptyList(),"fixture","component",bodyRef,id(5901),
+                "passed",emptyList(),emptyList(),emptyList(),bodyRef)
+            val command=WorkCommand(id(5902),project,CRecordEvidenceOperation(CRecordEvidence(evidenceId,data,listOf(CRecordEvidenceBodiesItem(body.digest,body.text())))))
+            val receipt=assertIs<CommandResult.Settled>(app.execute(token(f.workerKey),f.codec.encodeCommand(command)))
+            assertIs<LogicalOutcome.Success>(receipt.receipt.outcome)
+            // A subsequent evaluated command captures the published H, including its receipt-derived attribution.
+            app.execute(plannerToken,f.codec.encodeCommand(f.reserveCommand().copy(requestKey=id(5903))))
+            val captured=assertNotNull(f.capturedRuntimeState)
+            val evidence=captured.work.getValue(project).reference(WorkFamily.EVIDENCE,evidenceId)
+            val attributed=assertNotNull(attributedClosureEvidence(captured,project,inventory,evidence,planner))
+            assertEquals(f.worker,attributed.principalId);assertEquals(f.delegation,attributed.delegationId)
+            val retained=WDispatchClosurePayload(DispatchClosureCommand(id(5904),evidence,WorkGitOid(captured.basis.algorithm,captured.basis.hex),
+                source(evidence),WorkKey.Id(project,id(5905))),f.worker,f.delegation)
+            assertTrue(closureAttributionMatches(captured,project,inventory,planner,retained))
+            assertFalse(closureAttributionMatches(captured,project,inventory,planner,retained.copy(assessor=owner)))
+            assertFalse(closureAttributionMatches(captured,project,inventory,planner,retained.copy(delegation=id(5906))))
+            assertNull(attributedClosureEvidence(captured,project,inventory,evidence,f.worker))
+            assertNull(attributedClosureEvidence(captured,project,inventory,evidence.copy(digest=Digest.of(byteArrayOf(1))),planner))
+            assertNull(attributedClosureEvidence(captured,project,inventory.copy(task=captured.work.getValue(project).reference(WorkFamily.PROFILES,f.profile)),evidence,planner))
+            assertNull(attributedClosureEvidence(captured,project,inventory.copy(dependencies=listOf(evidence)),evidence,planner))
+            val withoutReceiptIndex=H1BoundState.checked(storeId,captured.basis,captured.core,captured.authority.records(),captured.work,expectedWorkModel=4)
+            assertNull(attributedClosureEvidence(withoutReceiptIndex,project,inventory,evidence,planner))
+        }
     }
     @Test fun passiveBindStartAndWorkerBodyUseActualAuthorityAndReducersWithoutIssuerCascade() {
         val f=JointFixture();f.activateWithAttributedFixtureObservations()

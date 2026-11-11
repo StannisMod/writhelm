@@ -7,7 +7,7 @@ import type { ToolContext } from "@opencode/plugin/promise/tool"
 import { isLosslessNumber } from "lossless-json"
 import { LinuxNativeCustody } from "./native-runtime-custody.js"
 import { NativeRuntimeClient, closedObject, nativeUnavailable, uuidPattern, type NativeSubject } from "./native-runtime-client.js"
-import { boundedWorkChannel, boundedPlanningKnowledgeChannel, boundedDelegationEnrollmentChannel, LinuxWorkRequestCustody, type BoundWorkChannel, type NativeWorkCredentialResolver } from "./connected-tools.js"
+import { boundedWorkChannel, boundedPlanningKnowledgeChannel, boundedDelegationEnrollmentChannel, boundedDispatchAttemptChannel, boundedDispatchMaterializationChannel, LinuxWorkRequestCustody, type BoundWorkChannel, type NativeWorkCredentialResolver } from "./connected-tools.js"
 import { exactJSON } from "./strict-json.js"
 
 type SecretRecord = Readonly<{ formatVersion: 1; kind: "native-scoped-key-v1"; storeId: string; projectId: string
@@ -211,10 +211,30 @@ export class NativeCredentialRegistry implements NativeWorkCredentialResolver {
     if (frame.assignmentId !== binding.assignmentId || frame.executionGeneration !== binding.executionGeneration || frame.bindingJSON !== binding.bindingJSON) nativeUnavailable()
     return frame
   }
+  async retentionPermit(sessionID:string,request:{assignmentId:string;generation:string;executionId:string;snapshot:unknown},signal?:AbortSignal):Promise<boolean>{
+    const binding=await this.inspect(sessionID)
+    if(!binding||binding.scope!=="assignment"||binding.assignmentId!==request.assignmentId||binding.executionGeneration!==request.generation)nativeUnavailable()
+    return this.#service.retentionPermit((await this.verifiedCredential(sessionID)).token,request,signal)
+  }
   async controllerContext(sessionID: string, profileJSON: string, signal?: AbortSignal) {
     const binding = await this.inspect(sessionID)
     if (!binding || binding.scope !== "controller") nativeUnavailable()
     return this.#service.controllerContext((await this.verifiedCredential(sessionID)).token, profileJSON, signal)
+  }
+  async dispatchContext(sessionID:string,planId:string,signal?:AbortSignal) {
+    const binding=await this.inspect(sessionID)
+    if(!binding||binding.scope!=="controller")nativeUnavailable()
+    return this.#service.dispatchContext((await this.verifiedCredential(sessionID)).token,planId,signal)
+  }
+  async reservationRetryEligibility(sessionID:string,reservationJSON:string,signal?:AbortSignal) {
+    const binding=await this.inspect(sessionID)
+    if(!binding||binding.scope!=="controller")nativeUnavailable()
+    return this.#service.reservationRetryEligibility((await this.verifiedCredential(sessionID)).token,reservationJSON,signal)
+  }
+  async originalResultReceipt(sessionID:string,commandJSON:string,signal?:AbortSignal) {
+    const binding=await this.inspect(sessionID)
+    if(!binding||binding.scope!=="assignment")nativeUnavailable()
+    return this.#service.originalResultReceipt((await this.verifiedCredential(sessionID)).token,commandJSON,signal)
   }
   /** Private hook-owned channel: native session selection is actual runtime state, not fabricated
    * ToolContext/message IDs or model fields. Service still authenticates each canonical request. */
@@ -252,6 +272,22 @@ export class NativeCredentialRegistry implements NativeWorkCredentialResolver {
     await this.sourceIdentity(sessionID)
     return boundedDelegationEnrollmentChannel(this.#service.projectId,this.#serviceOrigin,key.token,this.#requests,
       JSON.stringify([this.#service.storeId,this.#service.projectId,this.#epoch,sessionID,"prepared-delegation-v1"]))
+  }
+  async dispatchAttemptChannel(sessionID:string):Promise<BoundWorkChannel>{
+    const binding=await this.inspect(sessionID)
+    if(binding?.scope!=="controller")nativeUnavailable()
+    const key=await this.verifiedCredential(sessionID)
+    await this.sourceIdentity(sessionID)
+    return boundedDispatchAttemptChannel(this.#service.projectId,this.#serviceOrigin,key.token,this.#requests,
+      JSON.stringify([this.#service.storeId,this.#service.projectId,this.#epoch,sessionID,"dispatch-attempt-v1"]))
+  }
+  async dispatchMaterializationChannel(sessionID:string):Promise<BoundWorkChannel>{
+    const binding=await this.inspect(sessionID)
+    if(binding?.scope!=="controller")nativeUnavailable()
+    const key=await this.verifiedCredential(sessionID)
+    await this.sourceIdentity(sessionID)
+    return boundedDispatchMaterializationChannel(this.#service.projectId,this.#serviceOrigin,key.token,this.#requests,
+      JSON.stringify([this.#service.storeId,this.#service.projectId,this.#epoch,sessionID,"dispatch-materialization-v1"]))
   }
   async initialContext(sessionID:string,subject:NativeSubject,intentId:string,signal?:AbortSignal){
     const binding=await this.inspect(sessionID)

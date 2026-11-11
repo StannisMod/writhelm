@@ -8,6 +8,7 @@ import { contextJSON } from "./native-context-codec.js"
 import { exactJSON } from "./strict-json.js"
 import { closedObject, nativeUnavailable, uuidPattern } from "./native-runtime-client.js"
 import { sendContext } from "./native-context-protocol.js"
+import type { BoundWorkChannel } from "./connected-tools.js"
 
 const parse=(raw:string)=>exactJSON(raw,nativeUnavailable)
 const same=(a:unknown,b:unknown)=>contextJSON(a)===contextJSON(b)
@@ -24,14 +25,37 @@ export class NativeInitialStart {
     if(actual.sessionID!==this.controllerSessionID||actual.signal.aborted)nativeUnavailable()
     const channel=await this.registry.resolve(actual)
     if(channel?.scope!=="controller"||channel.projectID!==this.projectId)nativeUnavailable()
+    return this.execute(selectionJSON,actual.sessionID,actual.signal,channel,startId,contextJSON([actual.sessionID,actual.messageID,actual.id]))
+  }
+  /** Engine callers supply a durable original ID; no native tool-call identity is invented. */
+  async runController(selectionJSON:string,startId:string,signal:AbortSignal){
+    if(signal.aborted||typeof startId!=="string"||!uuidPattern.test(startId))nativeUnavailable()
+    const channel=await this.registry.contextChannel(this.controllerSessionID,signal)
+    if(channel.scope!=="controller"||channel.projectID!==this.projectId)nativeUnavailable()
+    return this.execute(selectionJSON,this.controllerSessionID,signal,channel,startId)
+  }
+  /** Recovery never creates an attempt when its original protected driver is absent. */
+  async restoreController(startId:string,signal:AbortSignal){
+    if(signal.aborted||typeof startId!=="string"||!uuidPattern.test(startId))nativeUnavailable()
+    const channel=await this.registry.contextChannel(this.controllerSessionID,signal)
+    if(channel.scope!=="controller"||channel.projectID!==this.projectId)nativeUnavailable()
+    await this.custody.initialize()
+    const raw=await this.custody.read("initial-driver",startId)
+    if(raw===undefined)nativeUnavailable()
+    const job=closedObject(parse(raw),["formatVersion","id","controllerSessionID","selectionJSON","intentId","observeKey","requestJSON"])
+    if(job.id!==startId||job.controllerSessionID!==this.controllerSessionID||typeof job.selectionJSON!=="string")nativeUnavailable()
+    return this.execute(job.selectionJSON,this.controllerSessionID,signal,channel,startId)
+  }
+  private async execute(selectionJSON:string,sessionID:string,signal:AbortSignal,channel:BoundWorkChannel,startId?:string,call?:string){
+    const actual={sessionID,signal}
     await this.registry.sourceIdentity(actual.sessionID,actual.signal)
     const selection=closedObject(parse(selectionJSON),["assignment","binding"]),key=selection.assignment?.key,binding=selection.binding
     if(selection.assignment?.family!=="assignments"||key?.projectId!==this.projectId||binding?.family!=="assignment-bindings"||
       binding.key?.projectId!==this.projectId||binding.key?.assignmentId!==key.id||binding.key?.generation?.value!=="0")nativeUnavailable()
     await this.custody.initialize()
-    const call=contextJSON([actual.sessionID,actual.messageID,actual.id])
     let id=startId
     if(id===undefined){
+      if(call===undefined)nativeUnavailable()
       const old=await this.custody.read("initial-call",call)
       id=old===undefined?randomUUID():parse(old).startId
       if(typeof id!=="string"||!uuidPattern.test(id))nativeUnavailable()
