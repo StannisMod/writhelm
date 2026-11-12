@@ -35,7 +35,7 @@ internal object NativeAssignmentPacket {
                 workRequire(resource.reference.identity.family !in setOf(WorkFamily.CONDITIONS,WorkFamily.CONDITION_CONFIRMATIONS,
                     WorkFamily.CONTROLLER_CONTINUATIONS),WorkProblem.BLOCKED_INPUT)
                 val r=work.resolve(resource.reference)
-                add("record",identityCodec.encodeReference(resource.reference),StrictJson.decode(WorkCodec().encodeRecord(r,true),
+                add("record",identityCodec.encodeReference(resource.reference),StrictJson.decode(WorkCodec(modelVersion=work.modelVersion).encodeRecord(r,true),
                     JsonLimits(bytes=4*1024*1024,stringBytes=262144,depth=128,collection=4096,tokens=500000)))
             }
             is ProtectedResource.WorkBody -> {

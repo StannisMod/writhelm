@@ -45,12 +45,12 @@ test("real local HTTP client preserves exact generation and refuses inconsistent
     }
     reply = { ...valid, active: false, bindingJSON: null, nativeHostId: null, nativeSessionId: null }
     assert.equal((await client.status(token, subject)).active, false)
-    reply = valid; rateLimited = 1
+    reply = valid; rateLimited = 3 // more than the former two retries; read-only admission still recovers
     assert.equal((await client.status(token, subject)).active, true) // bounded read recapture, not an effect retry
     const preparationId="11111111-1111-4111-8111-111111111111",startId="22222222-2222-4222-8222-222222222222"
     const task={projectId:id,taskId:id,revision:0},manifest={family:"input-manifests",key:{projectId:id,id},digest:"a".repeat(64)},profile={projectId:id,profileId:id,revision:0},resource={projectId:id,resourceId:id}
     const plan={family:"dispatch-plans",key:{projectId:id,id},payload:{projectId:id,planId:id,controllerId:id,entries:[{preparationId,startId,task,manifest,profile,resources:[resource]}]}}
-    const entry={preparationId,startId,futureReady:false,claimsAvailable:true,taskJSON:JSON.stringify({family:"task-revisions",key:task}),selectionJSON:JSON.stringify({task,manifest,profile,resources:[{resource,expectedGeneration:null}],reviewSubjects:[]})}
+    const entry={preparationId,startId,futureReady:false,claimsAvailable:true,closedJSON:null,taskJSON:JSON.stringify({family:"task-revisions",key:task}),selectionJSON:JSON.stringify({task,manifest,profile,resources:[{resource,expectedGeneration:null}],reviewSubjects:[]})}
     const digest=createHash("sha256").update(JSON.stringify(plan)).digest("hex")
     const attempt={family:"dispatch-attempts",key:{projectId:id,id:preparationId},payload:{preparationId,plan:{family:"dispatch-plans",key:{projectId:id,id},digest}}}
     reply={formatVersion:1,basis:{},planJSON:JSON.stringify(plan),entries:[entry],activeAssignments:[],attemptsJSON:[JSON.stringify(attempt)]}
@@ -91,4 +91,31 @@ test("receipt channel is separately bounded and carries escaped full-size comman
   assert.ok(Buffer.byteLength(received)>2*1024*1024)
   await assert.rejects(client.originalResultReceipt(token,command+"x"))
   assert.equal(requests,1)
+})
+
+test("dependent projection checks the exact plan, materialization, closure and successor manifest",async()=>{
+  const prep="11111111-1111-4111-8111-111111111111",start="22222222-2222-4222-8222-222222222222"
+  const matId="33333333-3333-4333-8333-333333333333",closeId="44444444-4444-4444-8444-444444444444"
+  const task={projectId:id,taskId:id,revision:0},nextTask={...task,revision:1}
+  const originalManifest={family:"input-manifests",key:{projectId:id,id},digest:"a".repeat(64)}
+  const profile={projectId:id,profileId:id,revision:0},resource={projectId:id,resourceId:id}
+  const plan={family:"dispatch-plans",key:{projectId:id,id},payload:{projectId:id,planId:id,controllerId:id,
+    entries:[{preparationId:prep,startId:start,task,manifest:originalManifest,profile,resources:[resource],futureDependencies:[{producer:task,readiness:"implemented"}]}]}}
+  const planJSON=JSON.stringify(plan),ref=(family:string,key:unknown,raw:string)=>({family,key,digest:createHash("sha256").update(raw).digest("hex")})
+  const materialization={family:"dispatch-materializations",key:{projectId:id,id:matId},payload:{requestKey:matId,operation:"materialize_dispatch_dependency",
+    payload:{plan:ref("dispatch-plans",plan.key,planJSON),task,newTask:nextTask}}}
+  const materializationJSON=JSON.stringify(materialization),manifest={family:"input-manifests",key:{projectId:id,id:closeId},payload:{task:nextTask,knownGaps:[]}}
+  const manifestJSON=JSON.stringify(manifest),closure={family:"dispatch-closures",key:{projectId:id,id:closeId},payload:{command:{requestKey:closeId,
+    operation:"close_dispatch_inputs",payload:{materialization:ref("dispatch-materializations",materialization.key,materializationJSON),manifest:manifest.key}}}}
+  const next={task:nextTask,manifest:ref("input-manifests",manifest.key,manifestJSON),profile,resources:[{resource,expectedGeneration:null}],reviewSubjects:[]}
+  const closed={materializationJSON,closureJSON:JSON.stringify(closure),taskJSON:JSON.stringify({family:"task-revisions",key:nextTask}),manifestJSON,selectionJSON:JSON.stringify(next)}
+  const entry={preparationId:prep,startId:start,futureReady:true,claimsAvailable:true,closedJSON:JSON.stringify(closed),
+    taskJSON:JSON.stringify({family:"task-revisions",key:task}),selectionJSON:JSON.stringify({task,manifest:originalManifest,profile,resources:[{resource,expectedGeneration:null}],reviewSubjects:[]})}
+  let reply={formatVersion:1,basis:{},planJSON,entries:[entry],activeAssignments:[],attemptsJSON:[]}
+  const client=new NativeRuntimeClient("http://127.0.0.1:12345",proof,id,id,id,id,(async()=>new Response(JSON.stringify(reply))) as typeof fetch)
+  assert.equal((await client.dispatchContext(token,id)).entries[0].closedJSON,entry.closedJSON)
+  reply={...reply,entries:[{...entry,closedJSON:JSON.stringify({...closed,manifestJSON:JSON.stringify({...manifest,payload:{...manifest.payload,knownGaps:["open"]}})})}]}
+  await assert.rejects(client.dispatchContext(token,id))
+  reply={...reply,entries:[{...entry,closedJSON:JSON.stringify({...closed,materializationJSON:materializationJSON.replace('"revision":1','"revision":2')})}]}
+  await assert.rejects(client.dispatchContext(token,id))
 })

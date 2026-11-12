@@ -28,9 +28,11 @@ internal class NativeRuntimeEndpoint(private val app: H1Application,private val 
         return try { supplied.size==32 && Base64.getUrlEncoder().withoutPadding().encodeToString(supplied)==value &&
             MessageDigest.isEqual(proof,supplied) } finally { supplied.fill(0) }
     }
-    fun read(token: String,bytes: ByteArray): ServiceReply=try {
+    fun read(token: String,bytes: ByteArray): ServiceReply=readBounded(token,bytes,false)
+    fun readCandidate(token:String,bytes:ByteArray):ServiceReply=readBounded(token,bytes,true)
+    private fun readBounded(token:String,bytes:ByteArray,candidate:Boolean):ServiceReply=try {
         if(closed)throw ServiceFault("UNAVAILABLE",503)
-        decode(token,bytes)
+        decode(token,bytes,candidate)
     }
         catch(_: AppAccessFault) { throw ServiceFault("WORK_UNAVAILABLE_OR_FORBIDDEN",403) }
         catch(_: CodecFault) { throw ServiceFault("INVALID_INPUT",400) }
@@ -53,14 +55,20 @@ internal class NativeRuntimeEndpoint(private val app: H1Application,private val 
       catch(_:CodecFault) { throw ServiceFault("INVALID_INPUT",400) }
       catch(_:IllegalArgumentException) { throw ServiceFault("INVALID_INPUT",400) }
       catch(_:WorkFault) { throw ServiceFault("WORK_UNAVAILABLE_OR_FORBIDDEN",403) }
-    private fun decode(token: String,bytes: ByteArray): ServiceReply {
-        val decoded=StrictJson.decode(bytes,JsonLimits(bytes=16384,stringBytes=8192,collection=32,tokens=256)) as? JObject
+    private fun decode(token: String,bytes: ByteArray,candidate:Boolean=false): ServiceReply {
+        val decoded=StrictJson.decode(bytes,if(candidate)JsonLimits(bytes=4*1024*1024,stringBytes=2*1024*1024,collection=4096,tokens=100000)
+            else JsonLimits(bytes=16384,stringBytes=8192,collection=32,tokens=256)) as? JObject
             ?: throw ServiceFault("INVALID_INPUT",400)
         val operation=decoded.entries["operation"]?.string() ?: throw ServiceFault("INVALID_INPUT",400)
+        if(candidate && operation !in setOf("candidate-assembly-permit","candidate-test-plan","candidate-test-permit","candidate-delivery"))throw ServiceFault("INVALID_INPUT",400)
         val fields=when(operation) {
             "identity","source-identity","worker-context","connect" -> decoded.fields("formatVersion","operation","projectId")
             "controller-context" -> decoded.fields("formatVersion","operation","projectId","profileJSON")
             "dispatch-context" -> decoded.fields("formatVersion","operation","projectId","planId")
+            "candidate-assembly-permit" -> decoded.fields("formatVersion","operation","projectId","requestJSON")
+            "candidate-test-plan" -> decoded.fields("formatVersion","operation","projectId","planRefJSON")
+            "candidate-delivery" -> decoded.fields("formatVersion","operation","projectId","planRefJSON")
+            "candidate-test-permit" -> decoded.fields("formatVersion","operation","projectId","planRefJSON","assemblyJSON","jobJSON")
             "dispatch-materialization" -> decoded.fields("formatVersion","operation","projectId","planId","taskJSON","newTaskJSON","verificationPlanJSON","manifestJSON","taskRequestId","manifestRequestId")
             "reservation-retry" -> decoded.fields("formatVersion","operation","projectId","reservationJSON")
             "original-result-receipt" -> decoded.fields("formatVersion","operation","projectId","commandJSON")
@@ -72,7 +80,14 @@ internal class NativeRuntimeEndpoint(private val app: H1Application,private val 
         }
         if(fields.getValue("formatVersion").long()!=1L)throw ServiceFault("INVALID_INPUT",400)
         if(uuid(fields.getValue("projectId"))!=project)throw AppAccessFault(AppAccessProblem.FORBIDDEN)
-        val data=if(operation=="connect") {
+        val data=if(operation=="candidate-delivery"||operation=="candidate-test-plan"||operation=="candidate-test-permit") {
+            val plan=WorkIdentityCodec().decodeReference(fields.getValue("planRefJSON").string().toByteArray())
+            if(operation=="candidate-delivery")app.nativeCandidateDelivery(token,project,controller,host,plan)
+            else if(operation=="candidate-test-plan")app.nativeCandidateTestPlan(token,project,controller,host,plan)
+            else app.nativeCandidateTestPermit(token,project,controller,host,fields.getValue("assemblyJSON").string(),plan,fields.getValue("jobJSON").string())
+        } else if(operation=="candidate-assembly-permit") {
+            app.nativeCandidateAssemblyPermit(token,project,controller,host,fields.getValue("requestJSON").string())
+        } else if(operation=="connect") {
             val identity=app.nativeRuntimeRead(token,project,controller,host,null,null,null,sourceIdentity=true) as JObject
             if(identity.entries.getValue("scope").string()!="controller")throw AppAccessFault(AppAccessProblem.FORBIDDEN)
             val connect=onConnect ?: throw ServiceFault("UNAVAILABLE",503)
@@ -132,7 +147,7 @@ internal class NativeRuntimeEndpoint(private val app: H1Application,private val 
             if(operation=="hint") { require(continuation==null);app.nativeObserved(token,project,controller,host,subject,binding) }
             else app.nativeRuntimeRead(token,project,controller,host,subject,binding,continuation,operation=="packet")
         }
-        return ServiceReply(200,data).also { it.bytes(if(operation in setOf("packet","worker-context","controller-context","dispatch-context","dispatch-materialization","preparation-context","initial-context"))4*1024*1024 else 16384) }
+        return ServiceReply(200,data).also { it.bytes(if(candidate || operation in setOf("packet","worker-context","controller-context","dispatch-context","dispatch-materialization","preparation-context","initial-context"))4*1024*1024 else 16384) }
     }
     override fun close() { closed=true;proof.fill(0) }
 }

@@ -14,8 +14,10 @@ import { NativeContextSources } from "./native-context-source.js"
 import { NativePassiveWorkers } from "./native-passive-worker.js"
 import { NativeWorkerPreparation, NativeDispatchFrontier } from "./native-worker-preparation.js"
 import { LinuxGitWitness } from "./linux-git-witness.js"
-import { NativeResultRetention, type RetentionRequest } from "./native-result-retention.js"
-import { closedObject } from "./native-runtime-client.js"
+import { NativeResultRetention, advanceCandidateDelivery, type RetentionRequest, type CandidateDeliveryProfile,
+  type CandidateTestRequest, type CandidateTestOutcome } from "./native-result-retention.js"
+import type { CandidateReviewAdapter } from "./native-result-retention.js"
+import { closedObject, uuidPattern } from "./native-runtime-client.js"
 import { exactJSON } from "./strict-json.js"
 import { contextJSON } from "./native-context-codec.js"
 import type { NativeCredentialRegistry } from "./native-credentials.js"
@@ -72,7 +74,53 @@ export type NativeRuntimeConfiguration = Readonly<{
   storeId: string; projectId: string; controllerId: string; hostId: string
   controllerSessionID: string; assignmentSessionIDs: readonly string[]
   serviceProof: Uint8Array; transportProof: Uint8Array
+  /** Trusted bootstrap-selected candidate/check execution adapter. No default command runner or
+   * implicit platform qualification; absent profile leaves delivery unavailable. */
+  candidateDelivery?:Readonly<{profile:CandidateDeliveryProfile;pollMillis:number;
+    execute:(request:CandidateTestRequest,signal:AbortSignal)=>Promise<CandidateTestOutcome>;review?:CandidateReviewAdapter}>
 }>
+
+/** Protected bootstrap selection. This adapter supports immutable Git-byte checks only; general
+ * command execution/containment is deliberately unavailable until a separate adapter is qualified. */
+export async function loadCandidateDeliveryBootstrap(bootstrap:LinuxNativeCustody,source:string){
+  const raw=await bootstrap.read("candidate-delivery-bootstrap","current")
+  if(raw===undefined)return undefined
+  const value=closedObject(exactJSON(raw,nativeUnavailable),["formatVersion","profile","pollMillis","executor"])
+  const profile=closedObject(value.profile,["planRefJSON","operationId","candidateId","head","time","testPlanId","capacity"])
+  const executor=closedObject(value.executor,["kind","git"]),pin=closedObject(executor.git,["path","sha256"])
+  const pollMillis=Number(value.pollMillis?.value),capacity=Number(profile.capacity?.value)
+  if(value.formatVersion?.value!=="1"||process.platform!=="linux"||executor.kind!=="linux-immutable-git-v1"||
+    ![profile.operationId,profile.candidateId,profile.testPlanId].every(id=>typeof id==="string"&&uuidPattern.test(id))||
+    typeof profile.planRefJSON!=="string"||typeof profile.time!=="string"||!/^\d{10} \+0000$/.test(profile.time)||
+    !Number.isInteger(pollMillis)||pollMillis<1000||pollMillis>60000||!Number.isInteger(capacity)||capacity<1||capacity>64||
+    typeof pin.path!=="string"||!path.isAbsolute(pin.path)||typeof pin.sha256!=="string"||!/^[0-9a-f]{64}$/.test(pin.sha256))nativeUnavailable()
+  const selected=JSON.parse(contextJSON(profile)) as CandidateDeliveryProfile
+  const witness=new LinuxGitWitness({path:pin.path,sha256:pin.sha256})
+  return {profile:selected,pollMillis,execute:async(job:CandidateTestRequest,signal:AbortSignal):Promise<CandidateTestOutcome>=>{
+    if(job.command[0]!=="immutable-git-file-sha256-v1"||job.command.length!==3)return {outcome:"unavailable",output:"Selected executor does not support this planned check"}
+    try {return await witness.checkCandidateFile(source,{...selected.head,...job.candidate},job.command[1]!,job.command[2]!,signal)}
+    catch {return {outcome:signal.aborted?"cancelled":"unavailable",output:"Immutable candidate/check observation unavailable"}}
+  }}
+}
+
+export function startCandidateDeliveryLoop(source:string,custody:LinuxNativeCustody,witness:LinuxGitWitness,
+  registry:NativeCredentialRegistry,sessionID:string,selected:NonNullable<NativeRuntimeConfiguration["candidateDelivery"]>){
+  if(!Number.isInteger(selected.pollMillis)||selected.pollMillis<1000||selected.pollMillis>60000)nativeUnavailable()
+  const abort=new AbortController()
+  let work:Promise<void>|undefined,status:unknown,first=true
+  let resolveFirst!:(value:Awaited<ReturnType<typeof advanceCandidateDelivery>>)=>void,rejectFirst!:(error:unknown)=>void
+  const initial=new Promise<Awaited<ReturnType<typeof advanceCandidateDelivery>>>((resolve,reject)=>{resolveFirst=resolve;rejectFirst=reject})
+  void initial.catch(()=>{}) // status retains a fail-closed hold even if bootstrap doesn't await the first tick
+  const tick=()=>{
+    if(work||abort.signal.aborted)return
+    work=advanceCandidateDelivery(source,custody,witness,registry,sessionID,selected.profile,selected.execute,abort.signal,selected.review)
+      .then(value=>{status=value;if(first){first=false;resolveFirst(value)}},error=>{
+        status={phase:"delivery-held"};if(first){first=false;rejectFirst(error)}
+      }).finally(()=>{work=undefined})
+  }
+  const timer=setInterval(tick,selected.pollMillis);timer.unref();tick()
+  return {initial,get status(){return status},async close(){clearInterval(timer);abort.abort();await work}}
+}
 
 /** Explicit pinned in-process startup composition. Configuration/proofs come from trusted local
  * bootstrap, never ctx.options/tool/RPC/model fields. Existing protected bindings are prerequisites;
@@ -122,6 +170,8 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
   let workers:NativePassiveWorkers|undefined,preparations:NativeWorkerPreparation|undefined,dispatch:NativeDispatchFrontier|undefined
   let retentionProof:NativeResultRetention|undefined
   let retentionWitness:LinuxGitWitness|undefined
+  let deliveryLoop:ReturnType<typeof startCandidateDeliveryLoop>|undefined
+  const closeDelivery=async()=>{await deliveryLoop?.close()}
   let reference:RuntimeReference|undefined
   let transport: Awaited<ReturnType<typeof listenNativeTransport>> | undefined
   let preparationTool:{dispose():Promise<void>}|undefined,tools:{dispose():Promise<void>}|undefined
@@ -194,9 +244,16 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
       dispatch=new NativeDispatchFrontier(registry,preparations,initialStart,custody,config.controllerSessionID,d.planId,Number(d.capacity.value),Number(d.pollMillis.value))
       dispatch.start()
     }
-    return Object.freeze({ registry, bridge, sources, workers, preparations, initial, initialStart, initialRecovery, dispatch, async close() {
+    if(config.candidateDelivery){
+      const selected=config.candidateDelivery
+      if(!retentionWitness)nativeUnavailable()
+      deliveryLoop=startCandidateDeliveryLoop(controller.workRoot,custody,retentionWitness,registry,config.controllerSessionID,selected)
+    }
+    return Object.freeze({ registry, bridge, sources, workers, preparations, initial, initialStart, initialRecovery, dispatch,
+      get candidateDeliveryStatus(){return deliveryLoop?.status},async close() {
       if(runtimeReferences.get(config.root)===reference)runtimeReferences.delete(config.root)
       await dispatch?.close()
+      await closeDelivery()
       await transport!.close()
       await preparationTool?.dispose()
       await tools?.dispose()
@@ -205,6 +262,7 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
       await bridge.close()
     } })
   } catch (error) {
+    await closeDelivery()
     await dispatch?.close()
     if(reference&&runtimeReferences.get(config.root)===reference)runtimeReferences.delete(config.root)
     if (transport) await transport.close()

@@ -77,7 +77,11 @@ private fun workEnrollment(authority: Auth2State,projection: AuthWorkProjection)
         }
     }
 }
-internal data class H1EvidenceAttribution(val principalId: UUID,val delegationId: UUID,val reference: WorkReference)
+/** Derived from the retained successful receipt, not from the evidence body. Keep its original
+ * identity and validation head so historical verifiers can identify the actual provenance rather
+ * than reconstructing a receipt from the report or from current authority. */
+internal data class H1EvidenceAttribution(val principalId: UUID,val delegationId: UUID,val reference: WorkReference,
+    val receipt:dev.writhelm.core.store.CommandIdentity,val validatedAt:GitOid,val credentialId:UUID,val fingerprint:Digest)
 internal fun evidenceAttribution(authority: Auth2State,r: Receipt): H1EvidenceAttribution? {
     val outcome=r.outcome as? LogicalOutcome.Success ?: return null
     if(r.identity.operation!="record_evidence")return null
@@ -87,7 +91,8 @@ internal fun evidenceAttribution(authority: Auth2State,r: Receipt): H1EvidenceAt
     val result=outcome.result.fields("key","generation","digest")
     val key=identityCodec.decodeKey(WorkFamily.EVIDENCE,StrictJson.encode(result.getValue("key")))
     return H1EvidenceAttribution(r.identity.principalId,scope.delegationId,
-        WorkReference(WorkRecordIdentity(WorkFamily.EVIDENCE,key),digest(result.getValue("digest"))))
+        WorkReference(WorkRecordIdentity(WorkFamily.EVIDENCE,key),digest(result.getValue("digest"))),
+        r.identity,r.validatedAt,r.authenticatedByCredentialId,Digest.parse(r.fingerprint))
 }
 /** Verified retained core authority, independent of today's grants/withdrawal eligibility. The core
  * graph binds direct traces to original successful resolutions and continuity to exact sources. */

@@ -289,6 +289,24 @@ export class NativeCredentialRegistry implements NativeWorkCredentialResolver {
     return boundedDispatchMaterializationChannel(this.#service.projectId,this.#serviceOrigin,key.token,this.#requests,
       JSON.stringify([this.#service.storeId,this.#service.projectId,this.#epoch,sessionID,"dispatch-materialization-v1"]))
   }
+  async candidateAssemblyPermit(sessionID:string,requestJSON:string,signal?:AbortSignal):Promise<boolean>{
+    const binding=await this.inspect(sessionID)
+    if(binding?.scope!=="controller")nativeUnavailable()
+    await this.sourceIdentity(sessionID)
+    return this.#service.candidateAssemblyPermit((await this.verifiedCredential(sessionID)).token,requestJSON,signal)
+  }
+  async candidateTestPlan(sessionID:string,planRefJSON:string,signal?:AbortSignal){
+    if((await this.inspect(sessionID))?.scope!=="controller")nativeUnavailable()
+    return this.#service.candidateTestPlan((await this.verifiedCredential(sessionID)).token,planRefJSON,signal)
+  }
+  async candidateDelivery(sessionID:string,planRefJSON:string,signal?:AbortSignal){
+    if((await this.inspect(sessionID))?.scope!=="controller")nativeUnavailable()
+    return this.#service.candidateDelivery((await this.verifiedCredential(sessionID)).token,planRefJSON,signal)
+  }
+  async candidateTestPermit(sessionID:string,assemblyJSON:string,planRefJSON:string,jobJSON:string,signal?:AbortSignal){
+    if((await this.inspect(sessionID))?.scope!=="controller")nativeUnavailable()
+    return this.#service.candidateTestPermit((await this.verifiedCredential(sessionID)).token,assemblyJSON,planRefJSON,jobJSON,signal)
+  }
   async initialContext(sessionID:string,subject:NativeSubject,intentId:string,signal?:AbortSignal){
     const binding=await this.inspect(sessionID)
     if(binding?.scope!=="controller")nativeUnavailable()

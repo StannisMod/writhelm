@@ -177,6 +177,8 @@ internal class WorkState private constructor(
         val planAttemptIds=records.values.mapNotNull { (it.payload as? WDispatchPlanPayload)?.value }
             .flatMap { it.entries }.flatMap { listOf(it.preparationId,it.startId) }.toSet()
         val successorIds=successors.flatMap { listOf(it.preparationId,requireNotNull(it.startId)) }
+        val closuresByManifest=records.values.filter { it.payload is WDispatchClosurePayload }
+            .groupBy { (it.payload as WDispatchClosurePayload).value.manifest }
         graph(dispatchAttempts.map { it.reservation.requestKey }.distinct().size==dispatchAttempts.size &&
             dispatchReservations.map { it.assignmentId }.distinct().size==dispatchAttempts.size &&
             dispatchReservations.map { it.workspaceId }.distinct().size==dispatchAttempts.size &&
@@ -274,6 +276,19 @@ internal class WorkState private constructor(
                     val root=a.rootPreparationId ?: a.preparationId
                     val e=plan.entries.singleOrNull { it.preparationId==root } ?: refuse(CodecProblem.INVALID_GRAPH)
                     val cmd=a.reservation;val reserve=(cmd.operation as? CReserveAssignmentOperation)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
+                    // A future dependency can use only the exact closed successor of this plan
+                    // entry. The closure itself is a separate authenticated publication; this
+                    // graph check does not qualify an assessor or verify the full packet.
+                    val exactSelection=if(e.futureDependencies.isEmpty())reserve.task==e.task && reserve.manifest==e.manifest else {
+                        closuresByManifest[reserve.manifest.identity.key].orEmpty().count { candidate ->
+                            edge();dependency(candidate.identity)
+                            val closure=(candidate.payload as WDispatchClosurePayload).value
+                            val materialization=(resolve(closure.materialization).payload as? WDispatchMaterializationPayload)?.value
+                            materialization!=null && materialization.plan==a.plan && materialization.task==e.task &&
+                                materialization.newTask==reserve.task && closure.manifest==reserve.manifest.identity.key &&
+                                reserve.manifest==reference(WorkFamily.INPUT_MANIFESTS,closure.manifest)
+                        }==1
+                    }
                     a.previous?.let { ref ->
                         val predecessor=(resolve(ref).payload as? WDispatchAttemptPayload)?.value ?: refuse(CodecProblem.INVALID_GRAPH)
                         val old=(predecessor.reservation.operation as CReserveAssignmentOperation).value
@@ -281,7 +296,7 @@ internal class WorkState private constructor(
                             old.intendedExecution.nativeHostId==reserve.intendedExecution.nativeHostId)
                     }
                     graph((r.identity.key as WorkKey.Id).id==a.preparationId && cmd.projectId==projectId &&
-                        e.futureDependencies.isEmpty() && reserve.task==e.task && reserve.manifest==e.manifest && reserve.profile==e.profile &&
+                        exactSelection && reserve.profile==e.profile &&
                         reserve.resources.map { it.resource }.toSet()==e.resources.toSet() && reserve.resources.size==e.resources.size &&
                         reserve.reviewSubjects.isEmpty() && reserve.bodies.isEmpty() && reserve.intendedExecution.controllerId==plan.controllerId &&
                         reserve.intendedExecution.template=="executor-v1")

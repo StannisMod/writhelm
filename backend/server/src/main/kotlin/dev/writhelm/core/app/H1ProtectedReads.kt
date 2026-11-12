@@ -59,7 +59,7 @@ internal class H1ProtectedReads {
         taskAndBase.addAll((p.manifest.knowledge+p.retainedOwnContinuation.filter { it.identity.family==WorkFamily.LOADED_VIEWS }.flatMap { it.knowledge })
             .map { ProtectedResource.Knowledge(it) })
         (p.task.references+p.manifest.references+p.retainedOwnContinuation.filter { it.identity.family==WorkFamily.LOADED_VIEWS }.flatMap { it.references })
-            .distinct().forEach { reference -> taskAndBase.addAll(resources(workRecordFacts(work.resolve(reference)))) }
+            .distinct().forEach { reference -> taskAndBase.addAll(resources(workRecordFacts(work.resolve(reference),work.modelVersion))) }
         if(p.assignment.executionGeneration==subject.generation)taskAndBase.add(ProtectedResource.MutableWork(
             WorkMutableSelector(WorkRecordIdentity(WorkFamily.ASSIGNMENTS,WorkKey.Id(project,subject.assignmentId)),p.assignment.recordGeneration)))
         val manifest=CoreRecordCodec.records(knowledge).single { it.family=="manifests" && uuid(it.key)==p.base.knowledgeManifestId }

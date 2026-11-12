@@ -181,8 +181,8 @@ internal class H1BoundaryValidator(private val cache: H1SnapshotCache) {
                 (it.payload as? WDispatchMaterializationPayload)?.value?.newTask==manifest.task
             })
         }
-        // No successful closure is admitted until independent qualification provenance has a
-        // durable historical verifier. Rejected receipts remain auditable through normal policy.
+        // Automatic declared-input checks are reconstructed from the original materialization.
+        // Legacy assessor assertions do not become successful service publications.
         if(operation==AuthorityOperation.CLOSE_DISPATCH_INPUTS) {
             if(record!=null) {
                 val key=record.identity.key as WorkKey.Id
@@ -190,9 +190,11 @@ internal class H1BoundaryValidator(private val cache: H1SnapshotCache) {
                     identityCodec.recordPath(record.identity),identityCodec.recordPath(WorkRecordIdentity(WorkFamily.INPUT_MANIFESTS,
                         (record.payload as? WDispatchClosurePayload)?.value?.manifest ?: fail(StoreProblem.INTEGRITY)))) &&
                     r.writes.all { it.beforeDigest==null && it.afterDigest!=null })
-                H1JointReduction().validateDispatchClosureHistory(h,c,key,r.identity.principalId,r.authenticatedByCredentialId,Digest.parse(r.fingerprint))
+                H1JointReduction().validateDispatchClosureHistory(h,c,key,r.identity.principalId,r.authenticatedByCredentialId,
+                    Digest.parse(r.fingerprint))
             }
-            integrity(record==null && r.writes.isEmpty())
+            if(record==null)integrity(r.writes.isEmpty())
+            else integrity((record.payload as? WDispatchClosurePayload)?.automatic==true)
         }
         if(record!=null && operation in setOf(AuthorityOperation.REQUEST_NATIVE_TRANSITION,AuthorityOperation.OBSERVE_NATIVE_TRANSITION)) {
             val write=r.writes.single { it.path==identityCodec.recordPath(record.identity) }

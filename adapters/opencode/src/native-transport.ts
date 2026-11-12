@@ -63,6 +63,10 @@ export async function listenNativeTransport(origin: string, proof: Uint8Array, b
         closedObject(input,["formatVersion","operation","intentId"])
         if(!initial||typeof input.intentId!=="string")nativeUnavailable()
         result=await initial.witness(input.intentId)
+      } else if(input.operation==="candidate-assembly-proof"){
+        closedObject(input,["formatVersion","operation","operationId"])
+        if(!retention||typeof input.operationId!=="string")nativeUnavailable()
+        result=await retention.candidateProof(input.operationId,AbortSignal.timeout(9000))
       } else if(input.operation==="result-retention-proof"){
         closedObject(input,["formatVersion","operation","assignmentId","executionGeneration","executionId","snapshotJSON"])
         if(!retention||typeof input.assignmentId!=="string"||typeof input.executionGeneration!=="string"||

@@ -82,11 +82,11 @@ export function boundedDispatchAttemptChannel(projectID:string,origin:string,tok
   return boundedChannel(projectID,"controller",origin,token,4*1024*1024,custody,bindingIdentity,
     new Set(["bind_dispatch_attempt"]),new Set(),"3",fetcher)
 }
-/** Internal controller-only atomic materialization; not a generic model tool. */
+/** Internal controller-only dependency materialization and declared-input closure; not a model tool. */
 export function boundedDispatchMaterializationChannel(projectID:string,origin:string,token:string,custody:WorkRequestCustody,
   bindingIdentity:string,fetcher:typeof fetch=fetch):BoundWorkChannel {
   return boundedChannel(projectID,"controller",origin,token,4*1024*1024,custody,bindingIdentity,
-    new Set(["materialize_dispatch_dependency"]),new Set(),"3",fetcher)
+    new Set(["materialize_dispatch_dependency","close_dispatch_inputs"]),new Set(),"3",fetcher)
 }
 
 function boundedChannel(projectID: string, scope: "controller" | "assignment", origin: string, token: string,

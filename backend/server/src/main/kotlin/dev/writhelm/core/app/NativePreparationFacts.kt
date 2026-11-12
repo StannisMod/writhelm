@@ -168,15 +168,6 @@ internal interface ReservationProofControl {
     fun inputs(state:H1BoundState,command:WorkCommand):ReservationInputProof?=null
 }
 
-/** Separately obtained assessment, tied to the exact structural subject and command at H.
- * Implementations must establish the assessor's provenance and independence; a worker field,
- * the structural checks below, or a synthetically supplied value is not such qualification. */
-internal data class PrebindingAssessment(val basis:GitOid,val project:UUID,val command:Digest,
-    val task:WorkReference,val manifest:WorkReference,val profile:WorkReference,val assessment:WSource)
-internal fun interface PrebindingAssessmentControl {
-    fun independentlyAssess(state:H1BoundState,command:WorkCommand):PrebindingAssessment?
-}
-
 /** Resolve receipt-derived attribution for an exact assessment subject at H. This only establishes
  * who recorded the evidence and its declared subject; the evidence's text, outcome or identity is
  * not by itself an independently qualified completeness assessment or permission to close a gap. */
@@ -219,6 +210,33 @@ internal fun interface ClosureAssessmentQualification {
         attribution:H1EvidenceAttribution):QualifiedClosureAssessment?
 }
 
+/** Historical verifier must derive its answer from durable qualification provenance available at
+ * the original H. It must not consult a live assessor or infer qualification from attribution. */
+internal fun interface HistoricalClosureQualification {
+    fun verify(state:H1BoundState,command:DispatchClosureCommand,inputs:PrebindingInputInventory,
+        attribution:H1EvidenceAttribution):QualifiedClosureAssessment?
+}
+
+/** Check the exact historical subject independently of the current runtime's observations.
+ * This helper does not install a verifier or authorize publication. */
+internal fun historicalClosureQualificationMatches(state:H1BoundState,command:DispatchClosureCommand,
+    inputs:PrebindingInputInventory,controllerPrincipal:UUID,record:WDispatchClosurePayload,
+    verifier:HistoricalClosureQualification):Boolean = try {
+    val work=state.work.getValue(command.manifest.projectId)
+    val materialization=(work.resolve(command.materialization).payload as WDispatchMaterializationPayload).value
+    val task=work.task(materialization.newTask)
+    val exact=PrebindingInputInventory(work.reference(WorkFamily.TASK_REVISIONS,materialization.newTask),
+        work.reference(WorkFamily.INPUT_MANIFESTS,materialization.manifest),task.dependencies.map { requireNotNull(it.selectedResult) })
+    if(inputs!=exact || record.value!=command || !closureAttributionMatches(state,command.manifest.projectId,inputs,controllerPrincipal,record)) false
+    else {
+        val evidence=(command.assessment as WSourceVariant2Value).value.reference
+        val attribution=attributedClosureEvidence(state,command.manifest.projectId,inputs,evidence,controllerPrincipal)
+        val expected=attribution?.let { QualifiedClosureAssessment(state.basis,command.materialization,inputs,evidence,it.principalId,it.delegationId) }
+        command.expectedHead==WorkGitOid(state.basis.algorithm,state.basis.hex) && attribution!=null &&
+            verifier.verify(state,command,inputs,attribution)==expected
+    }
+} catch(_:Exception) { false }
+
 /** Builds a closure reducer input only after exact-H inventory, receipt-derived authorship and an
  * independent qualification provider all agree. No default provider is installed. The caller must
  * still authenticate the controller and publish with a same-head CAS and historical audit. */
@@ -244,11 +262,9 @@ internal fun verifiedDispatchClosureAssessment(state:H1BoundState,command:Dispat
     } catch(_:Exception) { null }
 }
 
-/** Real structural verifier for the reservation inputs, combined with a separate trusted
- * independent-assessment provider. It does not create or remove a gap, qualify a profile, prove
- * a full assignment packet, or establish semantic discovery of undeclared requirements. */
-internal class IndependentPrebindingInputVerifier(private val observations:H1RuntimeFacts,
-    private val assessor:PrebindingAssessmentControl):ReservationProofControl {
+/** Check declared reservation inputs at the captured head. This does not create or remove a gap,
+ * qualify a profile, prove a full assignment packet, or establish discovery of undeclared norms. */
+internal class DeclaredPrebindingInputVerifier(private val observations:H1RuntimeFacts):ReservationProofControl {
     override fun profile(state:H1BoundState,command:WorkCommand):ReservationProfileProof?=null
     override fun packet(state:H1BoundState,command:WorkCommand):ReservationPacketProof?=null
     override fun inputs(state:H1BoundState,command:WorkCommand):ReservationInputProof? {
@@ -260,7 +276,6 @@ internal class IndependentPrebindingInputVerifier(private val observations:H1Run
             if(work.modelVersion!=4)return null
             val task=work.task(op.task)
             val manifest=(work.resolve(op.manifest).payload as? WInputManifestsPayload)?.value ?: return null
-            val taskRef=work.reference(WorkFamily.TASK_REVISIONS,op.task)
             val profile=work.reference(WorkFamily.PROFILES,op.profile)
             if(task.state!="executable" || task.unresolved.isNotEmpty() || task.executionProfile!=op.profile ||
                 manifest.task!=op.task || manifest.base!=task.base || manifest.knownGaps.isNotEmpty() ||
@@ -292,8 +307,6 @@ internal class IndependentPrebindingInputVerifier(private val observations:H1Run
                 if(result.task!=dependency.producer || manifest.items.none { it.mandatory && (it.source as? WSourceVariant2Value)?.value?.reference==ref })return null
             }
             val fingerprint=WorkCodec().fingerprint(command)
-            val expected=PrebindingAssessment(state.basis,command.projectId,fingerprint,taskRef,op.manifest,profile,manifest.declaredClosureAssessment)
-            if(assessor.independentlyAssess(state,command)!=expected)return null
             ReservationInputProof(state.basis,command.projectId,fingerprint,op.task,op.manifest,profile)
         }catch(_:Exception){null}
     }

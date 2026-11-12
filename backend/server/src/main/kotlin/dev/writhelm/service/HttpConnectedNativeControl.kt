@@ -61,6 +61,9 @@ internal class HttpConnectedNativeControl(origin: String,proof: ByteArray): Conn
         call("result-retention-proof","assignmentId" to uuid(assignment),"executionGeneration" to str(generation.toString()),
             "executionId" to uuid(execution),"snapshotJSON" to str(StrictJson.encode(encodeWSnapshot(result)).decodeToString()),maximum=65536,stringMaximum=32768)
     }catch(_:Exception){null}
+    fun candidateAssemblyProof(operationId:java.util.UUID):JsonValue?=try {
+        call("candidate-assembly-proof","operationId" to uuid(operationId),maximum=2*1024*1024,stringMaximum=1024*1024)
+    }catch(_:Exception){null}
     private fun envelopeCall(operation: String,e: ConnectedEnvelope)=call(operation,"key" to str(key(e)),"digest" to digest(Digest.of(e.bytes())))
     /** Trusted packet provisioner seam for the dependent context stage. Current service digest and
      * binding are verified by the receiving concrete bridge before any original is retained. This

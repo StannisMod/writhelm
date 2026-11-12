@@ -32,7 +32,8 @@ internal class H1Options(val runtime: H1RuntimeFacts,val app: AppOptions=AppOpti
     val commandReplyBytes: Int=65536,val navigationClock: ()->Long={System.nanoTime()/1000000},
     val nativeSafety: NativeRuntimeSafety=UnavailableNativeRuntimeSafety,
     val controllerSafety: NativeControllerRuntimeSafety=UnavailableNativeControllerSafety,
-    val workModelVersion:Int=2,val retentionEffectQualification:RetentionEffectQualification=RetentionEffectQualification { _,_,_,_,_->false }) {
+    val workModelVersion:Int=2,val retentionEffectQualification:RetentionEffectQualification=RetentionEffectQualification { _,_,_,_,_->false },
+    val candidateAssemblyProof:(UUID)->JsonValue?={null}) {
     init { require(app.admission.formatVersion==2 && commandReplyBytes in 1024..65536 && workModelVersion in setOf(2,4)) }
 }
 internal class H1Genesis(val core: ApprovalWorkflow,val auth: Collection<Auth2Record>,val work: Map<UUID,WorkState>)
@@ -170,11 +171,30 @@ internal class H1Application private constructor(private val storeId: UUID,priva
         val c=r.command
         return if(c.operation=="close_dispatch_inputs") {
                 val command=DispatchClosureCommandCodec().decode(c.bytes())
-                reduction.authorizeDispatchClosure(base,command,r.presentation) ?: fail(StoreProblem.DENIED)
-                // No deployed provider and durable qualification provenance exist. Registering the
-                // command must not turn evidence attribution into a qualified assessment.
-                val code=if(command.expectedHead!=WorkGitOid(base.basis.algorithm,base.basis.hex)) "STALE_GENERATION" else "BLOCKED_INPUT"
-                H1JointCandidate(base,base.core,base.authority,base.work,Evaluation(LogicalOutcome.Rejected("work",code),emptyList()))
+                val admission=reduction.authorizeDispatchClosure(base,command,r.presentation) ?: fail(StoreProblem.DENIED)
+                try {
+                    workRequire(command.expectedHead==WorkGitOid(base.basis.algorithm,base.basis.hex),WorkProblem.STALE_GENERATION)
+                    workRequire(command.assessment==WSourceVariant2Value(WSourceVariant2("work",command.materialization)),WorkProblem.BLOCKED_INPUT)
+                    val work=base.work.getValue(command.manifest.projectId)
+                    val materialization=(work.resolve(command.materialization).payload as WDispatchMaterializationPayload).value
+                    val task=work.task(materialization.newTask)
+                    val probe=WorkCommand(command.requestKey,work.projectId,CCreateTaskRevisionOperation(
+                        CCreateTaskRevision(materialization.newTask,task,null,emptyList())))
+                    val observed=r.observations.getOrPut(base.basis) { options.runtime.capture(base,probe) }
+                    workRequire(observed.basis==base.basis,WorkProblem.STALE_GENERATION)
+                    val plan=(work.resolve(materialization.plan).payload as WDispatchPlanPayload).value
+                    val actor=WorkExecutionInput(admission.identity.principalId,admission.credentialId,plan.controllerId,null,null)
+                    val effect=reduceDeclaredDispatchClosure(work,command.expectedHead,actor,observed.facts,command)
+                    val codec=WorkCodec(modelVersion=4)
+                    val changes=effect.changedRecords.map { row ->RecordChange(RecordKey("work",row.identity.family.tag,
+                        StrictJson.decode(identityCodec.encodeKey(row.identity.key))),codec.encodeRecord(row)) }
+                    val row=effect.after.records.getValue(effect.result)
+                    val result=obj("key" to StrictJson.decode(identityCodec.encodeKey(row.identity.key)),"generation" to JNull,"digest" to digest(codec.digest(row)))
+                    H1JointCandidate(base,base.core,base.authority,base.work+(work.projectId to effect.after),
+                        Evaluation(LogicalOutcome.Success(c.operation,result,false),changes.sortedBy { it.key.path }))
+                } catch(e:WorkFault) {
+                    H1JointCandidate(base,base.core,base.authority,base.work,Evaluation(LogicalOutcome.Rejected("work",e.problem.name),emptyList()))
+                }
             } else if(c.operation=="materialize_dispatch_dependency") {
                 val command=DispatchMaterializationCommandCodec().decode(c.bytes())
                 val admission=reduction.authorizeDispatchMaterialization(base,command,r.presentation) ?: fail(StoreProblem.DENIED)
@@ -450,6 +470,111 @@ internal class H1Application private constructor(private val storeId: UUID,priva
         workRequire(assignment.state=="active" && assignment.currentIntent==null,WorkProblem.INVALID_TRANSITION)
         Model2Inspector(work).requireActivation(subject,true)
     }
+    @Synchronized internal fun nativeCandidateTestPlan(token:String,project:UUID,controller:UUID,host:UUID,planRef:WorkReference):JsonValue = capture(token) { state,key ->
+        NativeRuntimeAccess(controller,host).sourceIdentity(state,key,project)
+        val credential=state.authority.authenticate(key,project) ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        if(credential.scope!=CredentialScope.Controller(controller)||!state.authority.workAllows(credential,project,WorkPermission.TASK_PLAN)||
+            !state.authority.workAllows(credential,project,WorkPermission.TASK_DISPATCH))throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        val work=state.work.getValue(project)
+        val row=work.resolve(planRef);val plan=(row.payload as? WDispatchPlanPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+        workRequire(plan.controllerId==controller && plan.candidateChecks.isNotEmpty(),WorkProblem.BLOCKED_INPUT)
+        obj("formatVersion" to num(1),"basis" to state.basis.json(),"planJSON" to str(WorkCodec(modelVersion=work.modelVersion).encodeRecord(row,true).decodeToString()))
+    }
+    @Synchronized internal fun nativeCandidateDelivery(token:String,project:UUID,controller:UUID,host:UUID,planRef:WorkReference):JsonValue {
+        nativeCandidateTestPlan(token,project,controller,host,planRef)
+        val selection=capture(token) { state,_ ->
+            val work=state.work.getValue(project);val plan=(work.resolve(planRef).payload as WDispatchPlanPayload).value
+            plan.entries.map { entry ->
+                val task=if(entry.futureDependencies.isEmpty())entry.task else dispatchClosedSelection(work,planRef,entry)?.task ?: return@capture null
+                val result=chooseDispatchResult(work,DispatchFutureDependency(task,"implemented")) as? DispatchResultChoice.Selected ?: return@capture null
+                result.result
+            }
+        } ?: return obj("formatVersion" to num(1),"kind" to str("pending"))
+        val inputs=candidateAssemblyInputs(token,project,controller,selection)
+        val excluded=capture(token) { state,_ ->
+            val work=state.work.getValue(project)
+            (selection.map { (work.resolve(it).payload as WResultsPayload).value.producer.principalId }+
+                state.authority.controllers.getValue(controller).principalId).distinct()
+        }
+        return obj("formatVersion" to num(1),"kind" to str("ready"),
+            "selectedJSON" to str(StrictJson.encode(JArray(selection.map { StrictJson.decode(identityCodec.encodeReference(it)) })).decodeToString()),
+            "inputsJSON" to str(StrictJson.encode(JArray(inputs.map { obj("base" to encodeWSnapshot(it.base),"result" to encodeWSnapshot(it.result)) })).decodeToString()),
+            "excludedReviewersJSON" to str(StrictJson.encode(JArray(excluded.map(::uuid))).decodeToString()))
+    }
+    @Synchronized internal fun nativeCandidateTestPermit(token:String,project:UUID,controller:UUID,host:UUID,
+        assemblyJSON:String,planRef:WorkReference,jobJSON:String):JsonValue {
+        nativeCandidateAssemblyPermit(token,project,controller,host,assemblyJSON)
+        nativeCandidateTestPlan(token,project,controller,host,planRef)
+        return capture(token) { state,_ ->
+            val work=state.work.getValue(project);val plan=(work.resolve(planRef).payload as WDispatchPlanPayload).value
+            val assembly=StrictJson.decode(assemblyJSON.toByteArray()) as JObject
+            val selected=StrictJson.decode(assembly.entries.getValue("selectedJSON").string().toByteArray()).list().map {
+                val ref=identityCodec.decodeReference(StrictJson.encode(it))
+                (work.resolve(ref).payload as WResultsPayload).value.task
+            }
+            val required=plan.entries.map { entry -> if(entry.futureDependencies.isEmpty())entry.task
+                else dispatchClosedSelection(work,planRef,entry)?.task ?: throw WorkFault(WorkProblem.NOT_READY) }
+            workRequire(selected.size==required.size && selected.toSet()==required.toSet(),WorkProblem.BLOCKED_INPUT)
+            val job=StrictJson.decode(jobJSON.toByteArray()).fields("runId","candidate","checkId","command","safeRepeat","previousRunId")
+            uuid(job.getValue("runId"));val candidate=job.getValue("candidate").fields("commit","tree")
+            val commit=workOid(candidate.getValue("commit"));val tree=workOid(candidate.getValue("tree"))
+            workRequire(commit.algorithm==tree.algorithm,WorkProblem.INVALID_SUBJECT)
+            val proof=options.candidateAssemblyProof(uuid(assembly.entries.getValue("operationId")))
+                ?: throw WorkFault(WorkProblem.BLOCKED_INPUT)
+            workRequire(proof!==JNull,WorkProblem.BLOCKED_INPUT)
+            val retained=StrictJson.decode(proof.string().toByteArray(),JsonLimits(bytes=2*1024*1024,stringBytes=1024*1024,collection=4096,tokens=100000))
+                .fields("original","result")
+            workRequire(retained.getValue("original").string()==assemblyJSON &&
+                StrictJson.encode(retained.getValue("result")).contentEquals(StrictJson.encode(job.getValue("candidate"))),WorkProblem.BLOCKED_INPUT)
+            val check=plan.candidateChecks.singleOrNull { it.checkId==job.getValue("checkId").string() } ?: throw WorkFault(WorkProblem.BLOCKED_INPUT)
+            workRequire(job.getValue("command").list().map { it.string() }==check.command.map { it.replace("{candidateCommit}",commit.hex).replace("{candidateTree}",tree.hex) } &&
+                (job.getValue("safeRepeat") as? JBoolean)?.value==check.safeRepeat,WorkProblem.BLOCKED_INPUT)
+            obj("formatVersion" to num(1),"kind" to str("candidate-test-permit"),"jobDigest" to digest(Digest.of(jobJSON.toByteArray())),
+                "planDigest" to digest(planRef.digest),"assemblyDigest" to digest(Digest.of(assemblyJSON.toByteArray())))
+        }
+    }
+    @Synchronized internal fun nativeCandidateAssemblyPermit(token:String,project:UUID,controller:UUID,host:UUID,raw:String):JsonValue {
+        // Exact operation bytes are echoed only after selection, rights and repository checks.
+        val request=StrictJson.decode(raw.toByteArray(),JsonLimits(bytes=1024*1024,stringBytes=512*1024,collection=4096,tokens=100000))
+            .fields("operationId","candidateId","head","inputs","time","selectedJSON")
+        uuid(request.getValue("operationId"));uuid(request.getValue("candidateId"))
+        workRequire(request.getValue("time").string().matches(Regex("[0-9]{10} \\+0000")),WorkProblem.INVALID_SUBJECT)
+        val references=StrictJson.decode(request.getValue("selectedJSON").string().toByteArray()).list()
+            .map { identityCodec.decodeReference(StrictJson.encode(it)) }
+        val inputs=candidateAssemblyInputs(token,project,controller,references)
+        val head=decodeWSnapshot(request.getValue("head"))
+        workRequire(head.dirtyContentDigest==null && head.commit!=null && head.repositoryId==inputs.first().result.repositoryId,WorkProblem.INVALID_SUBJECT)
+        val supplied=request.getValue("inputs").list().map { item ->val f=item.fields("base","result");decodeWSnapshot(f.getValue("base")) to decodeWSnapshot(f.getValue("result")) }
+        workRequire(supplied==inputs.map { it.base to it.result },WorkProblem.INVALID_SUBJECT)
+        return capture(token) { state,key ->
+            NativeRuntimeAccess(controller,host).sourceIdentity(state,key,project)
+            obj("formatVersion" to num(1),"basis" to state.basis.json(),"requestDigest" to digest(Digest.of(raw.toByteArray())),"kind" to str("candidate-assembly-permit"))
+        }
+    }
+    /** Current captured-head authorization and observation of an exact ordered candidate selection.
+     * This read does not execute Git, grant a reusable publication permit or accept the results. */
+    @Synchronized internal fun candidateAssemblyInputs(token:String,project:UUID,controller:UUID,
+        selected:List<WorkReference>):List<CandidateInput> = capture(token) { state,key ->
+        val credential=state.authority.authenticate(key,project) ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        if(credential.scope!=CredentialScope.Controller(controller) ||
+            !state.authority.allows(credential,project,Capability.READ) ||
+            !state.authority.workAllows(credential,project,WorkPermission.TASK_PLAN) ||
+            !state.authority.workAllows(credential,project,WorkPermission.TASK_DISPATCH))throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        workRequire(selected.isNotEmpty() && selected.size<=256 && selected.distinct().size==selected.size,WorkProblem.INVALID_SUBJECT)
+        val work=state.work.getValue(project)
+        selected.map { ref ->
+            val result=(work.resolve(ref).payload as? WResultsPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+            val task=work.task(result.task)
+            val probe=WorkCommand((ref.identity.key as WorkKey.Id).id,project,
+                CCreateTaskRevisionOperation(CCreateTaskRevision(result.task,task,null,emptyList())))
+            val observed=options.runtime.capture(state,probe)
+            workRequire(observed.basis==state.basis,WorkProblem.STALE_GENERATION)
+            candidateInputs(work,listOf(ref),observed.facts).single()
+        }.also { inputs ->
+            workRequire(inputs.map { it.task.taskId }.distinct().size==inputs.size &&
+                inputs.map { it.result.repositoryId }.distinct().size==1,WorkProblem.INVALID_SUBJECT)
+        }
+    }
     @Synchronized override fun close()=store.close()
     /** Only installed on the separately authenticated private native transport, never a work tool
      * or generic raw-state read. Capture and actor policy are shared with ordinary service requests. */
@@ -512,9 +637,21 @@ internal class H1Application private constructor(private val storeId: UUID,priva
             val claims=work.records.values.mapNotNull { row ->
                 (row.payload as? WClaimsPayload)?.value?.let { (row.identity.key as WorkKey.Resource) to it }
             }.toMap()
-            val entries=plan.entries.map { e -> obj("preparationId" to uuid(e.preparationId),"startId" to uuid(e.startId),
+            val planRef=work.reference(WorkFamily.DISPATCH_PLANS,row.identity.key)
+            val entries=plan.entries.map { e ->
+                val closed=if(e.futureDependencies.isEmpty())null else dispatchClosedSelection(work,planRef,e)
+                val closedJSON=closed?.let { selected ->
+                    val effective=e.copy(task=selected.task,manifest=selected.manifest,futureDependencies=emptyList())
+                    StrictJson.encode(obj("materializationJSON" to str(codec.encodeRecord(work.resolve(selected.materialization),true).decodeToString()),
+                        "closureJSON" to str(codec.encodeRecord(work.resolve(selected.closure),true).decodeToString()),
+                        "taskJSON" to str(codec.encodeRecord(work.record(WorkFamily.TASK_REVISIONS,selected.task),true).decodeToString()),
+                        "manifestJSON" to str(codec.encodeRecord(work.resolve(selected.manifest),true).decodeToString()),
+                        "selectionJSON" to str(dispatchPreparationSelection(work,effective).decodeToString()))).decodeToString()
+                }
+                obj("preparationId" to uuid(e.preparationId),"startId" to uuid(e.startId),
                 "taskJSON" to str(codec.encodeRecord(work.record(WorkFamily.TASK_REVISIONS,e.task),true).decodeToString()),
                 "selectionJSON" to str(dispatchPreparationSelection(work,e).decodeToString()),
+                "closedJSON" to (closedJSON?.let(::str) ?: JNull),
                 "claimsAvailable" to JBoolean(e.resources.all { resource -> claims.entries.none { (other,claim) ->
                     claim.state!="free" && (other==resource || resource in claim.incompatible || other in claims[resource]?.incompatible.orEmpty()) } }),
                 "futureReady" to JBoolean(e.futureDependencies.isNotEmpty() && e.futureDependencies.all { chooseDispatchResult(work,it) is DispatchResultChoice.Selected })) }

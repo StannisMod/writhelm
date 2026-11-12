@@ -430,7 +430,7 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
             val value=StrictJson.decode(bytes,limits,true)
             integrity(bytes.contentEquals(StrictJson.encode(value,limits.bytes,maxDepth=limits.depth)))
             val f=value.fields("formatVersion","family","key","payload")
-            val expected=if(key.namespace=="auth")2 else if(key.family in setOf("dispatch-plans","dispatch-attempts","dispatch-materializations") &&
+            val expected=if(key.namespace=="auth")2 else if(key.family in setOf("dispatch-plans","dispatch-attempts","dispatch-materializations","dispatch-closures") &&
                 (ports.namespaces.getValue("work").header as JObject).entries.getValue("modelVersion").int()==4)3 else 1
             integrity(f.getValue("formatVersion").int()==expected)
             integrity(f.getValue("family").string()==key.family && StrictJson.encode(f.getValue("key")).contentEquals(StrictJson.encode(key.key)))

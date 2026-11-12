@@ -235,6 +235,13 @@ class WorkTransitionContractTest {
         val provenance=withProvenance.after.records.getValue(withProvenance.result)
         assertEquals(command,(provenance.payload as WDispatchMaterializationPayload).value)
         val inventory=prebindingMaterializedInputs(withProvenance.after,command.requestKey,f.facts)
+        val automatic=proposeDeclaredMaterializedManifest(withProvenance.after,command.requestKey,WorkKey.Id(f.project,uid(299)),f.facts)
+        assertTrue(automatic.data.knownGaps.isEmpty())
+        assertEquals((withProvenance.after.resolve(inventory.manifest).payload as WInputManifestsPayload).value.items,automatic.data.items)
+        assertEquals(withProvenance.after.reference(WorkFamily.DISPATCH_MATERIALIZATIONS,withProvenance.result.key),
+            (automatic.data.declaredClosureAssessment as WSourceVariant2Value).value.reference)
+        assertFailsWith<WorkFault> { proposeDeclaredMaterializedManifest(withProvenance.after,command.requestKey,
+            WorkKey.Id(f.project,uid(299)),f.facts.copy(retainedSnapshots=emptySet())) }
         assertEquals(withProvenance.after.reference(WorkFamily.TASK_REVISIONS,newTask),inventory.task)
         assertEquals(withProvenance.after.reference(WorkFamily.INPUT_MANIFESTS,newManifest),inventory.manifest)
         assertEquals(listOf(result),inventory.dependencies)
@@ -317,12 +324,42 @@ class WorkTransitionContractTest {
                 closedEffect.after.bodies.values,modelVersion=4)
         }
         val closedRef=closedEffect.after.reference(WorkFamily.INPUT_MANIFESTS,closedKey)
+        val declared=declaredMaterializedInputs(closedEffect.after,command.requestKey,closureFacts,closedRef)
+        assertEquals(inventory.task,declared.task)
+        assertEquals(inventory.dependencies,declared.dependencies)
+        assertEquals(closedRef,declared.manifest)
+        assertFailsWith<WorkFault> {
+            declaredMaterializedInputs(closedEffect.after,command.requestKey,closureFacts.copy(retainedSnapshots=emptySet()),closedRef)
+        }
+        assertFailsWith<WorkFault> {
+            declaredMaterializedInputs(closedEffect.after,command.requestKey,closureFacts.copy(submittedDiffs=emptySet()),closedRef)
+        }
+        assertNull(dispatchClosedSelection(withProvenance.after,planRef,entry))
+        val selection=assertNotNull(dispatchClosedSelection(closedEffect.after,planRef,entry))
+        assertEquals(newTask,selection.task);assertEquals(closedRef,selection.manifest)
+        assertEquals(closedEffect.after.reference(WorkFamily.DISPATCH_CLOSURES,closedEffect.result.key),selection.closure)
+        val competing=closureCommand.copy(requestKey=uid(233),manifest=WorkKey.Id(f.project,uid(234)))
+        val competingEffect=reduceDispatchClosure(closedEffect.after,basis,f.actor,closureFacts,competing,proof)
+        assertNull(dispatchClosedSelection(competingEffect.after,planRef,entry)) // never guess between closures
         val nextReservation=reservation.copy(task=newTask,manifest=closedRef)
         val nextCommand=f.command(CReserveAssignmentOperation(nextReservation))
+        val dependentAttempt=DispatchAttempt(planRef,entry.preparationId,nextCommand)
+        val dependentBound=bindDispatchAttempt(closedEffect.after,f.actor,dependentAttempt)
+        assertEquals(dependentAttempt,(dependentBound.after.records.getValue(dependentBound.result).payload as WDispatchAttemptPayload).value)
+        assertEquals(WorkProblem.INVALID_REFERENCE,assertFailsWith<WorkFault> {
+            bindDispatchAttempt(closedEffect.after,f.actor,dependentAttempt.copy(reservation=nextCommand.copy(
+                operation=CReserveAssignmentOperation(nextReservation.copy(manifest=inventory.manifest)))))
+        }.problem)
+        val anotherPlan=planned.copy(planId=uid(230),entries=listOf(entry.copy(preparationId=uid(231),startId=uid(232))))
+        val anotherGraph=recordDispatchPlan(closedEffect.after,f.actor,anotherPlan).after
+        val anotherRef=anotherGraph.reference(WorkFamily.DISPATCH_PLANS,WorkKey.Id(f.project,anotherPlan.planId))
+        assertEquals(WorkProblem.INVALID_REFERENCE,assertFailsWith<WorkFault> {
+            bindDispatchAttempt(anotherGraph,f.actor,dependentAttempt.copy(plan=anotherRef,preparationId=uid(231)))
+        }.problem) // a closure from another plan cannot authorize this attempt
         val nextFingerprint=f.codec.fingerprint(nextCommand)
         val verifiedInputs=closureFacts.copy(verifiedPackets=emptySet(),
             prebindingClosures=setOf(WorkPrebindingClosure(newTask,closedRef,f.profileKey,nextFingerprint)))
-        assertEquals("reserved",f.reducer.reduce(closedEffect.after,nextCommand,f.actor,verifiedInputs).after.assignment(nextReservation.assignmentId).state)
+        assertEquals("reserved",f.reducer.reduce(dependentBound.after,nextCommand,f.actor,verifiedInputs).after.assignment(nextReservation.assignmentId).state)
         assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> {
             WorkTransaction(closedEffect.after,f.actor,verifiedInputs,nextCommand.requestKey,nextFingerprint).taskReady(newTask,closedRef,f.profileKey)
         }.problem) // separate full packet is still mandatory after binding

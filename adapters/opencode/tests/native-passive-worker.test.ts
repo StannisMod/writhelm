@@ -14,12 +14,145 @@ import { NativeCredentialRegistry } from "../src/native-credentials.js"
 import { LinuxNativeCustody } from "../src/native-runtime-custody.js"
 import { LinuxGitWitness, type GitSnapshot } from "../src/linux-git-witness.js"
 import { NativePassiveWorkers } from "../src/native-passive-worker.js"
-import { NativeResultRetention } from "../src/native-result-retention.js"
+import { NativeResultRetention, NativeCandidateAssembly, NativeCandidateTests, runCandidateChecks, advanceCandidateDelivery } from "../src/native-result-retention.js"
 import { listenNativeTransport } from "../src/native-transport.js"
 
 const id=(n:number)=>`00000000-0000-0000-0000-${n.toString(16).padStart(12,"0")}`
+test("equivalent plan JSON cannot bypass blocked or unknown final-review custody",async()=>{
+  const f=await fixture(),signal=new AbortController().signal
+  const custody=new LinuxNativeCustody(path.join(f.root,"review-subjects"),[f.source,f.parent]);await custody.initialize()
+  git(f.source,"update-ref",`refs/writhelm/results/${f.snapshot.retainedLocatorId}`,f.snapshot.commit.hex)
+  const reference={family:"dispatch-plans",key:{projectId:id(1),id:id(470)},digest:"a".repeat(64)}
+  const registry={candidateDelivery:async()=>({selectedJSON:"[]",inputs:[{base:f.snapshot,result:f.snapshot}],excludedReviewers:[id(1)]}),
+    candidateAssemblyPermit:async()=>true,candidateTestPlan:async()=>[{checkId:"check",command:["fixture"],safeRepeat:true,dependencies:[]}],candidateTestPermit:async()=>true}
+  for(const [index,unknown] of [false,true].entries()){
+    const profile={planRefJSON:JSON.stringify(reference),operationId:id(480+index*10),candidateId:id(481+index*10),head:f.snapshot,time:"1794390000 +0000",testPlanId:id(482+index*10),capacity:1}
+    git(f.source,"update-ref",`refs/heads/writhelm-candidate-${profile.candidateId}`,f.snapshot.commit.hex)
+    let reviews=0
+    const reviewer={reviewId:id(483+index*10),contextId:id(484+index*10),reviewerPrincipalId:id(999),execute:async(task:any)=>{
+      reviews++;if(unknown)throw Error("MOCK lost reviewer result")
+      return {...task,summary:"MOCK blocked review",findings:[{severity:"blocking" as const,requirement:"H1-09",scenario:"fixture",expected:"conform",actual:"blocker",evidence:"fixture"}]}
+    }}
+    const execute=async()=>({outcome:"passed" as const,output:"MOCK test"})
+    const run=(p=profile,r=reviewer)=>advanceCandidateDelivery(f.source,custody,f.witness,registry as never,"ses_controller",p,execute,signal,r)
+    if(unknown)await assert.rejects(run());else assert.equal((await run()).phase,"review-blocked")
+    assert.equal((await run()).phase,unknown?"review-unknown":"review-blocked")
+    await assert.rejects(run({...profile,planRefJSON:JSON.stringify(reference,null,2)},
+      {...reviewer,reviewId:id(485+index*10),contextId:id(486+index*10)}))
+    assert.equal(reviews,1)
+  }
+})
+test("third safe successful run satisfies the complete plan without erasing two failures",async()=>{
+  const f=await fixture(),signal=new AbortController().signal
+  const custody=new LinuxNativeCustody(path.join(f.root,"third-run"),[f.source,f.parent]);await custody.initialize()
+  const candidate={commit:f.snapshot.commit,tree:f.snapshot.tree}
+  let executions=0
+  const jobs=new NativeCandidateTests(custody,async()=>true,async()=>({outcome:++executions<3?"failed":"passed",output:`MOCK execution ${executions}`}))
+  const checks=[{checkId:"repeatable",command:["fixture"],safeRepeat:true,dependencies:[]}]
+  const failed=await runCandidateChecks(custody,jobs,id(460),candidate,checks,1,signal)
+  assert.equal(failed.ready,false);assert.equal(executions,2)
+  const retryId=failed.results.get("repeatable")!.runId
+  const third={runId:id(461),candidate,checkId:"repeatable",command:["fixture"],safeRepeat:true,previousRunId:retryId}
+  assert.equal((await jobs.run(third,signal)).outcome,"passed")
+  assert.equal(await jobs.readyForReview(candidate,id(460)),true)
+  assert.equal((await runCandidateChecks(custody,jobs,id(460),candidate,checks,1,signal)).ready,true)
+  assert.equal(executions,3)
+  const plan=JSON.parse((await custody.read("candidate-test-plan",id(460)))!)
+  for(const runId of [plan.runs[0].runId,retryId])assert.equal(JSON.parse((await custody.read("candidate-test-result",runId))!).result.outcome,"failed")
+})
+test("candidate scheduler holds unknown and unavailable dependencies without dispatching unsafe reruns",async()=>{
+  const f=await fixture(),signal=new AbortController().signal
+  const custody=new LinuxNativeCustody(path.join(f.root,"test-jobs"),[f.source,f.parent]);await custody.initialize()
+  const candidate={commit:f.snapshot.commit,tree:f.snapshot.tree}
+  const executed:string[]=[]
+  const jobs=new NativeCandidateTests(custody,async()=>true,async(job)=>{
+    executed.push(job.checkId)
+    if(job.checkId==="unknown")throw Error("MOCK lost process result")
+    return {outcome:job.checkId==="cancelled"?"cancelled":"unavailable",output:"MOCK adapter outcome"}
+  })
+  const checks=[{checkId:"unknown",command:["fixture"],safeRepeat:true,dependencies:[]},
+    {checkId:"unavailable",command:["fixture"],safeRepeat:false,dependencies:[]},
+    {checkId:"cancelled",command:["fixture"],safeRepeat:false,dependencies:[]},
+    {checkId:"blocked",command:["fixture"],safeRepeat:true,dependencies:["unknown"]}]
+  const result=await runCandidateChecks(custody,jobs,id(450),candidate,checks,2,signal)
+  assert.equal(result.ready,false);assert.deepEqual(result.held,["blocked"])
+  assert.equal(result.results.get("unknown")?.result.outcome,"unknown")
+  assert.equal(result.results.get("cancelled")?.result.outcome,"cancelled")
+  assert.equal(result.results.get("unavailable")?.result.outcome,"unavailable")
+  await runCandidateChecks(custody,jobs,id(450),candidate,checks,2,signal)
+  assert.equal(executed.length,3)
+  await assert.rejects(runCandidateChecks(custody,jobs,id(451),candidate,checks,2,signal))
+  await assert.rejects(jobs.run({runId:id(452),candidate,checkId:"unknown",command:["fixture"],safeRepeat:false,previousRunId:null},signal))
+  await assert.rejects(runCandidateChecks(custody,jobs,id(453),candidate,[checks[1]!],2,signal))
+  assert.equal(executed.length,3)
+})
 const git=(root:string,...args:string[])=>execFileSync("/usr/bin/git",["-c","core.hooksPath=/dev/null","-C",root,...args],
   {env:{PATH:"/usr/bin:/bin",LC_ALL:"C",GIT_CONFIG_GLOBAL:"/dev/null",GIT_CONFIG_NOSYSTEM:"1"},encoding:"utf8"}).trim()
+test("candidate objects preserve unrelated work and publication uses exact candidate CAS",async()=>{
+  const f=await fixture(),signal=new AbortController().signal
+  const commit=(message:string)=>{git(f.source,"add",".");git(f.source,"-c","user.name=Fixture","-c","user.email=fixture@example.invalid","commit","--no-gpg-sign","-m",message)}
+  await fs.writeFile(path.join(f.source,"score.txt"),"score=1\n");commit("producer")
+  const result:GitSnapshot={...f.snapshot,commit:{algorithm:"sha1",hex:git(f.source,"rev-parse","HEAD")},tree:{algorithm:"sha1",hex:git(f.source,"rev-parse","HEAD^{tree}")},retainedLocatorId:id(402)}
+  git(f.source,"update-ref",`refs/writhelm/results/${result.retainedLocatorId}`,result.commit.hex)
+  git(f.source,"switch","--detach",f.snapshot.commit.hex)
+  await fs.writeFile(path.join(f.source,"unrelated.txt"),"keep\n");commit("unrelated candidate work")
+  const head:GitSnapshot={...f.snapshot,commit:{algorithm:"sha1",hex:git(f.source,"rev-parse","HEAD")},tree:{algorithm:"sha1",hex:git(f.source,"rev-parse","HEAD^{tree}")}}
+  const candidateId=id(403),ref=`refs/heads/writhelm-candidate-${candidateId}`
+  git(f.source,"update-ref",ref,head.commit.hex)
+  await fs.writeFile(path.join(f.source,"local-untracked.txt"),"never touch\n")
+  const candidate=await f.witness.buildCandidate(f.source,head,[{base:f.snapshot,result}],id(404),"1794390000 +0000",signal)
+  assert.equal(git(f.source,"show",`${candidate.commit.hex}:score.txt`),"score=1")
+  assert.equal(git(f.source,"show",`${candidate.commit.hex}:unrelated.txt`),"keep")
+  assert.equal(git(f.source,"rev-parse","HEAD"),head.commit.hex)
+  assert.equal(await fs.readFile(path.join(f.source,"local-untracked.txt"),"utf8"),"never touch\n")
+  await f.witness.publishCandidateOnce(f.source,candidateId,head.commit,candidate.commit,signal)
+  assert.equal(git(f.source,"rev-parse",ref),candidate.commit.hex)
+  await assert.rejects(f.witness.publishCandidateOnce(f.source,candidateId,head.commit,result.commit,signal))
+  assert.equal(git(f.source,"rev-parse",ref),candidate.commit.hex)
+  const custody=new LinuxNativeCustody(path.join(f.root,"candidate-custody"),[f.source,f.parent]);await custody.initialize()
+  let authorized=true,writes=0,losePublication=false
+  const effects={buildCandidate:f.witness.buildCandidate.bind(f.witness),qualifySource:f.witness.qualifySource.bind(f.witness),
+    publishCandidateOnce:async(...args:Parameters<LinuxGitWitness["publishCandidateOnce"]>)=>{
+      writes++;await f.witness.publishCandidateOnce(...args);if(losePublication)throw Error("lost publication reply")
+    }}
+  const assembly=new NativeCandidateAssembly(f.source,custody,effects,async()=>authorized)
+  const request={operationId:id(405),candidateId:id(406),head,inputs:[{base:f.snapshot,result}],time:"1794390000 +0000",selectedJSON:"[]"}
+  git(f.source,"update-ref",`refs/heads/writhelm-candidate-${request.candidateId}`,head.commit.hex)
+  authorized=false;await assert.rejects(assembly.assemble(request,signal));assert.equal(writes,0)
+  authorized=true
+  const assembled=await assembly.assemble(request,signal)
+  const reopened=new NativeCandidateAssembly(f.source,custody,effects,async()=>authorized)
+  assert.deepEqual(await reopened.assemble(request,signal),assembled);assert.equal(writes,1)
+  await assert.rejects(reopened.assemble({...request,time:"1794390001 +0000"},signal));assert.equal(writes,1)
+  const unknown={...request,operationId:id(407),candidateId:id(408)}
+  git(f.source,"update-ref",`refs/heads/writhelm-candidate-${unknown.candidateId}`,head.commit.hex)
+  losePublication=true
+  await assert.rejects(assembly.assemble(unknown,signal));assert.equal(writes,2)
+  await assert.rejects(reopened.assemble(unknown,signal));assert.equal(writes,2)
+  authorized=false;await assert.rejects(reopened.assemble(request,signal));assert.equal(writes,2)
+  let runs=0
+  const checks=new NativeCandidateTests(custody,async()=>true,async(job)=>{
+    await f.witness.qualifySource(f.source,{...head,...job.candidate},signal)
+    assert.equal(git(f.source,"show",`${job.candidate.commit.hex}:score.txt`),"score=1")
+    const exit=runs++===0?"1":"0" // Explicit fixture transient failure, not candidate mutation.
+    try {
+      execFileSync(process.execPath,job.command.slice(1),{env:{FIXTURE_EXIT:exit},encoding:"utf8"})
+      return {outcome:"passed",output:`actual node exit 0; FIXTURE_EXIT=${exit}`}
+    }catch {return {outcome:"failed",output:`actual node exit 1; FIXTURE_EXIT=${exit}`}}
+  })
+  const first={runId:id(410),candidate:assembled,checkId:"fixture-transient",command:["node","-e","process.exit(Number(process.env.FIXTURE_EXIT))"],safeRepeat:true,previousRunId:null}
+  assert.equal((await checks.run(first,signal)).outcome,"failed")
+  assert.equal(await checks.readyForReview(assembled,id(412)),false)
+  const retry={...first,runId:id(411),previousRunId:first.runId}
+  assert.equal((await checks.run(retry,signal)).outcome,"passed")
+  assert.equal((await checks.run(first,signal)).outcome,"failed");assert.equal(runs,2)
+  assert.equal((await checks.run(retry,signal)).outcome,"passed");assert.equal(runs,2)
+  const subject=JSON.stringify({candidate:assembled,checks:[{checkId:first.checkId,command:first.command,safeRepeat:true,dependencies:[]}]})
+  await custody.retain("candidate-test-plan",id(412),JSON.stringify({subject,runs:[{checkId:first.checkId,runId:first.runId,retryId:retry.runId}]}))
+  await custody.retain("candidate-required-plan",JSON.stringify([assembled.commit.algorithm,assembled.commit.hex,assembled.tree.algorithm,assembled.tree.hex]),JSON.stringify({planId:id(412),subject}))
+  assert.equal(await checks.readyForReview(assembled,id(412)),true)
+  assert.equal(await checks.readyForReview(candidate,id(412)),false)
+})
 async function fixture(){
   const base=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(base)
   const root=await fs.mkdtemp(path.join(base,"passive-")),source=path.join(root,"source"),parent=path.join(root,"areas")

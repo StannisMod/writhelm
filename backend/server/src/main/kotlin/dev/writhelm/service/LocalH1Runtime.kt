@@ -21,8 +21,9 @@ internal class LocalH1Runtime private constructor(val app: H1Application,private
     private val endpoint: NativeRuntimeEndpoint,private val server: EmbeddedServer<*,*>,
     private val native: HttpConnectedNativeControl,private val root: Path,private val project: UUID,
     private val controller: UUID,private val host: UUID,private val token: String,
-    private val preparation: LinuxOwnedDirectoryPreparation,private val checks: OwnedCheckCustody,
-    private val installFacts: (ConnectedRuntimeFacts)->Unit): AutoCloseable {
+     private val preparation: LinuxOwnedDirectoryPreparation,private val checks: OwnedCheckCustody,
+     private val installFacts: (ConnectedRuntimeFacts)->Unit,
+     private val observeNativeProcess:(HttpConnectedNativeControl,String)->Boolean): AutoCloseable {
     private var engine: ConnectedWorkEngine?=null
     private var closed=false
     /** Run after the explicitly configured in-process native peer is listening. No worker is
@@ -41,8 +42,7 @@ internal class LocalH1Runtime private constructor(val app: H1Application,private
         val epoch=identity.getValue("epoch").string();require(epoch.matches(Regex("[0-9a-f]{64}")))
         // Match the existing pinned native-host executable independently through /proc. A selector
         // from the authenticated peer is not itself a process or profile qualification.
-        val pin=PinnedNativeExecutable("2.2.5",Digest.parse("8d060e1d2fbb9bb44cf09ae6ed1f3f6a7cff070b5227e2f90970132b23a92050"))
-        require(native.observeProcess(epoch,pin)!=null) { "native process identity unavailable" }
+        require(observeNativeProcess(native,epoch)) { "native process identity unavailable" }
         val areas=(identity.getValue("workRoots") as? JArray)?.values ?: error("actual native areas required")
         require(areas.isNotEmpty() && areas.size<=257)
         areas.forEach { outside(root,Path.of(it.string()).toRealPath()) }
@@ -57,7 +57,8 @@ internal class LocalH1Runtime private constructor(val app: H1Application,private
         // An existing/observable Git ref, native peer authentication or executable pin is NOT one.
         val retained=NativeResultRetentionFacts(nativeFacts,native,ResultRetentionQualification { _,_->false })
         val resultFacts=NativeResultDiffFacts(retained,NativeResultDiffTransportProof(native,epoch))
-        installFacts(ConnectedRuntimeFacts(resultFacts,preparation,native,
+        val inputs=ReservationProofFacts(resultFacts,DeclaredPrebindingInputVerifier(resultFacts))
+        installFacts(ConnectedRuntimeFacts(inputs,preparation,native,
             provenance,checks::observed))
         engine=ConnectedWorkEngine(app,project,{token},preparation,native,LinuxConnectedCustody(root.resolve("engine")))
     }
@@ -70,7 +71,9 @@ internal class LocalH1Runtime private constructor(val app: H1Application,private
         runBlocking { http.mcp.close() }
         endpoint.close();native.close();app.close()
     }
-    companion object {
+     companion object {
+         private fun observedNativeProcess(native:HttpConnectedNativeControl,epoch:String):Boolean =
+             native.observeProcess(epoch,PinnedNativeExecutable("2.2.5",Digest.parse("8d060e1d2fbb9bb44cf09ae6ed1f3f6a7cff070b5227e2f90970132b23a92050")))!=null
         private fun outside(root: Path,area: Path) {
             require(!root.startsWith(area) && !area.startsWith(root)) { "runtime custody overlaps managed data/work area" }
         }
@@ -114,7 +117,8 @@ internal class LocalH1Runtime private constructor(val app: H1Application,private
          * No raw key/proof in CLI arguments, configuration exports, canonical Git or work tools. */
         fun openFromNativeCustody(storeDirectory: Path,storeId: UUID,project: UUID,controller: UUID,host: UUID,origin: String,
             nativeOrigin: String,nativeCustodyRoot: Path,credentialId: UUID,operationalRoot: Path,managedWorkAreas: Collection<Path>,
-            registrations: List<OwnedPreparationRegistration> = emptyList()): LocalH1Runtime {
+             registrations: List<OwnedPreparationRegistration> = emptyList(),
+             observeNativeProcess:(HttpConnectedNativeControl,String)->Boolean=::observedNativeProcess): LocalH1Runtime {
             require(managedWorkAreas.isNotEmpty())
             managedWorkAreas.forEach { outside(nativeCustodyRoot,it.toRealPath()) }
             outside(nativeCustodyRoot,storeDirectory.toRealPath())
@@ -122,7 +126,7 @@ internal class LocalH1Runtime private constructor(val app: H1Application,private
                 "formatVersion","kind","storeId","projectId","principalId","credentialId","token")
             require(key.getValue("formatVersion").long()==1L && key.getValue("kind").string()=="native-scoped-key-v1" &&
                 uuid(key.getValue("storeId"))==storeId && uuid(key.getValue("projectId"))==project && uuid(key.getValue("credentialId"))==credentialId)
-            val token=key.getValue("token").string()
+             val token=key.getValue("token").string()
             (CredentialVerifier.parse(token) ?: error("protected credential unavailable")).use {
                 require(it.storeId==storeId && it.credentialId==credentialId)
             }
@@ -132,26 +136,37 @@ internal class LocalH1Runtime private constructor(val app: H1Application,private
                 val text=fields.getValue("secret").string();require(text.matches(Regex("[A-Za-z0-9_-]{43}")))
                 return java.util.Base64.getUrlDecoder().decode(text).also { require(it.size==32 && java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(it)==text) }
             }
-            val serviceProof=proof("service")
+             val profilePath=nativeCustodyRoot.resolve("service-work-profile-${Digest.of("current".toByteArray(Charsets.UTF_8)).hex}.json")
+             val modelVersion=if(!Files.exists(profilePath,LinkOption.NOFOLLOW_LINKS))2 else {
+                 val selected=JObject(secretRecord(nativeCustodyRoot,"service-work-profile","current")).fields("formatVersion","modelVersion")
+                 require(selected.getValue("formatVersion").long()==1L && selected.getValue("modelVersion").long()==4L)
+                 4 // explicit protected selection; never auto-migrate a legacy store
+             }
+             val serviceProof=proof("service")
             try {
                 val nativeProof=proof("transport")
                 try { return open(storeDirectory,storeId,project,controller,host,origin,nativeOrigin,serviceProof,nativeProof,
-                    token,operationalRoot,managedWorkAreas,registrations,uuid(key.getValue("principalId"))) }
+                     token,operationalRoot,managedWorkAreas,registrations,uuid(key.getValue("principalId")),modelVersion,observeNativeProcess) }
                 finally { nativeProof.fill(0) }
             } finally { serviceProof.fill(0) }
         }
         fun open(storeDirectory: Path,storeId: UUID,project: UUID,controller: UUID,host: UUID,origin: String,
             nativeOrigin: String,serviceProof: ByteArray,nativeProof: ByteArray,controllerToken: String,
             operationalRoot: Path,managedWorkAreas: Collection<Path>,registrations: List<OwnedPreparationRegistration> = emptyList(),
-            expectedPrincipal: UUID?=null): LocalH1Runtime {
+             expectedPrincipal: UUID?=null,workModelVersion:Int=2,
+             observeNativeProcess:(HttpConnectedNativeControl,String)->Boolean=::observedNativeProcess): LocalH1Runtime {
             val profile=HttpProfile(origin);HttpProfile(nativeOrigin)
             require(managedWorkAreas.isNotEmpty())
             managedWorkAreas.forEach { outside(operationalRoot.toAbsolutePath().normalize(),it.toRealPath()) }
             val root=directory(operationalRoot);outside(root,storeDirectory.toRealPath())
-            val facts=java.util.concurrent.atomic.AtomicReference<ConnectedRuntimeFacts?>()
-            val app=H1Application.open(storeDirectory,storeId,H1Options(H1RuntimeFacts { state,command ->
-                facts.get()?.capture(state,command) ?: UnavailableH1RuntimeFacts.capture(state,command)
-            }))
+             val facts=java.util.concurrent.atomic.AtomicReference<ConnectedRuntimeFacts?>()
+             require(workModelVersion in setOf(2,4))
+             val peer=java.util.concurrent.atomic.AtomicReference<HttpConnectedNativeControl?>()
+             val app=H1Application.open(storeDirectory,storeId,H1Options(H1RuntimeFacts { state,command ->
+                 facts.get()?.capture(state,command) ?: UnavailableH1RuntimeFacts.capture(state,command)
+             },workModelVersion=workModelVersion,candidateAssemblyProof={ operation ->
+                 if(workModelVersion==4 && facts.get()!=null)peer.get()?.candidateAssemblyProof(operation) else null
+             }))
             var native: HttpConnectedNativeControl?=null
             var endpoint: NativeRuntimeEndpoint?=null
             var http: HttpAdapter?=null
@@ -159,7 +174,8 @@ internal class LocalH1Runtime private constructor(val app: H1Application,private
                 val access=app.inspectAccess(controllerToken)
                 require(access.scope==CredentialScope.Controller(controller) && access.projectId==project &&
                     (expectedPrincipal==null || access.principalId==expectedPrincipal))
-                native=HttpConnectedNativeControl(nativeOrigin,nativeProof)
+                 native=HttpConnectedNativeControl(nativeOrigin,nativeProof)
+                 peer.set(native)
                 val composition=java.util.concurrent.atomic.AtomicReference<LocalH1Runtime?>()
                 endpoint=WrithelmService(app).nativeEndpoint(project,controller,host,serviceProof) {
                     (composition.get() ?: throw ServiceFault("UNAVAILABLE",503)).connectNative()
@@ -172,7 +188,7 @@ internal class LocalH1Runtime private constructor(val app: H1Application,private
                 val uri=java.net.URI(origin)
                 val server=embeddedServer(CIO,host=uri.host.removeSurrounding("[","]"),port=uri.port) { installed.install(this) }.start(wait=false)
                 return LocalH1Runtime(app,http,endpoint,server,native,root,project,controller,host,controllerToken,
-                    preparation,checks) { facts.set(it) }
+                     preparation,checks,{ facts.set(it) },observeNativeProcess)
                     .also { composition.set(it) }
             } catch(error: Exception) {
                 http?.let { runBlocking { it.mcp.close() } };endpoint?.close();native?.close();app.close();throw error

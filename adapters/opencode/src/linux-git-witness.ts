@@ -9,13 +9,15 @@ export type GitObject = Readonly<{algorithm:"sha1"|"sha256";hex:string}>
 export type GitSnapshot = Readonly<{repositoryId:string;commit:GitObject;tree:GitObject;dirtyContentDigest:null;retainedLocatorId:string}>
 export type GitExecutable = Readonly<{path:string;sha256:string}>
 export type GitDiffObservation = Readonly<{base:GitSnapshot;result:GitSnapshot;sha256:string;byteLength:number;bytes:Buffer}>
+export type CandidateMergeInput = Readonly<{base:GitSnapshot;result:GitSnapshot}>
 
-/** Explicit Linux READ-only Git/work-area witness, not a portable executable default or a writer
- * fence. No checkout/reset/clean, shell, filters, credentials or source-tree mutation here. */
+/** Explicit Linux Git/work-area witness with narrowly named one-shot ref/object primitives,
+ * not a portable executable default, authority decision or writer fence. No checkout/reset/clean,
+ * shell, filters, credentials or source-tree mutation here. */
 export class LinuxGitWitness {
   private readonly executable:GitExecutable
   constructor(executable:GitExecutable){this.executable=Object.freeze({...executable})}
-  private async run(directory:string,args:readonly string[],signal:AbortSignal):Promise<Buffer>{
+  private async run(directory:string,args:readonly string[],signal:AbortSignal,dates?:Readonly<{time:string}>):Promise<Buffer>{
     if(process.platform!=="linux"||!path.isAbsolute(this.executable.path)||!/^[0-9a-f]{64}$/.test(this.executable.sha256))nativeUnavailable()
     const file=await fs.open(this.executable.path,"r")
     try{
@@ -27,9 +29,51 @@ export class LinuxGitWitness {
     }finally{await file.close()}
     return new Promise((resolve,reject)=>{
       execFile(this.executable.path,["-c","core.hooksPath=/dev/null","-c","core.fsmonitor=false","-C",directory,...args],
-        {encoding:"buffer",maxBuffer:8*1024*1024,timeout:10000,signal,env:{PATH:"/usr/bin:/bin",LC_ALL:"C",GIT_CONFIG_NOSYSTEM:"1",GIT_CONFIG_GLOBAL:"/dev/null",GIT_TERMINAL_PROMPT:"0",GIT_OPTIONAL_LOCKS:"0"}},
+         {encoding:"buffer",maxBuffer:8*1024*1024,timeout:10000,signal,env:{PATH:"/usr/bin:/bin",LC_ALL:"C",GIT_CONFIG_NOSYSTEM:"1",GIT_CONFIG_GLOBAL:"/dev/null",GIT_TERMINAL_PROMPT:"0",GIT_OPTIONAL_LOCKS:"0",
+           ...(dates?{GIT_AUTHOR_DATE:dates.time,GIT_COMMITTER_DATE:dates.time}:{})}},
         (error,stdout)=>error?reject(new Error("qualified Git witness unavailable")):resolve(stdout))
     })
+  }
+  /** Low-level candidate object construction only. The caller supplies service-selected, observed
+   * inputs and must retain original operation identity before dispatch. No acceptance, checkout,
+   * worktree mutation or branch publication. Conflict rejects rather than selecting a resolution. */
+  async buildCandidate(source:string,head:GitSnapshot,inputs:readonly CandidateMergeInput[],operationId:string,
+    time:string,signal:AbortSignal):Promise<Readonly<{commit:GitObject;tree:GitObject}>>{
+    if(!uuidPattern.test(operationId)||!/^\d{10} \+0000$/.test(time)||!inputs.length||inputs.length>256)nativeUnavailable()
+    await this.qualifySource(source,head,signal)
+    let commit=head.commit.hex,tree=head.tree.hex
+    for(const input of inputs){
+      if(input.base.repositoryId!==head.repositoryId||input.result.repositoryId!==head.repositoryId||
+        input.base.commit.algorithm!==head.commit.algorithm||input.result.commit.algorithm!==head.commit.algorithm)nativeUnavailable()
+      await this.qualifySource(source,input.base,signal)
+      await this.verifyRetainedRef(source,input.result,signal)
+      tree=(await this.run(source,["merge-tree","--write-tree",`--merge-base=${input.base.commit.hex}`,commit,input.result.commit.hex],signal)).toString("utf8").trim()
+      if(!new RegExp(`^[0-9a-f]{${head.commit.algorithm==="sha1"?40:64}}$`).test(tree))nativeUnavailable()
+      commit=(await this.run(source,["-c","user.name=Writhelm candidate","-c","user.email=candidate@writhelm.invalid",
+        "commit-tree",tree,"-p",commit,"-m",`Candidate operation ${operationId}; result ${input.result.commit.hex}`],signal,{time})).toString("utf8").trim()
+      if(!new RegExp(`^[0-9a-f]{${head.commit.algorithm==="sha1"?40:64}}$`).test(commit))nativeUnavailable()
+    }
+    return Object.freeze({commit:Object.freeze({algorithm:head.commit.algorithm,hex:commit}),tree:Object.freeze({algorithm:head.tree.algorithm,hex:tree})})
+  }
+  /** One-shot CAS on a dedicated candidate ref, never main. Caller must retain intent before this
+   * effect and reconcile unknown outcomes without a new operation or a second dispatch. */
+  async publishCandidateOnce(source:string,candidateId:string,expected:GitObject,next:GitObject,signal:AbortSignal):Promise<void>{
+    if(!uuidPattern.test(candidateId)||expected.algorithm!==next.algorithm||
+      ![expected.hex,next.hex].every(hex=>new RegExp(`^[0-9a-f]{${expected.algorithm==="sha1"?40:64}}$`).test(hex)))nativeUnavailable()
+    await this.run(source,["update-ref",`refs/heads/writhelm-candidate-${candidateId}`,next.hex,expected.hex],signal)
+  }
+  /** Explicit Linux immutable-object check adapter, not an arbitrary process/project-test runner.
+   * Reads one blob from the selected candidate without checkout, filters or worktree writes. */
+  async checkCandidateFile(source:string,candidate:GitSnapshot,relative:string,expectedDigest:string,signal:AbortSignal){
+    if(!relative||relative.startsWith("/")||relative.includes("\\")||relative.split("/").some(part=>["",".",".."].includes(part))||
+      !/^[0-9a-f]{64}$/.test(expectedDigest))nativeUnavailable()
+    await this.qualifySource(source,candidate,signal)
+    const entry=(await this.run(source,["ls-tree","-z",candidate.commit.hex,"--",relative],signal)).toString("utf8")
+    if(!new RegExp(`^100(?:644|755) blob [0-9a-f]+\\t`).test(entry)||entry.split("\0").length!==2||entry.slice(entry.indexOf("\t")+1,-1)!==relative)nativeUnavailable()
+    const bytes=await this.run(source,["cat-file","blob",`${candidate.commit.hex}:${relative}`],signal)
+    const actualDigest=createHash("sha256").update(bytes).digest("hex")
+    return {outcome:actualDigest===expectedDigest?"passed" as const:"failed" as const,
+      output:JSON.stringify({method:"immutable-git-file-sha256-v1",candidate:{commit:candidate.commit,tree:candidate.tree},relative,expectedDigest,actualDigest,byteLength:bytes.length})}
   }
   async qualifySource(source:string,snapshot:GitSnapshot,signal:AbortSignal):Promise<void>{
     if(await fs.realpath(source)!==source||!snapshot.commit||snapshot.dirtyContentDigest!==null||

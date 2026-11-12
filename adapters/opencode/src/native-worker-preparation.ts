@@ -222,6 +222,7 @@ export class NativeDispatchFrontier {
   private dirty=false
   private closed=false
   private failure:unknown
+  private readonly reconciledStarts=new Set<string>()
   constructor(private readonly registry:NativeCredentialRegistry,private readonly preparation:NativeWorkerPreparation,
     private readonly initial:NativeInitialStart,private readonly custody:LinuxNativeCustody,private readonly sessionID:string,
     private readonly planId:string,private readonly capacity:number,private readonly pollMillis:number){
@@ -254,13 +255,18 @@ export class NativeDispatchFrontier {
     let occupied=active.length+[...this.inflight.keys()].filter(id=>!activeTasks.has(id)).length
     for(const projected of frame.entries){
       if(this.closed)break
-      const task=parse(projected.taskJSON),selection=parse(projected.selectionJSON),id=task.key?.taskId
+      let task=parse(projected.taskJSON),selectionJSON=projected.selectionJSON,selection=parse(selectionJSON)
+      const id=task.key?.taskId
       const declaration=plan.payload.entries.find((e:any)=>e.preparationId===projected.preparationId&&e.startId===projected.startId)
       const last=typeof id==="string"?this.lastScan.get(id):undefined
       if(typeof id!=="string"||!declaration||this.inflight.has(id)||
         (last?.basis===basis&&Date.now()-last.at<this.pollMillis))continue
       const future=Array.isArray(declaration.futureDependencies)&&declaration.futureDependencies.length>0
-      if(future){
+      if(future && projected.closedJSON!=null){
+        const closed=closedObject(parse(projected.closedJSON),["materializationJSON","closureJSON","taskJSON","manifestJSON","selectionJSON"])
+        task=parse(closed.taskJSON);selectionJSON=closed.selectionJSON;selection=parse(selectionJSON)
+        if(task.key?.taskId!==id||selection.task?.taskId!==id)nativeUnavailable()
+      } else if(future){
         if(task.payload?.kind!=="implementation"||task.payload?.state!=="executable"||!Array.isArray(task.payload.unresolved)||task.payload.unresolved.length)continue
         let raw=await this.custody.read("dispatch-materialization",projected.preparationId)
         if(raw===undefined&&!projected.futureReady)continue
@@ -283,7 +289,41 @@ export class NativeDispatchFrontier {
           const result=await sendContext(channel,"commands",raw!,signal)
           if(result.kind!=="settled"||result.outcome?.kind!=="success")return
           if(result.identity?.operation!==command.operation||result.identity?.projectId!==command.projectId||result.identity?.requestKey!==command.requestKey||
-            result.outcome.result?.key?.projectId!==command.projectId||result.outcome.result?.key?.id!==command.requestKey)nativeUnavailable()
+             result.outcome.result?.key?.projectId!==command.projectId||result.outcome.result?.key?.id!==command.requestKey)nativeUnavailable()
+          const materialization={family:"dispatch-materializations",key:result.outcome.result.key,digest:result.outcome.result.digest}
+          if(typeof materialization.digest!=="string"||!/^[0-9a-f]{64}$/.test(materialization.digest))nativeUnavailable()
+          let closureRaw=await this.custody.read("dispatch-closure",projected.preparationId)
+          if(closureRaw===undefined){
+            const current=await this.registry.dispatchContext(this.sessionID,this.planId,signal)
+            if(current.planJSON!==frame.planJSON)nativeUnavailable()
+            closureRaw=contextJSON({formatVersion:3,projectId:command.projectId,requestKey:randomUUID(),operation:"close_dispatch_inputs",
+              payload:{materialization,expectedHead:current.basis,assessment:{kind:"work",reference:materialization},
+                manifest:{projectId:command.projectId,id:randomUUID()}}})
+            await this.custody.retain("dispatch-closure",projected.preparationId,closureRaw)
+          }
+          let closure=parse(closureRaw)
+          for(let depth=0;;depth++){
+            if(depth>=256)nativeUnavailable()
+            const successor=await this.custody.read("dispatch-closure-successor",closure.requestKey)
+            if(successor===undefined)break
+            const next=parse(successor)
+            if(next.operation!=="close_dispatch_inputs"||next.projectId!==command.projectId||!uuidPattern.test(next.requestKey)||
+              next.requestKey===closure.requestKey||!same(next.payload?.materialization,materialization)||
+              !same(next.payload?.manifest,closure.payload?.manifest))nativeUnavailable()
+            closureRaw=successor;closure=next
+          }
+          if(closure.operation!=="close_dispatch_inputs"||closure.projectId!==command.projectId||!uuidPattern.test(closure.requestKey)||
+            !same(closure.payload?.materialization,materialization))nativeUnavailable()
+          const closed=await sendContext(channel,"commands",closureRaw,signal)
+          if(closed.kind==="settled"&&closed.outcome?.kind==="rejected"&&closed.outcome?.code==="STALE_GENERATION"){
+            if(closed.identity?.operation!==closure.operation||closed.identity?.projectId!==closure.projectId||closed.identity?.requestKey!==closure.requestKey)nativeUnavailable()
+            const current=await this.registry.dispatchContext(this.sessionID,this.planId,signal)
+            if(current.planJSON!==frame.planJSON)nativeUnavailable()
+            const successor=contextJSON({...closure,requestKey:randomUUID(),payload:{...closure.payload,expectedHead:current.basis}})
+            await this.custody.retain("dispatch-closure-successor",closure.requestKey,successor)
+          }
+          if(closed.kind==="settled"&&closed.outcome?.kind==="success"&&
+            (closed.identity?.operation!==closure.operation||closed.identity?.projectId!==closure.projectId||closed.identity?.requestKey!==closure.requestKey))nativeUnavailable()
         })().catch(e=>{if(!this.closed)this.failure=e}).finally(()=>{this.inflight.delete(id);this.wake()})
         this.inflight.set(id,operation)
         continue
@@ -312,10 +352,11 @@ export class NativeDispatchFrontier {
         rootPreparationId:tip.payload.rootPreparationId,startId:tip.payload.startId}:{planRefJSON}
       const startId=tip?.payload.startId??projected.startId
       if(!uuidPattern.test(startId)||!uuidPattern.test(attemptId)||selection.task?.taskId!==id)nativeUnavailable()
+      if(ownActive[0]?.payload?.state==="active"&&this.reconciledStarts.has(startId))continue
       this.lastScan.set(id,{basis,at:Date.now()})
       if(!ownActive.length)occupied++
       const operation=(async()=>{
-        const prepared=retained===undefined?await this.preparation.runPlannedController(projected.selectionJSON,attemptId,binding,signal):
+        const prepared=retained===undefined?await this.preparation.runPlannedController(selectionJSON,attemptId,binding,signal):
           await this.preparation.restorePlannedController(attemptId,binding,signal)
         if(prepared.phase==="reservation-held"&&tipRecord&&!ownActive.length){
           const eligibility=await this.preparation.retryEligibilityController(attemptId,signal)
@@ -332,15 +373,21 @@ export class NativeDispatchFrontier {
             !uuidPattern.test(successor.preparationId)||!uuidPattern.test(successor.startId)||successor.preparationId===successor.startId)nativeUnavailable()
           const nextBinding:PlannedAttempt={planRefJSON,previousRefJSON,rootPreparationId:projected.preparationId,startId:successor.startId}
           const nextRetained=await this.custody.read("preparation-driver",successor.preparationId)
-          if(nextRetained===undefined)await this.preparation.runPlannedController(projected.selectionJSON,successor.preparationId,nextBinding,signal)
+          if(nextRetained===undefined)await this.preparation.runPlannedController(selectionJSON,successor.preparationId,nextBinding,signal)
           else await this.preparation.restorePlannedController(successor.preparationId,nextBinding,signal)
           return
         }
         if(prepared.phase!=="binding-confirmed"||!['bound','active'].includes(prepared.state))return
         const startRaw=await this.custody.read("initial-driver",startId)
-        if(startRaw!==undefined)await this.initial.restoreController(startId,signal)
+        if(startRaw!==undefined){
+          const result=await this.initial.restoreController(startId,signal)
+          if(result?.phase==="active-admission-restored")this.reconciledStarts.add(startId)
+        }
         else if(prepared.state==="bound"&&prepared.currentIntent===null)
-          await this.initial.runController(contextJSON({assignment:prepared.assignmentSelector,binding:prepared.binding}),startId,signal)
+          {
+            const result=await this.initial.runController(contextJSON({assignment:prepared.assignmentSelector,binding:prepared.binding}),startId,signal)
+            if(result?.phase==="active-admission-confirmed")this.reconciledStarts.add(startId)
+          }
       })().catch(e=>{if(!this.closed)this.failure=e}).finally(()=>{this.inflight.delete(id);this.wake()})
       this.inflight.set(id,operation)
     }

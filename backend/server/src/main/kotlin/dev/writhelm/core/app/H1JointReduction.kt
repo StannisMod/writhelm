@@ -63,10 +63,11 @@ internal class H1JointReduction {
         integrity(work.modelVersion==4 && admission.identity.principalId==principal && admission.mode==AdmissionMode.EVALUATE &&
             admission.binding==null && admission.scope==CredentialScope.Controller(plan.controllerId))
     }
-    /** Reconstruct a closure's graph and original-H receipt attribution without invoking an
-     * external assessor. This is necessary historical provenance, not assessor qualification. */
+    /** Reconstruct original-H authority and the exact successor graph. Automatic checks bind the
+     * actor/credential and materialization; legacy assessor records require separate qualification. */
     fun validateDispatchClosureHistory(before:H1BoundState,after:H1BoundState,result:WorkKey.Id,
-        principal:java.util.UUID,credential:java.util.UUID,fingerprint:Digest) {
+        principal:java.util.UUID,credential:java.util.UUID,fingerprint:Digest,
+        qualification:HistoricalClosureQualification?=null) {
         integrity(before.storeId==after.storeId)
         val h=before.work[result.projectId] ?: fail(StoreProblem.INTEGRITY)
         val c=after.work[result.projectId] ?: fail(StoreProblem.INTEGRITY)
@@ -76,6 +77,13 @@ internal class H1JointReduction {
         integrity(command.requestKey==result.id && command.manifest.projectId==result.projectId &&
             DispatchClosureCommandCodec().fingerprint(command)==fingerprint)
         validateDispatchClosureAuthority(before,command,principal,credential)
+        if(retained.automatic) {
+            integrity(retained.assessor==principal && retained.delegation==credential &&
+                command.assessment==WSourceVariant2Value(WSourceVariant2("work",command.materialization)))
+            try { validateDispatchClosureEdge(h,c,WorkGitOid(before.basis.algorithm,before.basis.hex),command) }
+            catch(_:WorkFault) { fail(StoreProblem.INTEGRITY) }
+            return
+        }
         val materialization=try { (h.resolve(command.materialization).payload as? WDispatchMaterializationPayload)?.value }
             catch(_:WorkFault) { null } ?: fail(StoreProblem.INTEGRITY)
         val inventory=try {
@@ -85,6 +93,8 @@ internal class H1JointReduction {
                 task.dependencies.map { it.selectedResult ?: fail(StoreProblem.INTEGRITY) })
         } catch(_:WorkFault) { fail(StoreProblem.INTEGRITY) }
         integrity(closureAttributionMatches(before,result.projectId,inventory,principal,retained))
+        val verifier=qualification ?: fail(StoreProblem.INTEGRITY)
+        integrity(historicalClosureQualificationMatches(before,command,inventory,principal,retained,verifier))
         try { validateDispatchClosureEdge(h,c,WorkGitOid(before.basis.algorithm,before.basis.hex),command) }
         catch(_:WorkFault) { fail(StoreProblem.INTEGRITY) }
     }

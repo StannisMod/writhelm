@@ -405,6 +405,49 @@ test("MOCK frontier restart retains successor identity after unknown publication
   } finally {await resumed.close()}
 })
 
+test("MOCK frontier requests automatic closure and starts only the closed dependent",async()=>{
+  const prep="11111111-1111-4111-8111-111111111111",start="22222222-2222-4222-8222-222222222222"
+  const task={projectId,taskId:driverId,revision:0},next={...task,revision:1}
+  const records=new Map<string,string>(),operations:string[]=[]
+  let closed=false,staleClosure:string|undefined,started!:()=>void
+  const done=new Promise<void>(r=>{started=r})
+  const planJSON=JSON.stringify({key:{projectId,id:driverId},payload:{entries:[{preparationId:prep,startId:start,futureDependencies:[{}]}]}})
+  const frame=()=>({basis:{algorithm:"sha1",hex:"a".repeat(40)},planJSON,attemptsJSON:[],activeAssignments:[],entries:[{
+    preparationId:prep,startId:start,futureReady:true,claimsAvailable:true,selectionJSON:JSON.stringify({task}),
+    taskJSON:JSON.stringify({key:task,payload:{kind:"implementation",state:"executable",unresolved:[],dependencies:[{selectedResult:null}]}}),
+    closedJSON:closed?JSON.stringify({materializationJSON:"{}",closureJSON:"{}",manifestJSON:"{}",selectionJSON:JSON.stringify({task:next}),
+      taskJSON:JSON.stringify({key:next,payload:{kind:"implementation",state:"executable",unresolved:[],dependencies:[{selectedResult:{id:driverId}}]}})}):null}]})
+  const channel={scope:"controller",projectID:projectId,send:async(_route:string,raw:string)=>{
+    const cmd=JSON.parse(raw);operations.push(cmd.operation)
+    if(cmd.operation==="close_dispatch_inputs"){
+      if(staleClosure===undefined){
+        staleClosure=cmd.requestKey
+        return JSON.stringify({kind:"settled",identity:{operation:cmd.operation,projectId,requestKey:cmd.requestKey},
+          outcome:{kind:"rejected",domain:"work",code:"STALE_GENERATION"}})
+      }
+      assert.notEqual(cmd.requestKey,staleClosure)
+      assert.deepEqual(cmd.payload.assessment.reference,cmd.payload.materialization)
+      assert.equal(cmd.payload.expectedHead.hex,"a".repeat(40));closed=true
+    }
+    return JSON.stringify({kind:"settled",identity:{operation:cmd.operation,projectId,requestKey:cmd.requestKey},
+      outcome:{kind:"success",result:{key:{projectId,id:cmd.requestKey},digest:"b".repeat(64)}}})
+  }}
+  const preparation={runPlannedController:async(raw:string)=>{
+    assert.equal(closed,true);assert.deepEqual(JSON.parse(raw).task,next)
+    return {phase:"binding-confirmed",state:"bound",currentIntent:null,assignmentSelector:{},binding:{}}
+  }}
+  const frontier=new NativeDispatchFrontier({dispatchContext:async()=>frame(),dispatchMaterializationChannel:async()=>channel} as never,
+    preparation as never,{runController:async()=>{started();return {phase:"active"}}} as never,
+    {read:async(n:string,k:string)=>records.get(n+k),retain:async(n:string,k:string,v:string)=>{records.set(n+k,v)}} as never,
+    "ses_controller",driverId,1,250)
+  frontier.start()
+  try {
+    await Promise.race([done,new Promise<never>((_,reject)=>setTimeout(()=>reject(Error("dependent start timeout")),3000))])
+    assert.deepEqual(operations,["materialize_dispatch_dependency","close_dispatch_inputs","materialize_dispatch_dependency","close_dispatch_inputs"])
+    assert.ok(records.has("dispatch-closure"+prep))
+  } finally {await frontier.close()}
+})
+
 test("MOCK frontier holds occupied claim and resumes only after it becomes free",async()=>{
   const prep="11111111-1111-4111-8111-111111111111",start="22222222-2222-4222-8222-222222222222"
   const taskId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",reservation={operation:"reserve_assignment",payload:{assignmentId:driverId}}
@@ -461,6 +504,29 @@ test("MOCK frontier retains materialization command and never reserves an unchec
     await Promise.race([published,new Promise<never>((_,reject)=>setTimeout(()=>reject(Error("recovery timeout")),2000))])
     assert.ok(requests.every(raw=>raw===requests[0]));assert.equal(requests.length,4)
   } finally {await restored.close()}
+})
+
+test("MOCK frontier dispatches the exact closed dependent successor",async()=>{
+  const prep="11111111-1111-4111-8111-111111111111",start="22222222-2222-4222-8222-222222222222"
+  const taskId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",oldTask={projectId,taskId,revision:0},nextTask={...oldTask,revision:1}
+  const oldSelection={task:oldTask},nextSelection={task:nextTask,manifest:{id:"closed"}}
+  const plan={key:{projectId,id:driverId},payload:{entries:[{preparationId:prep,startId:start,futureDependencies:[{}]}]}}
+  const closedJSON=JSON.stringify({materializationJSON:"{}",closureJSON:"{}",taskJSON:JSON.stringify({key:nextTask,
+    payload:{kind:"implementation",state:"executable",unresolved:[],dependencies:[{selectedResult:{id:"producer"}}]}}),
+    manifestJSON:"{}",selectionJSON:JSON.stringify(nextSelection)})
+  const frame={basis:{revision:1},planJSON:JSON.stringify(plan),attemptsJSON:[],activeAssignments:[],entries:[{
+    preparationId:prep,startId:start,futureReady:true,claimsAvailable:true,closedJSON,selectionJSON:JSON.stringify(oldSelection),
+    taskJSON:JSON.stringify({key:oldTask,payload:{kind:"implementation",state:"executable",unresolved:[],dependencies:[{selectedResult:null}]}})}]}
+  let dispatched!:()=>void,seen=""
+  const started=new Promise<void>(resolve=>{dispatched=resolve})
+  const preparation={runPlannedController:async(selection:string)=>{seen=selection;dispatched();return {phase:"reservation-held"}}}
+  const frontier=new NativeDispatchFrontier({dispatchContext:async()=>frame} as never,preparation as never,{} as never,
+    {read:async()=>undefined} as never,"ses_controller",driverId,1,250)
+  frontier.start()
+  try {
+    await Promise.race([started,new Promise<never>((_,reject)=>setTimeout(()=>reject(Error("dependent dispatch timeout")),2000))])
+    assert.deepEqual(JSON.parse(seen),nextSelection)
+  } finally {await frontier.close()}
 })
 
 test("controller start reuses the retained transition after a lost response",async()=>{

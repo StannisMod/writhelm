@@ -36,6 +36,27 @@ internal fun chooseDispatchResult(state:WorkState,rule:DispatchFutureDependency)
 internal data class DispatchMaterialization(val task:CCreateTaskRevision,val manifest:CPinInputManifest)
 private const val MATERIALIZED_CLOSURE_GAP="Fresh mandatory-input closure assessment required for selected dependency results"
 
+/** Exact closed successor for a planned future dependency. Missing or competing closures hold the
+ * entry; this read-only selection does not authorize reservation, start or qualification. */
+internal data class DispatchClosedSelection(val materialization:WorkReference,val closure:WorkReference,
+    val task:WorkKey.TaskRevision,val manifest:WorkReference)
+internal fun dispatchClosedSelection(state:WorkState,plan:WorkReference,entry:DispatchPlanEntry):DispatchClosedSelection? {
+    workRequire(state.modelVersion==4 && plan.identity.family==WorkFamily.DISPATCH_PLANS,WorkProblem.INVALID_REFERENCE)
+    val declared=(state.resolve(plan).payload as? WDispatchPlanPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+    workRequire(declared.entries.singleOrNull { it.preparationId==entry.preparationId }==entry && entry.futureDependencies.isNotEmpty(),
+        WorkProblem.INVALID_REFERENCE)
+    val matches=state.records.values.mapNotNull { row ->
+        val closure=(row.payload as? WDispatchClosurePayload)?.value ?: return@mapNotNull null
+        val materialization=(state.resolve(closure.materialization).payload as? WDispatchMaterializationPayload)?.value ?: return@mapNotNull null
+        if(materialization.plan!=plan || materialization.task!=entry.task)return@mapNotNull null
+        val manifest=state.reference(WorkFamily.INPUT_MANIFESTS,closure.manifest)
+        val value=(state.resolve(manifest).payload as? WInputManifestsPayload)?.value ?: return@mapNotNull null
+        if(value.task!=materialization.newTask || value.knownGaps.isNotEmpty())return@mapNotNull null
+        DispatchClosedSelection(closure.materialization,state.reference(WorkFamily.DISPATCH_CLOSURES,row.identity.key),materialization.newTask,manifest)
+    }
+    return matches.singleOrNull()
+}
+
 /** Structural input inventory for the first closure stage. This is not an assessment of semantic
  * completeness, packet proof, authorization, or permission to remove the closure gap. The caller
  * must bind any independent assessment to the captured service head and current authority. */
@@ -52,11 +73,20 @@ internal data class DispatchClosureCommand(val requestKey:UUID,val materializati
     val expectedHead:WorkGitOid,val assessment:WSource,val manifest:WorkKey.Id)
 /** The identity claims must be checked against the original H receipt index; retaining them does
  * not by itself qualify the assessment or prove independence. */
-internal data class WDispatchClosurePayload(val value:DispatchClosureCommand,val assessor:UUID,val delegation:UUID):WorkPayload
-internal fun encodeDispatchClosureRecord(v:WDispatchClosurePayload):JsonValue = obj(
+internal data class WDispatchClosurePayload(val value:DispatchClosureCommand,val assessor:UUID,val delegation:UUID,
+    val automatic:Boolean=false):WorkPayload
+internal fun encodeDispatchClosureRecord(v:WDispatchClosurePayload):JsonValue = if(v.automatic)obj(
+    "command" to StrictJson.decode(DispatchClosureCommandCodec().encode(v.value)),
+    "kind" to str("declared-input-check"),"actor" to uuid(v.assessor),"credential" to uuid(v.delegation)) else obj(
     "command" to StrictJson.decode(DispatchClosureCommandCodec().encode(v.value)),
     "assessor" to uuid(v.assessor),"delegation" to uuid(v.delegation))
 internal fun decodeDispatchClosureRecord(v:JsonValue):WDispatchClosurePayload {
+    if(v is JObject && "kind" in v.entries) {
+        val f=v.fields("command","kind","actor","credential")
+        shape(f.getValue("kind").string()=="declared-input-check")
+        return WDispatchClosurePayload(DispatchClosureCommandCodec().decode(StrictJson.encode(f.getValue("command"))),
+            uuid(f.getValue("actor")),uuid(f.getValue("credential")),true)
+    }
     val f=v.fields("command","assessor","delegation")
     return WDispatchClosurePayload(DispatchClosureCommandCodec().decode(StrictJson.encode(f.getValue("command"))),
         uuid(f.getValue("assessor")),uuid(f.getValue("delegation")))
@@ -111,6 +141,25 @@ internal fun reduceDispatchClosure(state:WorkState,basis:WorkGitOid,actor:WorkEx
     val after=effect.after.derive(listOf(WorkRecord(identity,WDispatchClosurePayload(command,assessment.assessor,assessment.delegation))),emptyList())
     return WorkEffect(state,after,identity,effect.changedRecords+after.records.getValue(identity),effect.addedBodies)
 }
+
+/** Automatic declared-input path. No assessor, delegation or reviewer is created. */
+internal fun reduceDeclaredDispatchClosure(state:WorkState,basis:WorkGitOid,actor:WorkExecutionInput,
+    facts:WorkExternalFacts,command:DispatchClosureCommand):WorkEffect {
+    workRequire(state.modelVersion==4 && command.expectedHead==basis,WorkProblem.STALE_GENERATION)
+    val materialization=(state.resolve(command.materialization).payload as? WDispatchMaterializationPayload)?.value
+        ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+    val plan=(state.resolve(materialization.plan).payload as WDispatchPlanPayload).value
+    workRequire(actor.controllerId==plan.controllerId && actor.assignment==null && actor.execution==null,WorkProblem.INVALID_BINDING)
+    workRequire(command.assessment==WSourceVariant2Value(WSourceVariant2("work",command.materialization)),WorkProblem.BLOCKED_INPUT)
+    val proposal=proposeDeclaredMaterializedManifest(state,materialization.requestKey,command.manifest,facts)
+    val effect=WorkReducer().reduceClosurePin(state,WorkCommand(command.requestKey,state.projectId,CPinInputManifestOperation(proposal)),
+        actor,facts,proposal.data.task)
+    val identity=WorkRecordIdentity(WorkFamily.DISPATCH_CLOSURES,WorkKey.Id(state.projectId,command.requestKey))
+    workRequire(identity !in state.records,WorkProblem.DUPLICATE_ID)
+    val record=WorkRecord(identity,WDispatchClosurePayload(command,actor.principalId,actor.credentialId,true))
+    val after=effect.after.derive(listOf(record),emptyList())
+    return WorkEffect(state,after,identity,effect.changedRecords+record,effect.addedBodies)
+}
 /** Historical work-graph check; does not re-execute an assessor or prove its identity. The service
  * must separately verify the receipt, authorization, assessment provenance, basis and write set. */
 internal fun validateDispatchClosureEdge(before:WorkState,after:WorkState,basis:WorkGitOid,original:DispatchClosureCommand) {
@@ -156,16 +205,45 @@ internal fun proposeClosedMaterializedManifest(state:WorkState,basis:WorkGitOid,
     return CPinInputManifest(newManifest,previous.copy(declaredClosureAssessment=assessment.assessment,knownGaps=emptyList()),emptyList())
 }
 internal fun prebindingMaterializedInputs(state:WorkState,materializationId:UUID,facts:WorkExternalFacts):PrebindingInputInventory {
+    return declaredMaterializedInputs(state,materializationId,facts,null)
+}
+
+/** Deterministic successor proposal after checking declared inputs. The retained materialization
+ * identifies the check's subject; it is not a reviewer report or semantic-completeness certificate.
+ * Publication still requires service authority, an exact-head transaction and historical checking. */
+internal fun proposeDeclaredMaterializedManifest(state:WorkState,materializationId:UUID,newManifest:WorkKey.Id,
+    facts:WorkExternalFacts):CPinInputManifest {
+    workRequire(newManifest.projectId==state.projectId &&
+        WorkRecordIdentity(WorkFamily.INPUT_MANIFESTS,newManifest) !in state.records,WorkProblem.INVALID_REFERENCE)
+    val inputs=declaredMaterializedInputs(state,materializationId,facts,null)
+    val previous=(state.resolve(inputs.manifest).payload as WInputManifestsPayload).value
+    val provenance=state.reference(WorkFamily.DISPATCH_MATERIALIZATIONS,WorkKey.Id(state.projectId,materializationId))
+    return CPinInputManifest(newManifest,previous.copy(knownGaps=emptyList(),
+        declaredClosureAssessment=WSourceVariant2Value(WSourceVariant2("work",provenance))),emptyList())
+}
+
+/** Automatic declared-input check, not independent review. With a successor reference, validate
+ * the exact unchanged input set after closing the materialization marker. Real known gaps cannot
+ * be cleared through this path. External source observations still have to be supplied by the
+ * trusted service adapter; a body or worker report does not establish artifact retention. */
+internal fun declaredMaterializedInputs(state:WorkState,materializationId:UUID,facts:WorkExternalFacts,
+    successor:WorkReference?):PrebindingInputInventory {
     workRequire(state.modelVersion==4,WorkProblem.INVALID_SUBJECT)
     val cmd=(state.record(WorkFamily.DISPATCH_MATERIALIZATIONS,WorkKey.Id(state.projectId,materializationId)).payload as? WDispatchMaterializationPayload)?.value
         ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
     val plan=(state.resolve(cmd.plan).payload as? WDispatchPlanPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
     val entry=plan.entries.singleOrNull { it.task==cmd.task } ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
     val task=state.task(cmd.newTask)
-    val manifestRef=state.reference(WorkFamily.INPUT_MANIFESTS,cmd.manifest)
+    val originalRef=state.reference(WorkFamily.INPUT_MANIFESTS,cmd.manifest)
+    val original=(state.resolve(originalRef).payload as WInputManifestsPayload).value
+    val manifestRef=successor ?: originalRef
     val manifest=(state.resolve(manifestRef).payload as WInputManifestsPayload).value
+    workRequire(original.knownGaps==listOf(MATERIALIZED_CLOSURE_GAP),WorkProblem.BLOCKED_INPUT)
+    if(successor!=null)workRequire(successor.identity.family==WorkFamily.INPUT_MANIFESTS &&
+        manifest.knownGaps.isEmpty() && manifest.copy(declaredClosureAssessment=original.declaredClosureAssessment,
+            knownGaps=original.knownGaps)==original,WorkProblem.INVALID_REFERENCE)
     workRequire(task.state=="executable" && task.unresolved.isEmpty() && task.executionProfile==entry.profile &&
-        manifest.task==cmd.newTask && manifest.base==task.base && manifest.knownGaps==listOf(MATERIALIZED_CLOSURE_GAP),WorkProblem.BLOCKED_INPUT)
+        manifest.task==cmd.newTask && manifest.base==task.base,WorkProblem.BLOCKED_INPUT)
     workRequire(task.approvedDesign.all { it in facts.approvedDecisions },WorkProblem.BLOCKED_INPUT)
     val applicability=(state.record(WorkFamily.APPLICABILITY,manifest.applicability).payload as WApplicabilityPayload).value
     workRequire(applicability.entries.none { it.state!="applicable" },WorkProblem.BLOCKED_INPUT)
@@ -327,7 +405,9 @@ internal fun validateDispatchMaterializationEdge(before:WorkState,after:WorkStat
     val expected=before.records+records.associateBy { it.identity }
     workRequire(after.records==expected && after.bodies==before.bodies,WorkProblem.INVALID_REFERENCE)
 }
-internal data class DispatchPlanCandidate(val projectId:UUID,val planId:UUID,val controllerId:UUID,val entries:List<DispatchPlanEntry>)
+internal data class DispatchCandidateCheck(val checkId:String,val command:List<String>,val safeRepeat:Boolean,val dependencies:List<String>)
+internal data class DispatchPlanCandidate(val projectId:UUID,val planId:UUID,val controllerId:UUID,val entries:List<DispatchPlanEntry>,
+    val candidateChecks:List<DispatchCandidateCheck> = emptyList())
 internal data class WDispatchPlanPayload(val value:DispatchPlanCandidate):WorkPayload
 /** Original reservation is part of the immutable plan-attempt identity, not a local retry hint. */
 internal data class DispatchAttempt(val plan:WorkReference,val preparationId:UUID,val reservation:WorkCommand,
@@ -455,21 +535,27 @@ internal class DispatchPlanCandidateCodec {
     private fun key(v:WorkKey)=StrictJson.decode(identityCodec.encodeKey(v))
     private fun reference(v:WorkReference)=StrictJson.decode(identityCodec.encodeReference(v))
     fun encode(v:DispatchPlanCandidate):ByteArray {
-        val version=if(v.entries.any { it.futureDependencies.isNotEmpty() })2 else 1
-        val bytes=StrictJson.encode(obj("formatVersion" to num(version),"projectId" to uuid(v.projectId),"planId" to uuid(v.planId),
+        val version=if(v.candidateChecks.isNotEmpty())3 else if(v.entries.any { it.futureDependencies.isNotEmpty() })2 else 1
+        val root=obj("formatVersion" to num(version),"projectId" to uuid(v.projectId),"planId" to uuid(v.planId),
             "controllerId" to uuid(v.controllerId),"entries" to workArray(v.entries,1,256,true) { e ->
                 val fields=linkedMapOf<String,JsonValue>("task" to key(e.task),"manifest" to reference(e.manifest),"profile" to key(e.profile),
                     "resources" to workArray(e.resources,1,256,true) { key(it) },"preparationId" to uuid(e.preparationId),"startId" to uuid(e.startId))
-                if(version==2)fields["futureDependencies"]=workArray(e.futureDependencies,0,256,true) { d -> obj("producer" to key(d.producer),"readiness" to str(d.readiness)) }
+                if(version>=2)fields["futureDependencies"]=workArray(e.futureDependencies,0,256,true) { d -> obj("producer" to key(d.producer),"readiness" to str(d.readiness)) }
                 JObject(fields)
-            }))
+            })
+        val bytes=StrictJson.encode(if(version<3)root else JObject(root.entries+("candidateChecks" to JArray(v.candidateChecks.map { check ->
+            obj("checkId" to str(check.checkId),"command" to JArray(check.command.map(::str)),"safeRepeat" to JBoolean(check.safeRepeat),
+                "dependencies" to JArray(check.dependencies.map(::str)))
+        }))))
         decode(bytes)
         return bytes
     }
     fun decode(bytes:ByteArray):DispatchPlanCandidate {
-        val f=StrictJson.decode(bytes,JsonLimits(bytes=262144,stringBytes=65536,depth=32,collection=1024,tokens=100000))
-            .fields("formatVersion","projectId","planId","controllerId","entries")
-        val version=f.getValue("formatVersion").long();shape(version in setOf(1L,2L))
+        val decoded=StrictJson.decode(bytes,JsonLimits(bytes=262144,stringBytes=65536,depth=32,collection=1024,tokens=100000)) as? JObject ?: refuse(CodecProblem.INVALID_SHAPE)
+        val version=decoded.entries["formatVersion"]?.long() ?: refuse(CodecProblem.INVALID_SHAPE)
+        shape(version in setOf(1L,2L,3L))
+        val f=if(version==3L)decoded.fields("formatVersion","projectId","planId","controllerId","entries","candidateChecks")
+            else decoded.fields("formatVersion","projectId","planId","controllerId","entries")
         val project=uuid(f.getValue("projectId"))
         val entries=workList(f.getValue("entries"),1,256,true) { item ->
             val x=if(version==1L)item.fields("task","manifest","profile","resources","preparationId","startId")
@@ -494,7 +580,21 @@ internal class DispatchPlanCandidateCodec {
         val ids=entries.flatMap { listOf(it.preparationId,it.startId) }
         shape(ids.distinct().size==ids.size)
         if(version==2L)shape(entries.any { it.futureDependencies.isNotEmpty() })
-        return DispatchPlanCandidate(project,uuid(f.getValue("planId")),uuid(f.getValue("controllerId")),entries)
+        val checks=if(version<3)emptyList() else workList(f.getValue("candidateChecks"),1,256,true) { item ->
+            val c=item.fields("checkId","command","safeRepeat","dependencies")
+            DispatchCandidateCheck(workText(c.getValue("checkId"),1,128),workList(c.getValue("command"),1,64,false) { workText(it,1,8192) },
+                (c.getValue("safeRepeat") as? JBoolean)?.value ?: refuse(CodecProblem.INVALID_SHAPE),
+                workList(c.getValue("dependencies"),0,256,true) { workText(it,1,128) })
+        }
+        shape(checks.map { it.checkId }.distinct().size==checks.size)
+        val byId=checks.associateBy { it.checkId };val visiting=HashSet<String>();val visited=HashSet<String>()
+        fun visit(id:String) {
+            if(id in visited)return
+            shape(id !in visiting && id in byId);visiting.add(id)
+            byId.getValue(id).dependencies.forEach(::visit);visiting.remove(id);visited.add(id)
+        }
+        checks.forEach { visit(it.checkId) }
+        return DispatchPlanCandidate(project,uuid(f.getValue("planId")),uuid(f.getValue("controllerId")),entries,checks)
     }
 }
 

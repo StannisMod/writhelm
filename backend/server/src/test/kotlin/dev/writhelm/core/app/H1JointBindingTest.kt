@@ -201,6 +201,7 @@ class H1JointBindingTest {
     }
     @Test fun `materialization publishes four records atomically and cold audits original head`() {
         val f=JointFixture();val root=directory();var seq=5600;lateinit var heldClosureBytes:ByteArray
+        lateinit var originalProvenance:H1EvidenceAttribution
         f.publishedActiveApp(modelVersion=4,root=root).use { app ->
             fun publish(op:dev.writhelm.core.work.WorkOperation,token:String=plannerToken):CommandResult.Settled {
                 val reply=app.execute(token,f.codec.encodeCommand(WorkCommand(id(seq++),project,op)))
@@ -393,12 +394,35 @@ class H1JointBindingTest {
             val closureRecord=candidate.after.records.getValue(candidate.result).payload as WDispatchClosurePayload
             assertEquals(assessor,closureRecord.assessor);assertEquals(assessDelegation,closureRecord.delegation)
             val exactInputs=prebindingMaterializedInputs(assessmentH.work.getValue(project),command.requestKey,f.runtimeFacts)
+            val provenance=assertNotNull(attributedClosureEvidence(assessmentH,project,exactInputs,assessmentEvidence,planner))
+            originalProvenance=provenance
+            assertEquals(assessor,provenance.receipt.principalId)
+            assertEquals(project,provenance.receipt.projectId)
+            assertEquals("record_evidence",provenance.receipt.operation)
+            assertEquals(assessorKey,provenance.credentialId)
+            assertEquals(assessmentEvidence,provenance.reference)
+            // Explicit test double only: production has no historical qualification verifier.
+            val historical=HistoricalClosureQualification { s,c,inputs,attribution ->
+                QualifiedClosureAssessment(s.basis,c.materialization,inputs,assessmentEvidence,attribution.principalId,attribution.delegationId)
+            }
+            assertTrue(historicalClosureQualificationMatches(assessmentH,next,exactInputs,planner,closureRecord,historical))
+            assertFalse(historicalClosureQualificationMatches(assessmentH,next,exactInputs.copy(dependencies=emptyList()),planner,closureRecord,historical))
+            assertFalse(historicalClosureQualificationMatches(assessmentH,next,exactInputs,planner,closureRecord,
+                HistoricalClosureQualification { _,_,_,_->null }))
+            assertFalse(historicalClosureQualificationMatches(assessmentH,next,exactInputs,planner,closureRecord,
+                HistoricalClosureQualification { s,c,inputs,attribution ->
+                    QualifiedClosureAssessment(s.basis,c.materialization,inputs,assessmentEvidence,attribution.principalId,id(6023))
+                }))
+            assertFalse(historicalClosureQualificationMatches(assessmentH,next,exactInputs,planner,closureRecord,
+                HistoricalClosureQualification { _,_,_,_->throw IllegalStateException("unavailable") }))
             assertFalse(closureAttributionMatches(assessmentH,project,exactInputs,planner,
                 closureRecord.copy(value=next.copy(assessment=workSource(failedEvidence)))))
             val candidateH=H1BoundState.checked(storeId,assessmentH.basis,assessmentH.core,assessmentH.authority.records(),
                 assessmentH.work+(project to candidate.after),expectedWorkModel=4)
+            assertFailsWith<StoreFault> { f.bridge.validateDispatchClosureHistory(assessmentH,candidateH,candidate.result.key as WorkKey.Id,
+                planner,plannerKey,DispatchClosureCommandCodec().fingerprint(next)) }
             f.bridge.validateDispatchClosureHistory(assessmentH,candidateH,candidate.result.key as WorkKey.Id,planner,plannerKey,
-                DispatchClosureCommandCodec().fingerprint(next))
+                DispatchClosureCommandCodec().fingerprint(next),historical)
             val originalClosure=candidate.after.records.getValue(candidate.result)
             val forgedClosure=originalClosure.copy(payload=closureRecord.copy(assessor=f.worker))
             val forgedWork=WorkState.restore(project,candidate.after.records.values.filter { it.identity!=candidate.result }+forgedClosure,
@@ -406,7 +430,7 @@ class H1JointBindingTest {
             val forgedH=H1BoundState.checked(storeId,assessmentH.basis,assessmentH.core,assessmentH.authority.records(),
                 assessmentH.work+(project to forgedWork),expectedWorkModel=4)
             assertFailsWith<StoreFault> { f.bridge.validateDispatchClosureHistory(assessmentH,forgedH,candidate.result.key as WorkKey.Id,
-                planner,plannerKey,DispatchClosureCommandCodec().fingerprint(next)) }
+                planner,plannerKey,DispatchClosureCommandCodec().fingerprint(next),historical) }
             val candidateManifest=candidate.after.reference(WorkFamily.INPUT_MANIFESTS,next.manifest)
             assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> {
                 WorkTransaction(candidate.after,WorkExecutionInput(planner,plannerKey,f.controller,null,null),
@@ -423,6 +447,35 @@ class H1JointBindingTest {
             assertEquals("BLOCKED_INPUT",assertIs<LogicalOutcome.Rejected>(serviceHeld.receipt.outcome).code)
             assertTrue(serviceHeld.receipt.writes.isEmpty())
 
+            val automaticHead=app.coordinationCapture(plannerToken,project).basis
+            val automatic=next.copy(requestKey=id(6031),manifest=WorkKey.Id(project,id(6032)),
+                expectedHead=WorkGitOid(automaticHead.algorithm,automaticHead.hex),
+                assessment=workSource(next.materialization))
+            val automaticBytes=DispatchClosureCommandCodec().encode(automatic)
+            val automaticReply=assertIs<CommandResult.Settled>(app.execute(plannerToken,automaticBytes))
+            assertIs<LogicalOutcome.Success>(automaticReply.receipt.outcome)
+            assertEquals(setOf("dispatch-closures","input-manifests"),automaticReply.receipt.writes.map { it.record.family }.toSet())
+            assertTrue(assertIs<CommandResult.Settled>(app.execute(plannerToken,automaticBytes)).commandReplayed)
+            val automaticState=app.coordinationCapture(plannerToken,project).work
+            val automaticRecord=automaticState.record(WorkFamily.DISPATCH_CLOSURES,WorkKey.Id(project,id(6031))).payload as WDispatchClosurePayload
+            assertTrue(automaticRecord.automatic)
+            assertEquals(planner,automaticRecord.assessor)
+            assertEquals(plannerKey,automaticRecord.delegation)
+            val successor=automaticState.reference(WorkFamily.INPUT_MANIFESTS,automatic.manifest)
+            assertTrue((automaticState.resolve(successor).payload as WInputManifestsPayload).value.knownGaps.isEmpty())
+            assertTrue((automaticState.resolve(newManifest).payload as WInputManifestsPayload).value.knownGaps.isNotEmpty())
+            val projected=app.nativeDispatchContext(plannerToken,project,f.controller,f.intended.nativeHostId,
+                automatic.materialization.let { (automaticState.resolve(it).payload as WDispatchMaterializationPayload).value.plan.identity.key as WorkKey.Id }.id) as JObject
+            val closedProjection=StrictJson.decode(projected.entries.getValue("entries").list().single().member("closedJSON").string().toByteArray())
+            val projectedSelection=StrictJson.decode(closedProjection.member("selectionJSON").string().toByteArray())
+            assertEquals(command.newTask,identityCodec.decodeKey(WorkFamily.TASK_REVISIONS,StrictJson.encode(projectedSelection.member("task"))))
+            assertEquals(successor,identityCodec.decodeReference(StrictJson.encode(projectedSelection.member("manifest"))))
+            assertEquals(WorkProblem.BLOCKED_INPUT,assertFailsWith<WorkFault> {
+                WorkTransaction(automaticState,WorkExecutionInput(planner,plannerKey,f.controller,null,null),
+                    f.runtimeFacts.copy(verifiedPackets=emptySet()),id(6033),Digest.of(byteArrayOf(2)))
+                    .taskReady(command.newTask,successor,f.profile)
+            }.problem)
+
             val secondRetro=ref(publish(CRecordRetrospectiveOperation(CRecordRetrospective(WorkKey.Id(project,id(5662)),
                 CRecordRetrospectiveData(f.task,subject,null,"no-significant-new-findings",emptyList()),emptyList())),worker))
             publish(CSubmitResultOperation(CSubmitResult(WorkKey.Id(project,id(5663)),
@@ -431,14 +484,22 @@ class H1JointBindingTest {
             val held=assertIs<CommandResult.Settled>(app.execute(plannerToken,DispatchMaterializationCommandCodec().encode(changed)))
             assertEquals("NOT_READY",assertIs<LogicalOutcome.Rejected>(held.receipt.outcome).code);assertTrue(held.receipt.writes.isEmpty())
         }
-        val options=H1Options(H1RuntimeFacts { state,_ ->H1ObservedFacts(state.basis,f.runtimeFacts,f.observations.qualifiedProfiles) },workModelVersion=4)
+        var reopenedState:H1BoundState?=null
+        val options=H1Options(H1RuntimeFacts { state,_->reopenedState=state;H1ObservedFacts(state.basis,f.runtimeFacts,f.observations.qualifiedProfiles) },workModelVersion=4)
         H1Application.open(root,storeId,options).use { app ->
             val current=app.coordinationCapture(plannerToken,project).work
             assertIs<WDispatchMaterializationPayload>(current.record(WorkFamily.DISPATCH_MATERIALIZATIONS,WorkKey.Id(project,id(5659))).payload)
+            val restoredClosure=current.record(WorkFamily.DISPATCH_CLOSURES,WorkKey.Id(project,id(6031))).payload as WDispatchClosurePayload
+            assertTrue(restoredClosure.automatic)
+            assertEquals(plannerKey,restoredClosure.delegation)
+            assertTrue((current.record(WorkFamily.INPUT_MANIFESTS,WorkKey.Id(project,id(6032))).payload as WInputManifestsPayload).value.knownGaps.isEmpty())
             val replay=assertIs<CommandResult.Settled>(app.execute(plannerToken,heldClosureBytes))
             assertTrue(replay.commandReplayed)
             assertEquals("BLOCKED_INPUT",assertIs<LogicalOutcome.Rejected>(replay.receipt.outcome).code)
             assertTrue(replay.receipt.writes.isEmpty())
+            app.execute(plannerToken,f.codec.encodeCommand(f.reserveCommand().copy(requestKey=id(6030))))
+            val restored=assertNotNull(reopenedState).evidence[originalProvenance.reference.identity]
+            assertEquals(originalProvenance,restored) // all original receipt fields survive cold reconstruction
         }
     }
     @Test fun `future dependency rule is published and restored as an exact hold`() {
@@ -536,6 +597,7 @@ class H1JointBindingTest {
             val frame=endpoint.read(plannerToken,context).value as JObject
             assertEquals(entry.preparationId,uuid(frame.entries.getValue("entries").list().single().member("preparationId")))
             assertEquals(entry.startId,uuid(frame.entries.getValue("entries").list().single().member("startId")))
+            assertEquals(JNull,frame.entries.getValue("entries").list().single().member("closedJSON"))
             assertEquals(1,frame.entries.getValue("attemptsJSON").list().size)
             assertFailsWith<ServiceFault> { endpoint.read(ownerToken,context) }
             endpoint.close()
@@ -907,19 +969,12 @@ class H1JointBindingTest {
             override fun inputs(state:H1BoundState,command:WorkCommand):ReservationInputProof?=proof
         }
         val delegate=H1RuntimeFacts { state,_->H1ObservedFacts(state.basis,f.observations.facts.copy(verifiedPackets=emptySet()),f.observations.qualifiedProfiles) }
-        val assessment=PrebindingAssessment(f.head,project,f.codec.fingerprint(command),work.reference(WorkFamily.TASK_REVISIONS,f.task),
-            f.manifest,profile,f.source)
-        var independent:PrebindingAssessment?=assessment
-        val verifier=IndependentPrebindingInputVerifier(delegate,PrebindingAssessmentControl { _,_->independent })
+        val verifier=DeclaredPrebindingInputVerifier(delegate)
         assertEquals(expected,verifier.inputs(base,command))
-        independent=assessment.copy(basis=GitOid("sha1","b".repeat(40)))
-        assertNull(verifier.inputs(base,command))
-        independent=assessment.copy(manifest=profile)
-        assertNull(verifier.inputs(base,command))
-        independent=null;assertNull(verifier.inputs(base,command))
-        independent=assessment
+        val stale=H1RuntimeFacts { _,_->H1ObservedFacts(GitOid("sha1","b".repeat(40)),f.observations.facts,f.observations.qualifiedProfiles) }
+        assertNull(DeclaredPrebindingInputVerifier(stale).inputs(base,command))
         val noRetained=H1RuntimeFacts { state,_->H1ObservedFacts(state.basis,f.observations.facts.copy(retainedSnapshots=emptySet()),f.observations.qualifiedProfiles) }
-        assertNull(IndependentPrebindingInputVerifier(noRetained,PrebindingAssessmentControl { _,_->independent }).inputs(base,command))
+        assertNull(DeclaredPrebindingInputVerifier(noRetained).inputs(base,command))
         val extraSnapshot=f.snapshot.copy(retainedLocatorId=id(5890))
         val extraSource=WSourceVariant1Value(WSourceVariant1("artifact",extraSnapshot))
         val applicability=work.record(WorkFamily.APPLICABILITY,f.applicability)
@@ -928,9 +983,7 @@ class H1JointBindingTest {
         val missingInput=WorkState.restore(project,work.records.values.filter { it.identity!=changed.identity }+changed,work.bodies.values,modelVersion=4)
         val changedBase=H1BoundState.checked(storeId,f.head,f.base.core,f.base.authority.records(),mapOf(project to missingInput),expectedWorkModel=4)
         val enoughFacts=H1RuntimeFacts { state,_->H1ObservedFacts(state.basis,f.observations.facts.copy(retainedSnapshots=f.observations.facts.retainedSnapshots+extraSnapshot),f.observations.qualifiedProfiles) }
-        var assessmentCalls=0
-        assertNull(IndependentPrebindingInputVerifier(enoughFacts,PrebindingAssessmentControl { _,_->assessmentCalls++;assessment }).inputs(changedBase,command))
-        assertEquals(0,assessmentCalls) // a trusted assessment cannot replace a missing mandatory input
+        assertNull(DeclaredPrebindingInputVerifier(enoughFacts).inputs(changedBase,command))
         val checkedFacts=ReservationProofFacts(delegate,verifier).capture(base,command)
         assertEquals(setOf(WorkPrebindingClosure(f.task,f.manifest,f.profile,f.codec.fingerprint(command))),checkedFacts.facts.prebindingClosures)
         assertTrue(checkedFacts.facts.verifiedPackets.isEmpty())

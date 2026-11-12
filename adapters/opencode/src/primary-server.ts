@@ -9,7 +9,7 @@ import { LinuxWorkRequestCustody } from "./connected-tools.js"
 import { NativeRuntimeClient, closedObject, nativeUnavailable, uuidPattern } from "./native-runtime-client.js"
 import { createNativeCredentialRegistry } from "./native-host-identity.js"
 import { registerPrimaryGovernor } from "./native-primary.js"
-import { startProtectedNativeRuntime, nativeRuntimeReference } from "./native-runtime.js"
+import { startProtectedNativeRuntime, nativeRuntimeReference, loadCandidateDeliveryBootstrap } from "./native-runtime.js"
 import { exactJSON } from "./strict-json.js"
 import { nativeContextAdmission } from "./native-context-reference.js"
 
@@ -77,9 +77,10 @@ export default Plugin.define({id:"writhelm-opencode",async setup(ctx){
   let runtime:Awaited<ReturnType<typeof startProtectedNativeRuntime>>|undefined
   const governor=await registerPrimaryGovernor(ctx,registry,bootstrap,{workRoot,controllerId:cfg.controllerId,
     controllerCredentialId:cfg.controllerCredentialId,projectId:cfg.projectId,schemas:cfg.schemas},async sessionID=>{
+    const candidateDelivery=await loadCandidateDeliveryBootstrap(bootstrap,workRoot)
     runtime=await startProtectedNativeRuntime(ctx,native,{root,nativeOrigin:cfg.nativeOrigin,serviceOrigin:cfg.serviceOrigin,transportOrigin:cfg.transportOrigin,
       storeId:cfg.storeId,projectId:cfg.projectId,controllerId:cfg.controllerId,hostId:cfg.hostId,
-      controllerSessionID:sessionID,assignmentSessionIDs:[],serviceProof,transportProof})
+      controllerSessionID:sessionID,assignmentSessionIDs:[],serviceProof,transportProof,candidateDelivery})
     await registry.connectRuntime(sessionID)
   },context)
   return async()=>{await governor.close();await runtime?.close();serviceProof.fill(0);transportProof.fill(0)}
