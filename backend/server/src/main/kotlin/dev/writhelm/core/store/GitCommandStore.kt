@@ -459,7 +459,7 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
             return
         }
         if(outcome.operation in H1Catalog.authOperations) {
-            val family=when(outcome.operation) { "register_delegation","revoke_delegation" -> "delegations"; "replace_work_grants" -> "work-grants"; else -> "credentials" }
+            val family=when(outcome.operation) { "register_project" -> "projects"; "register_controller" -> "controllers"; "register_delegation","revoke_delegation" -> "delegations"; "replace_work_grants" -> "work-grants"; else -> "credentials" }
             val key=when(outcome.operation) { "replace_work_grants" -> obj("principalId" to outcome.result,"projectId" to uuid(r.identity.projectId)); "rotate_delegated_credential" -> outcome.result.fields("credentialId","replacedCredentialId").getValue("credentialId"); else -> outcome.result }
             integrity(RecordKey("auth",family,key).path in c.entries); return
         }
@@ -500,6 +500,8 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
             "revoke_access","replace_grants" -> payload.getValue("principalId")
             "revoke_credential" -> payload.getValue("credentialId")
             "replace_work_grants" -> payload.getValue("principalId")
+            "register_controller" -> payload.getValue("controllerId")
+            "register_project" -> payload.getValue("newProjectId")
             "register_delegation","revoke_delegation" -> payload.getValue("delegationId")
             "revoke_delegated_credential" -> payload.getValue("credentialId")
             else -> obj("credentialId" to payload.getValue("newCredentialId"),"replacedCredentialId" to payload.getValue("credentialId"))
@@ -517,6 +519,26 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
             integrity((path !in h.entries)==new)
         }
         when(c.operation) {
+            "register_project" -> {
+                val target=p.getValue("newProjectId")
+                val grant=e.changes.singleOrNull { it.key.namespace=="core" && it.key.family=="grants" }?.key?.key ?: fail(StoreProblem.INTEGRITY)
+                val fields=grant.fields("principalId","projectId");uuid(fields.getValue("principalId"))
+                integrity(fields.getValue("projectId")==target)
+                requireChange("auth","projects",target,true)
+                requireChange("core","grants",grant,true)
+                requireChange("auth","grant-guards",grant,true)
+                requireChange("auth","work-grants",grant,true)
+                requireChange("auth","credentials",p.getValue("ownerCredentialId"),true)
+            }
+            "register_controller" -> {
+                val principal=p.getValue("principalId");val grant=obj("principalId" to principal,"projectId" to uuid(c.projectId))
+                requireChange("core","grants",grant,true)
+                requireChange("auth","principals",principal,true)
+                requireChange("auth","grant-guards",grant,true)
+                requireChange("auth","work-grants",grant,true)
+                requireChange("auth","credentials",p.getValue("credentialId"),true)
+                requireChange("auth","controllers",p.getValue("controllerId"),true)
+            }
             "register_delegation" -> {
                 val binding=(p.getValue("binding") as? JObject)?.entries ?: fail(StoreProblem.INTEGRITY)
                 val principal=binding.getValue("principalId")

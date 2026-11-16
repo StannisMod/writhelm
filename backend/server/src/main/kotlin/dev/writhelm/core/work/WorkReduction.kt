@@ -139,8 +139,6 @@ internal class WorkTransaction(val h: WorkState,val actor: WorkExecutionInput,va
         workRequire(t.kind !in setOf("implementation","remediation") || t.approvedDesign.isNotEmpty(),WorkProblem.BLOCKED_INPUT)
         t.approvedDesign.forEach(::decision)
         val p=(h.record(WorkFamily.PROFILES,profile).payload as WProfilesPayload).value
-        workRequire(p.qualification=="qualified" && p.qualificationEvidence.isNotEmpty(),WorkProblem.NOT_READY)
-        p.qualificationEvidence.forEach(::source)
         workRequire(p.outputReserveTokens+p.toolReserveTokens+p.compactionReserveTokens<p.contextTokens,WorkProblem.NOT_READY)
         val m=(resolve(manifest,WorkFamily.INPUT_MANIFESTS).payload as WInputManifestsPayload).value
         val inputProof=prebinding && h.modelVersion==4 && WorkPrebindingClosure(task,manifest,profile,fingerprint) in facts.prebindingClosures

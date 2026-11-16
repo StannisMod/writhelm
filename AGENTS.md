@@ -13,6 +13,18 @@ Read README.md and the document relevant to the assigned task. Do not load all d
 - Live model calls, embeddings and paid experiments require explicit authorization.
 - Do not modify user-wide harness configuration or unrelated repositories.
 
+## Chat-bound planners
+
+- Every ordinary harness chat has its own planner session. Bind planner state, continuation and
+  unfinished operations to that exact chat/controller, never to a window, folder or shared service.
+- Planner sessions communicate only through documents/records in the shared store, primarily
+  versioned tasks and linked reports/results/decisions. No hidden cross-chat messages, shared planner
+  memory or transcript-as-assignment shortcuts. Notifications refer to retained records.
+- Shared infrastructure is not a shared planner. Two views of one chat retain one planner; distinct
+  chats retain distinct planners, even in one project. Worker/reviewer assignment scopes stay separate.
+- Follow the binding [H1-10 rule](docs/contracts/agent-workflow.md#h1-10--one-planner-per-harness-chat-document-mediated-coordination)
+  and [context continuity contract](docs/contracts/context-continuity.md).
+
 ## Cross-platform development
 
 - Linux, Windows and macOS are target service platforms, not Linux plus remote clients only.

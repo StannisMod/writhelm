@@ -43,8 +43,10 @@ Candidate pure reservation, binding, effect-observation and result transitions u
 and claims, but depend on service-derived current authority, qualification and native facts not yet wired.
 An isolated original-state-to-candidate footprint validator and successful-command reconstruction
 exist; they are not yet a Git history auditor or receipt verifier.
-The Linux service composes a protected qualification-evidence reader, but has no registered
-qualification or independent live-environment observer configured; it therefore admits no profile.
+The Linux service uses phase-specific current machine admission: passive preparation, binding,
+execution and result retention have separate checks. Historical qualification campaigns are not
+per-assignment prerequisites. Missing deployment/session/tool-policy observations and unsupported
+operations remain held; this is not proof of the complete H1 acceptance journey.
 The owner-directed [H1 acceptance journey](docs/acceptance.md#h1-owner-acceptance--minimum-vertical-journey)
 requires dependency-limited parallel worktree execution and independent contract-based review; it
 is an outstanding requirement, not an implemented or passed workflow.

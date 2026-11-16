@@ -29,7 +29,7 @@ internal object NativeInitialContext {
                 "executionGeneration" to str(subject.generation.toString())),"delivery" to str("queue"),"resume" to JBoolean(true))
     }
     fun read(state:H1BoundState,key:PresentedCredential,project:UUID,controller:UUID,host:UUID,subject:WAssignmentSubject,
-        binding:WorkReference,intentId:UUID,safety:NativeRuntimeSafety):JsonValue {
+        binding:WorkReference,intentId:UUID,safety:NativeRuntimeSafety,reviewTickets:CandidateReviewTicketIssuer?=null):JsonValue {
         val actor=state.authority.authenticate(key,project) ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
         if(actor.scope!=CredentialScope.Controller(controller)||!state.authority.allows(actor,project,Capability.READ))throw AppAccessFault(AppAccessProblem.FORBIDDEN)
         val status=NativeRuntimeAccess(controller,host).status(state,key,project,subject,binding,null,safety) as JObject
@@ -41,7 +41,7 @@ internal object NativeInitialContext {
         val dispatch=status.entries.getValue("dispatch")==JBoolean(true) && status.entries.getValue("quiescent")==JBoolean(true) &&
             a.state=="bound" && a.currentIntent==WorkKey.Id(project,intentId) && intent.outcome=="pending"
         state.requireCurrentContinuation(project,subject)
-        val instructions=JArray(NativeAssignmentPacket.render(state,project,subject).map { obj("key" to str(it.first),"value" to str(it.second)) })
+        val instructions=JArray(NativeAssignmentPacket.render(state,project,subject,reviewTickets).map { obj("key" to str(it.first),"value" to str(it.second)) })
         return obj("formatVersion" to num(1),"basis" to state.basis.json(),"envelopeJSON" to str(raw),"envelopeDigest" to digest(Digest.of(raw.toByteArray())),
             "packetJSON" to str(StrictJson.encode(instructions,2*1024*1024).decodeToString()),"profileJSON" to str(WorkCodec().encodeRecord(work.record(WorkFamily.PROFILES,a.profile),true).decodeToString()),
             "assignmentJSON" to str(WorkCodec().encodeRecord(work.record(WorkFamily.ASSIGNMENTS,WorkKey.Id(project,subject.assignmentId)),true).decodeToString()),

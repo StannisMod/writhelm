@@ -127,7 +127,7 @@ internal class ConnectedRuntimeFacts(private val delegate: H1RuntimeFacts,privat
             }
         }
         return H1ObservedFacts(state.basis,original.facts.copy(native=nativeFacts,model2=original.facts.model2.copy(basis=basis,
-            controllers=mapOf(controller.controllerId to controller),observedEvidence=observedChecks(work),stages=stages,notPerformedAttempts=notPerformed)),original.qualifiedProfiles)
+            controllers=mapOf(controller.controllerId to controller),observedEvidence=observedChecks(work),stages=stages,notPerformedAttempts=notPerformed)),original.qualifiedProfiles,original.executionAdmission)
     }
     companion object {
         /** Exact provisional delivery identity, derived from the complete current canonical

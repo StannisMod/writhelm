@@ -86,6 +86,6 @@ internal class ReplacementRuntimeFacts(private val delegate: H1RuntimeFacts,priv
         try {
             custody.capture(CoordinationCapture(state.basis,controller,work),op)?.let { proof ->facts=facts.copy(replacements=mapOf(proof.digest to proof)) }
         } catch(e: WorkFault) { facts=facts.copy(replacementFailures=mapOf(op.proof.digest to e.problem)) }
-        return H1ObservedFacts(state.basis,original.facts.copy(model2=facts),original.qualifiedProfiles)
+        return H1ObservedFacts(state.basis,original.facts.copy(model2=facts),original.qualifiedProfiles,original.executionAdmission)
     }
 }

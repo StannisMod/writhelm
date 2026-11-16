@@ -7,13 +7,13 @@ import type { SessionApi } from "@opencode/client/promise/api"
 import { ConnectedNativeAdapter, type ConnectedNativeBridge, type RetainedConnectedEnvelope } from "../src/connected-native.js"
 
 // Explicit SDK-shaped MOCK. No host/client constructor, inference, installed profile or network call.
-function fixture() {
+function fixture(reviewer=false) {
   const rawJSON = '{"assignment":{"generation":9007199254740993},"opaque":"exact service bytes"}'
   const envelope: RetainedConnectedEnvelope = { key: "k", rawJSON, digest: createHash("sha256").update(rawJSON).digest("hex"), bindingJSON: "exact-binding-json",
     hostID: "host", sessionID: "ses_mock", messageID: "msg_mock", text: "Blocker B resolved; continue.",
     metadata: { continuationId: "condition", assignmentId: "assignment", executionGeneration: "9007199254740993" },
-    instructions: [{ key: "writhelm-task", value: "exact assigned task" }] }
-  const hooks = new Map<string, (event: { sessionID: string }) => Promise<void>>()
+    instructions: [{ key: "writhelm-task", value: "exact assigned task" },...(reviewer?[{key:"writhelm-candidate-review-ticket-fixture",value:"explicit MOCK service-issued reviewer packet"}]:[])] }
+  const hooks = new Map<string, (event: { sessionID: string;tool?:string }) => Promise<void>>()
   let payload: unknown, wakes = 0, claims = 0, state: "qualified-quiescent" | "active" | "held" = "qualified-quiescent"
   let loseReply = false, admitWithoutWake = false, badBody = false, interrupts = 0
   let failBeforeAdmit = false, qualifiedAbsent = false
@@ -211,4 +211,17 @@ test("MOCK fresh adapter rebuilds local gate from retained receiver and protecte
   await assert.rejects(fresh.deliver("k"), /reconcile original dispatch/)
   f.active(); await fresh.release("k"); assert.equal(f.wakes, 1)
   await fresh.close()
+})
+test("MOCK restored connected reviewer refuses cached tools using its exact service-bound mandatory packet",async()=>{
+  const f=fixture(true);await f.adapter.register();await f.adapter.hold("k")
+  assert.equal(await f.adapter.deliver("k"),"matched-wake");await f.adapter.close()
+  const fresh=f.freshAdapter();await fresh.register();await fresh.hold("k")
+  try{
+    f.active();await fresh.release("k")
+    for(const tool of ["edit","shell","execute","subagent","codemode","plugin_write"])
+      await assert.rejects(f.hooks.get("tool")!({sessionID:"ses_mock",tool}),/reviewer tool execution forbidden/)
+    await f.hooks.get("tool")!({sessionID:"ses_mock",tool:"writhelm_work_command"})
+    f.changedPacket();await assert.rejects(f.hooks.get("tool")!({sessionID:"ses_mock",tool:"read"}))
+    assert.equal(f.wakes,1)
+  }finally{await fresh.close()}
 })

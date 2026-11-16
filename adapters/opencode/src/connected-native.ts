@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto"
 import type { Plugin } from "@opencode/plugin"
 import type { SessionApi } from "@opencode/client/promise/api"
+import { reviewerToolAllowed } from "./native-context-policy.js"
 
 /** The JVM/strict service decoder lowers only SDK scalars. Domain JSON remains opaque: never
  * JSON.parse/stringify an Int64 assignment/command and claim its original bytes survived. */
@@ -87,7 +88,7 @@ export class ConnectedNativeAdapter {
     })
     const tool = await this.ctx.tool.hook("execute.before", async event => {
       if (!include(event.sessionID)||!this.bridge.managed(event.sessionID)) return
-      await this.admitTool(event.sessionID)
+      await this.admitTool(event.sessionID,event.tool)
     })
     this.disposals.push(context.dispose, tool.dispose)
   }
@@ -119,7 +120,7 @@ export class ConnectedNativeAdapter {
       check(this.gates.get(sessionID) === gate && !gate.closed && !this.closed
         && !this.bindingHolds.has(sessionID) && current === "active", "authority changed while native boundary held")
   }
-  async admitTool(sessionID:string):Promise<void>{
+  async admitTool(sessionID:string,toolName?:string):Promise<void>{
       check(this.bridge.managed(sessionID),"unmanaged native receiver")
       check(!this.bindingHolds.has(sessionID), "managed binding held without continuation")
       const gate = this.gates.get(sessionID)
@@ -127,7 +128,11 @@ export class ConnectedNativeAdapter {
       const binding = await this.bridge.binding(sessionID), complete = await this.packet(gate.envelope)
       const current = await this.bridge.current(gate.envelope)
       check(this.gates.get(sessionID) === gate && !gate.closed && !this.closed && binding === gate.envelope.bindingJSON
-        && complete && !this.bindingHolds.has(sessionID) && current === "active", "managed tool admission held")
+         && complete && !this.bindingHolds.has(sessionID) && current === "active", "managed tool admission held")
+       // Candidate-review ticket is part of the exact service-bound mandatory packet checked above,
+       // not an untrusted session role label. Keep the guard after initial -> connected recovery.
+       if(toolName!==undefined&&gate.envelope.instructions.some(entry=>entry.key.startsWith("writhelm-candidate-review-ticket-")))
+         check(reviewerToolAllowed(toolName),"reviewer tool execution forbidden")
   }
   private async envelope(key: string, checkCurrentBinding = true) {
     check(!this.closed, "adapter closed")

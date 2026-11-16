@@ -15,7 +15,7 @@ export type RetentionRequest = Readonly<{assignmentId:string;generation:string;e
  * A missing receipt after dispatch is unknown even if the ref exists: never dispatch again. */
 export class NativeResultRetention {
   constructor(private readonly source:string,private readonly custody:LinuxNativeCustody,
-    private readonly git:Pick<LinuxGitWitness,"qualifySource"|"pinRetainedRefOnce"|"verifyRetainedRef">,
+    private readonly git:Pick<LinuxGitWitness,"qualifySource"|"pinRetainedRefOnce"|"verifyRetainedRef"> & Partial<Pick<LinuxGitWitness,"verifyCandidateRef"|"verifyReachableSnapshot"|"observeRetainedDiff">>,
     private readonly authorize:(request:RetentionRequest,signal:AbortSignal)=>Promise<boolean>,
     private readonly observeWorktree:(request:RetentionRequest,signal:AbortSignal)=>Promise<boolean>) {}
   /** Immutable assembly observation for a service holding its own authority snapshot. No callback
@@ -29,8 +29,40 @@ export class NativeResultRetention {
     if(retained.original!==original||request.operationId!==operationId||
       await this.custody.read("candidate-publish",operationId)!==receipt||
       await this.custody.read("candidate-objects",operationId)!==JSON.stringify(retained.result))return null
-    await this.git.qualifySource(this.source,{...request.head,...retained.result},signal)
+    if(!this.git.verifyCandidateRef)return null
+    await this.git.verifyCandidateRef(this.source,request.candidateId,{...request.head,...retained.result,retainedLocatorId:request.candidateId},signal)
     return receipt
+  }
+  /** Service-selected immutable inputs only. No current-service callback under fact capture and no
+   * publication/repair. Every requested snapshot must belong to the retained original assembly. */
+  async candidateInputsProof(operationId:string,requestJSON:string,signal:AbortSignal){
+    const before=await this.candidateProof(operationId,signal)
+    if(!before||!this.git.verifyReachableSnapshot||!this.git.observeRetainedDiff)nativeUnavailable()
+    const reachable=this.git.verifyReachableSnapshot.bind(this.git)
+    const receipt=JSON.parse(before),original=JSON.parse(receipt.original),request=JSON.parse(requestJSON)
+    if(Object.keys(request).sort().join(",")!=="results,snapshots"||!Array.isArray(request.snapshots)||!Array.isArray(request.results)||
+      request.snapshots.length>1024||request.results.length>256)nativeUnavailable()
+    const candidate={...original.head,...receipt.result,retainedLocatorId:original.candidateId} as GitSnapshot
+    const same=(a:unknown,b:unknown)=>contextJSON(a)===contextJSON(b)
+    const verifySnapshot=async(snapshot:GitSnapshot)=>{
+      if(same(snapshot,candidate)||same(snapshot,original.head)){
+        await reachable(this.source,snapshot,candidate,signal)
+      }else{
+        const result=(original.inputs as CandidateMergeInput[]).find(input=>same(input.result,snapshot)||same(input.base,snapshot))
+        if(!result)nativeUnavailable()
+        await this.git.verifyRetainedRef(this.source,result.result,signal)
+        await reachable(this.source,snapshot,result.result,signal)
+      }
+    }
+    for(const snapshot of request.snapshots as GitSnapshot[])await verifySnapshot(snapshot)
+    const diffs=[]
+    for(const result of request.results as CandidateMergeInput[]){
+      if(!(original.inputs as CandidateMergeInput[]).some(input=>same(input,result)))nativeUnavailable()
+      diffs.push(await this.git.observeRetainedDiff(this.source,result.base,result.result,signal))
+    }
+    if(await this.candidateProof(operationId,signal)!==before)nativeUnavailable()
+    for(const snapshot of request.snapshots as GitSnapshot[])await verifySnapshot(snapshot)
+    return {formatVersion:1,requestDigest:createHash("sha256").update(requestJSON).digest("hex"),diffs}
   }
 
   private capture(input:RetentionRequest,signal:AbortSignal){
@@ -297,6 +329,8 @@ export type CandidateReviewReport=Readonly<{reviewId:string;contextId:string;rev
   summary:string;findings:readonly Readonly<{severity:"blocking"|"nonblocking";requirement:string;scenario:string;expected:string;actual:string;evidence:string}>[]}>
 export type CandidateReviewAdapter=Readonly<{reviewId:string;contextId:string;reviewerPrincipalId:string;
   execute:(task:CandidateReviewTask,signal:AbortSignal)=>Promise<CandidateReviewReport>}>
+export type CanonicalCandidateReview=(profile:CandidateDeliveryProfile,candidate:CandidateAssemblyResult,selectedJSON:string,
+  signal:AbortSignal)=>Promise<Readonly<{phase:string;integrationAllowed:false}>>
 
 /** This trusted adapter must establish a fresh non-author context with separate report/scratch.
  * It receives no candidate writer/integration capability. This cooperative interface does not
@@ -339,7 +373,8 @@ async function reviewCandidate(custody:LinuxNativeCustody,task:CandidateReviewTa
  * check plan come from the protected service, not a caller-selected successful subset. */
 export async function advanceCandidateDelivery(source:string,custody:LinuxNativeCustody,git:LinuxGitWitness,
   registry:NativeCredentialRegistry,sessionID:string,profile:CandidateDeliveryProfile,
-  execute:(request:CandidateTestRequest,signal:AbortSignal)=>Promise<CandidateTestOutcome>,signal:AbortSignal,review?:CandidateReviewAdapter){
+  execute:(request:CandidateTestRequest,signal:AbortSignal)=>Promise<CandidateTestOutcome>,signal:AbortSignal,review?:CandidateReviewAdapter,
+  canonicalReview?:CanonicalCandidateReview,checkAdmission?:(request:CandidateTestRequest,signal:AbortSignal)=>Promise<boolean>){
   const planRefJSON=contextJSON(exactJSON(profile.planRefJSON,nativeUnavailable))
   const selection=await registry.candidateDelivery(sessionID,planRefJSON,signal)
   if(selection===null)return {phase:"waiting-for-results" as const}
@@ -349,9 +384,19 @@ export async function advanceCandidateDelivery(source:string,custody:LinuxNative
   const candidate=await assembly.assemble(request,signal)
   const checks=(await registry.candidateTestPlan(sessionID,planRefJSON,signal)).map(check=>({...check,
     command:check.command.map(argument=>argument.replaceAll("{candidateCommit}",candidate.commit.hex).replaceAll("{candidateTree}",candidate.tree.hex))}))
-  const jobs=new NativeCandidateTests(custody,(job,abort)=>registry.candidateTestPermit(sessionID,JSON.stringify(request),planRefJSON,JSON.stringify(job),abort),
+  const jobs=new NativeCandidateTests(custody,async(job,abort)=>await registry.candidateTestPermit(sessionID,JSON.stringify(request),planRefJSON,JSON.stringify(job),abort)&&
+      (!checkAdmission||await checkAdmission(job,abort)),
     async(job,abort)=>{await git.qualifySource(source,{...profile.head,...job.candidate},abort);return execute(job,abort)})
   const tests=await runCandidateChecks(custody,jobs,profile.testPlanId,candidate,checks,profile.capacity,signal)
+  if(tests.ready&&canonicalReview){
+    if(review)nativeUnavailable() // never combine callback-review authority with service-bound review
+    const current=await registry.candidateDelivery(sessionID,planRefJSON,signal)
+    if(current===null||current.selectedJSON!==request.selectedJSON)nativeUnavailable()
+    await registry.candidateAssemblyPermit(sessionID,JSON.stringify(request),signal)
+    const observed=await canonicalReview(profile,candidate,request.selectedJSON,signal)
+    if(observed.integrationAllowed!==false)nativeUnavailable()
+    return {...observed,candidate,tests,selectedJSON:request.selectedJSON,excludedPrincipals:current.excludedReviewers,integrationAllowed:false as const}
+  }
   if(tests.ready&&review){
     // Recapture current exact service selection before sending any review context.
     const current=await registry.candidateDelivery(sessionID,planRefJSON,signal)

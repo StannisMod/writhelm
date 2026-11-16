@@ -97,7 +97,8 @@ internal class NativeRuntimeAccess(private val controller: UUID,private val host
             Model2Inspector(work).requireActivation(subject,delivered)
             true
         } catch(_: WorkFault) { false }
-        val active=a.state=="active" && a.currentIntent==null && ready(true)
+        val currentRuntime=try {safety.safeAccess(state,subject)}catch(_:Exception){false}
+        val active=a.state=="active" && a.currentIntent==null && ready(true) && currentRuntime
         val manager=c.scope is CredentialScope.Controller && state.authority.workAllows(c,project,WorkPermission.TASK_DISPATCH)
         val preparation=manager && a.state in setOf("paused","bound") && try {
             state.requireCurrentContinuation(project,subject)
@@ -106,7 +107,7 @@ internal class NativeRuntimeAccess(private val controller: UUID,private val host
         } catch(_: WorkFault) { false }
         val intent=a.currentIntent?.let { (work.record(WorkFamily.NATIVE_INTENTS,it).payload as WNativeIntentsPayload).value }
         val pending=intent?.outcome=="pending"
-        val dispatch=manager && pending && intent!!.operation in setOf("start","resume") && ready(false)
+        val dispatch=manager && pending && intent!!.operation in setOf("start","resume") && ready(false) && currentRuntime
         val pause=manager && pending && intent!!.operation=="pause" && a.state in setOf("pausing","unknown")
         var delivery=false
         var attempt: UUID?=null
@@ -123,7 +124,7 @@ internal class NativeRuntimeAccess(private val controller: UUID,private val host
         }
         return obj("formatVersion" to num(1),"basis" to state.basis.json(),"active" to JBoolean(active),"prepare" to JBoolean(preparation),
             "dispatch" to JBoolean(dispatch),"pause" to JBoolean(pause),"delivery" to JBoolean(delivery),
-            "quiescent" to JBoolean(!active && (preparation || dispatch) && safety.safeAccess(state,subject)),
+            "quiescent" to JBoolean(!active && (preparation || dispatch) && currentRuntime),
             "freshEnvelope" to JBoolean(freshEnvelope),"freshPause" to JBoolean(manager && a.state=="active" && a.currentIntent==null),
             "bindingJSON" to str(identityCodec.encodeReference(binding).decodeToString()),
             "nativeHostId" to uuid(host),"nativeSessionId" to str(execution.nativeSessionId),
@@ -132,7 +133,7 @@ internal class NativeRuntimeAccess(private val controller: UUID,private val host
             "attemptId" to (attempt?.let(::uuid) ?: JNull),"envelopeDigest" to (envelopeDigest?.let(::digest) ?: JNull))
     }
     fun packet(state: H1BoundState,key: dev.writhelm.core.auth.PresentedCredential,project: UUID,
-        subject: WAssignmentSubject,binding: WorkReference,continuation: UUID): JsonValue {
+        subject: WAssignmentSubject,binding: WorkReference,continuation: UUID,reviewTickets:CandidateReviewTicketIssuer?=null): JsonValue {
         val c=actor(state,key,project)
         if(c.scope !is CredentialScope.Controller || !state.authority.allows(c,project,Capability.READ))throw AppAccessFault(AppAccessProblem.FORBIDDEN)
         // Reuse exactly the same subject/host/current-policy checks as the permit, at the same H.
@@ -143,7 +144,7 @@ internal class NativeRuntimeAccess(private val controller: UUID,private val host
         return obj("formatVersion" to num(1),"envelopeDigest" to digest,"bindingJSON" to str(identityCodec.encodeReference(binding).decodeToString()),
             "freshEnvelope" to status.entries.getValue("freshEnvelope"),
             "nativeHostId" to uuid(host),"nativeSessionId" to status.entries.getValue("nativeSessionId"),
-            "instructions" to JArray(NativeAssignmentPacket.render(state,project,subject).map { obj("key" to str(it.first),"value" to str(it.second)) }))
+            "instructions" to JArray(NativeAssignmentPacket.render(state,project,subject,reviewTickets).map { obj("key" to str(it.first),"value" to str(it.second)) }))
     }
     private fun held(state: H1BoundState)=obj("formatVersion" to num(1),"basis" to state.basis.json(),
         "active" to JBoolean(false),"prepare" to JBoolean(false),"dispatch" to JBoolean(false),"pause" to JBoolean(false),"delivery" to JBoolean(false),"quiescent" to JBoolean(false),

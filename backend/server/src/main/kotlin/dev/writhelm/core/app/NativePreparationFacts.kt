@@ -123,7 +123,7 @@ internal class LinuxRegisteredProfileFacts(private val delegate: H1RuntimeFacts,
                 observed.profile!=work.reference(WorkFamily.PROFILES,reserve.profile))return original
             val registration=registered.singleOrNull { it.subject==observed } ?: return original
             if(!registration.artifacts.values.all(::retained))return original
-            H1ObservedFacts(original.basis,original.facts,original.qualifiedProfiles+observed.profile)
+            H1ObservedFacts(original.basis,original.facts,original.qualifiedProfiles+observed.profile,original.executionAdmission)
         } catch(_: Exception) { original }
     }
 }
@@ -150,7 +150,7 @@ internal class CanonicalTaskDecisionFacts(private val delegate: H1RuntimeFacts):
                 state.core.validationSourceAvailable(it) && state.core.validationDecisionApproved(it) }.toSet()
         } catch(_: Exception) { return original }
         return H1ObservedFacts(original.basis,original.facts.copy(
-            knowledgeSources=original.facts.knowledgeSources+decisions,approvedDecisions=original.facts.approvedDecisions+decisions),original.qualifiedProfiles)
+            knowledgeSources=original.facts.knowledgeSources+decisions,approvedDecisions=original.facts.approvedDecisions+decisions),original.qualifiedProfiles,original.executionAdmission)
     }
 }
 
@@ -338,7 +338,7 @@ internal class ReservationProofFacts(private val delegate: H1RuntimeFacts,privat
         val facts=original.facts.copy(verifiedPackets=if(packet)original.facts.verifiedPackets+op.manifest else original.facts.verifiedPackets,
             prebindingClosures=if(input)original.facts.prebindingClosures+WorkPrebindingClosure(op.task,op.manifest,op.profile,expected.second.command) else original.facts.prebindingClosures)
         return H1ObservedFacts(original.basis,facts,
-            if(profile)original.qualifiedProfiles+expected.first.profile else original.qualifiedProfiles)
+            if(profile)original.qualifiedProfiles+expected.first.profile else original.qualifiedProfiles,original.executionAdmission)
     }
 }
 
@@ -412,7 +412,7 @@ internal class NativeResultDiffFacts(private val delegate:H1RuntimeFacts,private
         val observed=try { control.observe(state,command) } catch(_:Exception) { null }
         if(observed!=expected)return original
         return H1ObservedFacts(original.basis,original.facts.copy(
-            submittedDiffs=original.facts.submittedDiffs+WorkSubmittedDiff(expected.task,listOf(expected.result),expected.changes)),original.qualifiedProfiles)
+            submittedDiffs=original.facts.submittedDiffs+WorkSubmittedDiff(expected.task,listOf(expected.result),expected.changes)),original.qualifiedProfiles,original.executionAdmission)
     }
 }
 
@@ -455,7 +455,7 @@ internal class NativeResultRetentionFacts(private val delegate:H1RuntimeFacts,pr
             if(frame.getValue("formatVersion").long()!=1L || uuid(frame.getValue("assignmentId"))!=data.assignment.assignmentId ||
                 frame.getValue("generation").string()!=data.assignment.generation.toString() ||
                 uuid(frame.getValue("executionId"))!=execution.executionId || decodeWSnapshot(frame.getValue("snapshot"))!=result)return original
-            H1ObservedFacts(original.basis,original.facts.copy(retainedSnapshots=original.facts.retainedSnapshots+result),original.qualifiedProfiles)
+            H1ObservedFacts(original.basis,original.facts.copy(retainedSnapshots=original.facts.retainedSnapshots+result),original.qualifiedProfiles,original.executionAdmission)
         } catch(_:Exception) { original }
     }
 }
@@ -474,7 +474,7 @@ internal class NativePreparationFacts(private val delegate:H1RuntimeFacts,privat
         val bind=(command.operation as? CBindAssignmentOperation)?.value ?: return original
         val observed=try { observe(state,command.projectId,bind) }catch(_:Exception){null} ?: return original
         return H1ObservedFacts(original.basis,original.facts.copy(native=original.facts.native+(bind.intentId to observed.first),
-            retainedSnapshots=original.facts.retainedSnapshots+observed.second),original.qualifiedProfiles)
+            retainedSnapshots=original.facts.retainedSnapshots+observed.second),original.qualifiedProfiles,original.executionAdmission)
     }
     internal fun observe(state:H1BoundState,project:UUID,bind:CBindAssignment):Pair<WorkNativeObservation,WSnapshot>? {
         val work=state.work.getValue(project);val a=work.assignment(bind.assignmentId)
@@ -507,7 +507,8 @@ internal class NativePreparationFacts(private val delegate:H1RuntimeFacts,privat
         val model=n.getValue("model") as? JObject ?: return null
         val m=model.fields(*(if("variant" in model.entries)arrayOf("providerID","id","variant")else arrayOf("providerID","id")))
         workRequire(same(model,job.getValue("model")) && m.getValue("providerID").string()==profile.model.providerId &&
-            m.getValue("id").string()==profile.model.modelId && m["variant"]?.string()==profile.model.variant,WorkProblem.INVALID_BINDING)
+            m.getValue("id").string()==profile.model.modelId &&
+            (m["variant"]?.string()==profile.model.variant || profile.model.variant==null && m["variant"]?.string()=="default"),WorkProblem.INVALID_BINDING)
         val metadata=n.getValue("metadata").fields("writhelm").getValue("writhelm").fields("kind","assignmentId","executionGeneration",
             "controllerId","executionId","workspaceId","taskJSON","profileKeyJSON")
         workRequire(metadata.getValue("kind").string()=="passive-preparation-v1" && uuid(metadata.getValue("assignmentId"))==bind.assignmentId &&

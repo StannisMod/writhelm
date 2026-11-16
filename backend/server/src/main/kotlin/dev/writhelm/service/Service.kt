@@ -20,6 +20,44 @@ internal class ServiceLimits(val responseBytes: Int=4*1024*1024,val snapshotByte
     init { require(responseBytes in 65536..4*1024*1024 && snapshotBytes in 1..1024*1024 &&
         snapshots in 1..2 && cursorCount in 1..512 && snapshotMillis in 1..300000) }
 }
+/** Private native-client enrollment only. Proof is provisioned outside project/model inputs.
+ * The request names a session, never a folder, actor, grant set, reset or owner credential. Its
+ * actual location/parent/assignment status is resolved by the trusted broker/native observer. */
+internal class TestClientEnrollmentEndpoint(private val broker:LinuxTestClientEnrollment,proof:ByteArray,
+    private val activate:((LinuxTestClientEnrollment.Controller)->JsonValue)?=null,
+    private val instanceStatus:(()->UUID)?=null):AutoCloseable {
+    private val proof=proof.copyOf().also {require(it.size==32)}
+    @Volatile private var closed=false
+    fun accepts(raw:String?):Boolean {
+        if(closed || raw==null || !raw.matches(Regex("[A-Za-z0-9_-]{43}")))return false
+        val supplied=try {java.util.Base64.getUrlDecoder().decode(raw)}catch(_:IllegalArgumentException){return false}
+        return try {supplied.size==32 && java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(supplied)==raw &&
+            java.security.MessageDigest.isEqual(proof,supplied)}finally{supplied.fill(0)}
+    }
+    fun read(bytes:ByteArray):ServiceReply {
+        if(closed)stop("UNAVAILABLE",503)
+        val request=StrictJson.decode(bytes,JsonLimits(bytes=4096,stringBytes=256,collection=8,tokens=32)).fields("formatVersion","operation","sessionID")
+        val operation=request.getValue("operation").string()
+        if(request.getValue("formatVersion").long()!=1L || operation !in setOf("open-session","activate-session"))stop("INVALID_INPUT",400)
+        val session=request.getValue("sessionID").string()
+        val binding=broker.session(session)
+        if(operation=="activate-session") {
+            val provision=activate ?: stop("UNAVAILABLE",503)
+            return ServiceReply(200,obj("formatVersion" to num(1),"kind" to str("runtime-configured"),"sessionID" to str(session),
+                "projectId" to uuid(binding.projectId),"controllerId" to uuid(binding.controllerId),"credentialId" to uuid(binding.credentialId),
+                "runtimeJSON" to str(StrictJson.encode(provision(binding),8192).toString(Charsets.UTF_8))))
+        }
+        return ServiceReply(200,obj("formatVersion" to num(1),"kind" to str("session-enrolled"),"sessionID" to str(session),
+            "workRoot" to str(binding.workRoot.toString()),"projectId" to uuid(binding.projectId),"controllerId" to uuid(binding.controllerId),
+            "principalId" to uuid(binding.principalId),"credentialId" to uuid(binding.credentialId),"token" to str(binding.token)))
+    }
+    fun status():ServiceReply {
+        if(closed)stop("UNAVAILABLE",503)
+        val current=instanceStatus ?: stop("UNAVAILABLE",503)
+        return ServiceReply(200,obj("formatVersion" to num(1),"kind" to str("test-client-ready"),"storeId" to uuid(current())))
+    }
+    override fun close(){closed=true;proof.fill(0)}
+}
 /** Shared actual checked application boundary. No production auth/transition doubles. */
 internal class WrithelmService private constructor(val app: MechanismApp?,val limits: ServiceLimits,
     private val now: ()->Long,private val h1: H1Application?) {
@@ -46,6 +84,9 @@ internal class WrithelmService private constructor(val app: MechanismApp?,val li
             val a=access(token)
             val f=StrictJson.decodeWorkCommand(bytes,JsonLimits(bytes=8*1024*1024,stringBytes=4*1024*1024),1024*1024).fields("formatVersion","requestKey","projectId","operation","payload")
             val op=f.getValue("operation").string()
+            // Enrollment is a trusted instance-broker call into APP, not an ordinary HTTP/MCP
+            // command, even when the caller happens to possess a project owner credential.
+            if(op in setOf("register_project","register_controller"))stop("FORBIDDEN",403)
             if(a.projectId!=uuid(f.getValue("projectId")))stop("FORBIDDEN",403)
             if(agent && (op !in agentOperations || a.scope is dev.writhelm.core.auth2.CredentialScope.Assignment || dev.writhelm.core.auth.requiredCapability(op) !in a.capabilities))stop("FORBIDDEN",403)
             h1.execute(token,bytes)

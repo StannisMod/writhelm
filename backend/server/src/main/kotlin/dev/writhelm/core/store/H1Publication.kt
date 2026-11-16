@@ -6,7 +6,7 @@ import dev.writhelm.core.work.*
 
 /** Closed frozen-v2 journal catalogue. This is not command payload admission or domain policy. */
 internal object H1Catalog {
-    val authOperations=setOf("replace_work_grants","register_delegation","rotate_delegated_credential","revoke_delegated_credential","revoke_delegation")
+    val authOperations=setOf("register_project","register_controller","replace_work_grants","register_delegation","rotate_delegated_credential","revoke_delegated_credential","revoke_delegation")
     val resultFamilies=mapOf(
         "create_task_revision" to "task-revisions", "set_task_head" to "task-heads",
         "pin_input_manifest" to "input-manifests", "create_profile" to "profiles",

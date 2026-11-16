@@ -15,9 +15,18 @@ export const primaryPolicyStatements = [
  * shell/edit/subagent access to the primary project. Does not grant service or worker authority. */
 export async function requirePrimaryPolicy(workRoot:string):Promise<void>{
   const file=path.join(workRoot,"opencode.json")
+  await requirePrimaryPolicyFile(file)
+}
+/** Automatic test-client profile policy is outside user projects. This validates an explicitly
+ * selected protected profile; it never edits or merges a user's project configuration. */
+export async function requirePrimaryPolicyFile(file:string):Promise<void>{
   if(await fs.realpath(file)!==file)throw new Error("Primary policy path is not qualified")
   const value=JSON.parse(await fs.readFile(file,"utf8"))
-  if(JSON.stringify(value.policies?.slice(-primaryPolicyStatements.length))!==JSON.stringify(primaryPolicyStatements))
+  const policies=value.policies?.slice(-primaryPolicyStatements.length)
+  if(!Array.isArray(policies)||policies.length!==primaryPolicyStatements.length||
+    policies.some((rule,index)=>!rule||typeof rule!=="object"||Object.keys(rule).length!==3||
+      rule.action!==primaryPolicyStatements[index].action||rule.resource!==primaryPolicyStatements[index].resource||
+      rule.effect!==primaryPolicyStatements[index].effect))
     throw new Error("Native primary fallback policy missing; refuse GUI-only governance")
 }
 /** Trusted fresh-profile installer only. Existing project configuration is never overwritten or

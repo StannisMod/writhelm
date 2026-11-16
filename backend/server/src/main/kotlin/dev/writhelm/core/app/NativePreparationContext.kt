@@ -11,7 +11,8 @@ import java.util.UUID
 
 /** Current passive preparation basis, not a caller's ready/qualified flag. Reservation already
  * passed the ordinary task/profile/manifest reducer. Recheck mutable authority/withdrawal/claims
- * before native I/O; actual runtime/source/profile qualification remains the adapter's own gate. */
+ * before native I/O; actual process/source/work-area preparation checks remain the adapter's gate.
+ * Historical execution campaigns and inference configuration are not passive-preparation inputs. */
 internal object NativePreparationContext {
     fun read(state:H1BoundState,key:PresentedCredential,project:UUID,controller:UUID,host:UUID,
         subject:WAssignmentSubject,safety:NativeRuntimeSafety=UnavailableNativeRuntimeSafety):JsonValue {

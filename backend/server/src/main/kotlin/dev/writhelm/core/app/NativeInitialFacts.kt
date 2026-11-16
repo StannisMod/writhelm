@@ -11,14 +11,14 @@ internal fun interface NativeInitialProofControl { fun initialProof(intent:UUID)
 /** Confirms original initial-prompt admission at the held native context boundary. An SDK reply,
  * inbox presence, model output or idle is insufficient; no completion/fencing fact is produced. */
 internal class NativeInitialFacts(private val delegate:H1RuntimeFacts,private val native:NativeInitialProofControl,
-    private val epoch:String):H1RuntimeFacts {
+    private val epoch:String,private val reviewTickets:CandidateReviewTicketIssuer?=null):H1RuntimeFacts {
     init { require(epoch.matches(Regex("[0-9a-f]{64}"))) }
     override fun capture(state:H1BoundState,command:WorkCommand):H1ObservedFacts {
         val original=delegate.capture(state,command)
         val operation=(command.operation as? CObserveNativeTransitionOperation)?.value ?: return original
         if(operation.outcome!="confirmed")return original
         val observed=try { observe(state,command.projectId,operation) }catch(_:Exception){null} ?: return original
-        return H1ObservedFacts(original.basis,original.facts.copy(native=original.facts.native+(operation.intentId to observed)),original.qualifiedProfiles)
+        return H1ObservedFacts(original.basis,original.facts.copy(native=original.facts.native+(operation.intentId to observed)),original.qualifiedProfiles,original.executionAdmission)
     }
     internal fun observe(state:H1BoundState,project:UUID,operation:CObserveNativeTransition):WorkNativeObservation? {
         val work=state.work.getValue(project);val a=work.assignment(operation.assignmentId)
@@ -31,7 +31,7 @@ internal class NativeInitialFacts(private val delegate:H1RuntimeFacts,private va
         val envelope=NativeInitialContext.envelope(state,project,subject,a.binding,operation.intentId)
         val bytes=StrictJson.encode(envelope)
         workRequire(p.getValue("envelopeJSON").string()==bytes.decodeToString() && digest(p.getValue("envelopeDigest"))==Digest.of(bytes),WorkProblem.DIGEST_MISMATCH)
-        val instructions=JArray(NativeAssignmentPacket.render(state,project,subject).map { obj("key" to str(it.first),"value" to str(it.second)) })
+        val instructions=JArray(NativeAssignmentPacket.render(state,project,subject,reviewTickets).map { obj("key" to str(it.first),"value" to str(it.second)) })
         workRequire(digest(p.getValue("packetDigest"))==Digest.of(StrictJson.encode(instructions,2*1024*1024)),WorkProblem.DIGEST_MISMATCH)
         val held=StrictJson.decode(p.getValue("heldJSON").string().toByteArray()).fields("digest","messageId","sessionID")
         val e=(envelope as JObject).entries

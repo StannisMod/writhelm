@@ -6,6 +6,8 @@ import { exactJSON } from "./strict-json.js"
 import { closedObject,nativeUnavailable } from "./native-runtime-client.js"
 
 const parse=(raw:string)=>exactJSON(raw,nativeUnavailable)
+/** Execution allowlist, not merely a model-context filter. Unknown/plugin/code-mode tools refuse. */
+export const reviewerToolAllowed=(name:string)=>["read","writhelm_work_read","writhelm_work_command"].includes(name)
 const tokens=(value:any)=>{
   const raw=value?.value
   if(typeof raw!=="string"||!/^[1-9][0-9]*$/.test(raw)||BigInt(raw)>2147483647n)nativeUnavailable()

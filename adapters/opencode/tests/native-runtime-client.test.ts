@@ -10,6 +10,32 @@ const token = `wh1.${id}.${id}.${Buffer.alloc(32, 1).toString("base64url")}`
 const proof = Buffer.alloc(32, 2).toString("base64url")
 const subject = { assignmentId: id, executionGeneration: "9223372036854775807", bindingJSON: "exact retained binding" }
 
+test("review ticket transport uses authenticated candidate route and rejects changed subject or digest",async()=>{
+  const ticketJSON=JSON.stringify({formatVersion:1,reviewId:id,contextId:id}) // Explicit MOCK service ticket, protocol test only.
+  let mode="valid",requests=0
+  const server=createServer(async(request,response)=>{
+    requests++;assert.equal(request.url,"/internal/native/candidate/v1")
+    assert.equal(request.headers.authorization,`Bearer ${token}`)
+    assert.equal(request.headers["x-writhelm-native-proof"],proof)
+    const chunks:Buffer[]=[];for await(const part of request)chunks.push(Buffer.from(part))
+    const input=JSON.parse(Buffer.concat(chunks).toString("utf8"))
+    assert.equal(input.operation,"candidate-review-ticket");assert.equal(input.ticketJSON,ticketJSON)
+    const returned=mode==="changed"?JSON.stringify({formatVersion:1,reviewId:id,contextId:"different"}):ticketJSON
+    response.setHeader("Content-Type","application/json")
+    response.end(JSON.stringify({formatVersion:1,kind:"candidate-review-ticket",ticketJSON:returned,
+      ticketDigest:mode==="bad-digest"?"0".repeat(64):createHash("sha256").update(returned).digest("hex")}))
+  })
+  await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve))
+  try{
+    const address=server.address();assert.ok(address&&typeof address!=="string")
+    const client=new NativeRuntimeClient(`http://127.0.0.1:${address.port}`,proof,id,id,id,id)
+    assert.equal((await client.issueCandidateReviewTicket(token,ticketJSON)).ticketJSON,ticketJSON)
+    mode="changed";await assert.rejects(client.issueCandidateReviewTicket(token,ticketJSON))
+    mode="bad-digest";await assert.rejects(client.issueCandidateReviewTicket(token,ticketJSON))
+    const before=requests;await assert.rejects(client.issueCandidateReviewTicket(token,"x".repeat(262145)));assert.equal(requests,before)
+  }finally{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()))}
+})
+
 test("real local HTTP client preserves exact generation and refuses inconsistent service permits", async () => {
   let reply: Record<string, unknown> = { formatVersion: 1, basis: {}, active: true, prepare: false,
     dispatch: false, pause: false, delivery: false, quiescent: false, freshEnvelope: false, freshPause: false, bindingJSON: subject.bindingJSON, nativeHostId: id,

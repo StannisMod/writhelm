@@ -217,6 +217,18 @@ internal class Receipt(val storeId: UUID,val identity: CommandIdentity,val finge
                 required(key("auth","credentials",r.getValue("credentialId")),true); required(key("auth","credentials",r.getValue("replacedCredentialId")))
                 families("auth" to "credentials"); integrity(writes.size==2)
             }
+            "register_project" -> {
+                required(key("auth","projects",o.result),true)
+                val expected=setOf("core" to "grants","auth" to "projects","auth" to "grant-guards","auth" to "work-grants","auth" to "credentials")
+                integrity(writes.size==5 && writes.map { it.record.namespace to it.record.family }.toSet()==expected)
+                integrity(writes.all { it.beforeDigest==null && it.afterDigest!=null })
+            }
+            "register_controller" -> {
+                required(key("auth","controllers",o.result),true)
+                val expected=setOf("core" to "grants","auth" to "principals","auth" to "grant-guards","auth" to "work-grants","auth" to "credentials","auth" to "controllers")
+                integrity(writes.size==6 && writes.map { it.record.namespace to it.record.family }.toSet()==expected)
+                integrity(writes.all { it.beforeDigest==null && it.afterDigest!=null })
+            }
             "register_delegation" -> {
                 required(key("auth","delegations",o.result),true)
                 val expected=setOf("core" to "grants","auth" to "principals","auth" to "grant-guards","auth" to "work-grants","auth" to "credentials","auth" to "delegations","work" to "assignments")

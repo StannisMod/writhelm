@@ -8,6 +8,14 @@ import java.util.UUID
 
 internal sealed interface Auth3Payload {
     val operation: String
+    /** Trusted project enrollment, never available through a planner tool allowlist. Fixed grants
+     * cannot carry APPROVE/MANAGE or caller-selected authority. Raw secrets stay with the broker. */
+    data class RegisterController(val controllerId:UUID,val principalId:UUID,val credentialId:UUID,
+        val verifierDigest:Digest):Auth3Payload { override val operation="register_controller" }
+    /** Project owner is the authenticated broker's existing owner, never a body-selected actor. */
+    data class RegisterProject(val newProjectId:UUID,val ownerCredentialId:UUID,val verifierDigest:Digest):Auth3Payload {
+        override val operation="register_project"
+    }
     class ReplaceWorkGrants(val principalId: UUID, val expectedGeneration: Long, val expectedWorkGrantDigest: Digest,
         permissions: Collection<WorkPermission>): Auth3Payload {
         override val operation="replace_work_grants"; val permissions=frozenSet(permissions)
@@ -38,6 +46,10 @@ internal class Auth3CommandCodec(private val limits: JsonLimits=auth2Admission()
         if(f.getValue("formatVersion").long()!=3L) refuse(CodecProblem.UNSUPPORTED_FORMAT)
         val v=f.getValue("payload")
         val p=when(f.getValue("operation").string()) {
+            "register_project" -> { val q=v.fields("newProjectId","ownerCredentialId","verifierVersion","verifierDigest")
+                version(q.getValue("verifierVersion"));Auth3Payload.RegisterProject(uuid(q.getValue("newProjectId")),uuid(q.getValue("ownerCredentialId")),digest(q.getValue("verifierDigest"))) }
+            "register_controller" -> { val q=v.fields("controllerId","principalId","credentialId","verifierVersion","verifierDigest")
+                version(q.getValue("verifierVersion"));Auth3Payload.RegisterController(uuid(q.getValue("controllerId")),uuid(q.getValue("principalId")),uuid(q.getValue("credentialId")),digest(q.getValue("verifierDigest"))) }
             "replace_work_grants" -> { val q=v.fields("principalId", "expectedGeneration", "expectedWorkGrantDigest", "permissions")
                 Auth3Payload.ReplaceWorkGrants(uuid(q.getValue("principalId")),q.getValue("expectedGeneration").long(),digest(q.getValue("expectedWorkGrantDigest")),permissions(q.getValue("permissions"))) }
             "register_delegation" -> { val q=v.fields("delegationId", "binding", "expectedAssignmentGeneration", "verifierVersion", "verifierDigest", "knowledgeCapabilities")
@@ -62,6 +74,10 @@ internal class Auth3CommandCodec(private val limits: JsonLimits=auth2Admission()
         return framedDigest("writhelm.command.v3") { writeFramed(bytes) }
     }
     private fun payload(p: Auth3Payload): JsonValue = when(p) {
+        is Auth3Payload.RegisterProject -> obj("newProjectId" to uuid(p.newProjectId),"ownerCredentialId" to uuid(p.ownerCredentialId),
+            "verifierVersion" to num(1),"verifierDigest" to digest(p.verifierDigest))
+        is Auth3Payload.RegisterController -> obj("controllerId" to uuid(p.controllerId),"principalId" to uuid(p.principalId),
+            "credentialId" to uuid(p.credentialId),"verifierVersion" to num(1),"verifierDigest" to digest(p.verifierDigest))
         is Auth3Payload.ReplaceWorkGrants -> obj("principalId" to uuid(p.principalId), "expectedGeneration" to JNumber(p.expectedGeneration), "expectedWorkGrantDigest" to digest(p.expectedWorkGrantDigest), "permissions" to permissionJson(p.permissions))
         is Auth3Payload.RegisterDelegation -> obj("delegationId" to uuid(p.delegationId), "binding" to bindingJson(p.binding), "expectedAssignmentGeneration" to JNumber(p.expectedAssignmentGeneration), "verifierVersion" to num(1), "verifierDigest" to digest(p.verifierDigest), "knowledgeCapabilities" to JArray(listOf(str("READ"))))
         is Auth3Payload.RotateDelegatedCredential -> obj("delegationId" to uuid(p.delegationId), "credentialId" to uuid(p.credentialId), "expectedGeneration" to JNumber(p.expectedGeneration), "expectedDelegationGeneration" to JNumber(p.expectedDelegationGeneration), "expectedAssignmentGeneration" to JNumber(p.expectedAssignmentGeneration), "newCredentialId" to uuid(p.newCredentialId), "verifierVersion" to num(1), "newVerifierDigest" to digest(p.newVerifierDigest))
@@ -101,7 +117,7 @@ internal object Auth3OutcomeCodec {
                 val f=v.fields("kind","operation","result","domainReplayed")
                 shape((f.getValue("domainReplayed") as? JBoolean)?.value==false)
                 val operation=f.getValue("operation").string()
-                shape(operation in setOf("replace_work_grants","register_delegation","rotate_delegated_credential","revoke_delegated_credential","revoke_delegation"))
+                shape(operation in setOf("register_project","register_controller","replace_work_grants","register_delegation","rotate_delegated_credential","revoke_delegated_credential","revoke_delegation"))
                 if(operation=="rotate_delegated_credential") {
                     val r=f.getValue("result").fields("credentialId","replacedCredentialId")
                     Auth3Outcome.Success(operation,uuid(r.getValue("credentialId")),uuid(r.getValue("replacedCredentialId")))

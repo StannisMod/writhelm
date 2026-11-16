@@ -88,7 +88,7 @@ const deployment=new LinuxNativeCustody(path.join(cfg.root,"deployment"),[cfg.so
 const initial=new NativeInitialAdapter(ctx,native,registry,custody,deployment,sessionID);await initial.register()
 let workerSession:string|undefined
 let retentionWrites=0
-const retentionGit={qualifySource:gitWitness.qualifySource.bind(gitWitness),verifyRetainedRef:gitWitness.verifyRetainedRef.bind(gitWitness),
+const retentionGit={qualifySource:gitWitness.qualifySource.bind(gitWitness),verifyRetainedRef:gitWitness.verifyRetainedRef.bind(gitWitness),verifyCandidateRef:gitWitness.verifyCandidateRef.bind(gitWitness),
   pinRetainedRefOnce:async(...args:Parameters<LinuxGitWitness["pinRetainedRefOnce"]>)=>{retentionWrites++;await gitWitness.pinRetainedRefOnce(...args)}}
 const authorizeRetention=async(request:Parameters<NativeResultRetention["retain"]>[0],abort:AbortSignal)=>
   workerSession!==undefined && registry.retentionPermit(workerSession,request,abort)

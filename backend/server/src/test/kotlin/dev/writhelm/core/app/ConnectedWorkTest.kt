@@ -35,7 +35,8 @@ internal class ConnectedFixture(private val reviewerGap: Boolean=false,private v
     lateinit var options: H1Options;var connected: ConnectedRuntimeFacts?=null
     var engine: ConnectedWorkEngine?=null
     var driver: AuthorizedRebindDriver?=null
-    private val delegate=H1RuntimeFacts { state,_ ->H1ObservedFacts(state.basis,f.runtimeFacts,f.observations.qualifiedProfiles) }
+    private val delegate=H1RuntimeFacts { state,command ->H1ObservedFacts(state.basis,f.runtimeFacts,f.observations.qualifiedProfiles,
+        NativeExecutionAdmission.expected(state,command)) } // synthetic native admission for portable lifecycle tests
     val consumerManifest: WorkReference
     init {
         Files.writeString(consumerRoot.resolve("consumer.kt"),"consumer uses agreed mechanism\n")

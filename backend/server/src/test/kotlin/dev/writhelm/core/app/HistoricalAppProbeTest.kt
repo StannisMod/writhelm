@@ -37,7 +37,8 @@ class HistoricalAppProbeTest {
             }
             val parent=stored(files,null);val cache=H1SnapshotCache(storeId);val before=cache.load(parent)
             val command=WorkCommand(id(15001),project,CRequestNativeTransitionOperation(CRequestNativeTransition(f.assignment,2,id(15002),id(15003),"start",null,emptyList())))
-            val candidate=f.key(plannerKey) { f.bridge.work(before,command,it,H1ObservedFacts(parent.oid,f.observations.facts,f.observations.qualifiedProfiles)) }
+            val candidate=f.key(plannerKey) { f.bridge.work(before,command,it,H1ObservedFacts(parent.oid,f.observations.facts,
+                f.observations.qualifiedProfiles,NativeExecutionAdmission.expected(before,command))) }
             assertEquals("bound",candidate.work.getValue(project).assignment(f.assignment).state)
             val changes=candidate.evaluation.changes.map { change ->
                 if(change.key.family!="assignments")change else {

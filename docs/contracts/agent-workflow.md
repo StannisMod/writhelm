@@ -1,6 +1,6 @@
 # H1 — governed agent workflow inside OpenCode
 
-Contract K-HARNESS, revision 6. Status: H1 boundary, practical-control, connected-work coordination, deterministic correction, grouped delivery and owner-directed vertical-journey amendments approved,
+Contract K-HARNESS, revision 7. Status: H1 boundary, practical-control, connected-work coordination, deterministic correction, grouped delivery, owner-directed vertical-journey and chat-bound planner/document-only coordination amendments approved,
 including initial cooperative execution. Component implementation/qualification still required. First user-pilot
 target, not a claim of implemented orchestration or acceptance of the whole draft specification.
 
@@ -167,6 +167,43 @@ execution, physical writer recovery, review or integration are implemented or qu
 check can test orchestration with explicit doubles; the owner test must exercise the real selected
 harness/profile and preserve the limitations and separate permissions in H1-08.
 
+## H1-10 — One planner per harness chat; document-mediated coordination
+
+Each ordinary user conversation in the harness has its own bounded planner/controller session.
+That conversation, not a UI window, directory, client process or shared service instance, is the
+stable ownership boundary for its planner state. Planner identity/binding, continuation, active
+task frontier, pending decisions and unfinished operations belong to that exact chat/controller.
+Persist required recoverable state with that attribution; no unique required state may exist only
+in transient chat context or UI memory. Restoring the chat restores its own binding/state under
+current authority checks, not another chat's state or a newly substituted planner.
+
+Two distinct chats in the same project have distinct planner sessions. Two views of the same chat
+do not create a second planner. Reconnecting or moving a view between windows/processes does not
+change ownership, grant rights or adopt an old worker execution epoch. Workers/reviewers remain
+separately scoped assignments, not additional automatically promoted planners.
+
+Planner sessions coordinate only through explicit documents/records retained in the shared store,
+primarily versioned tasks and their linked inputs, dependencies, reports, results and decisions.
+Shared project knowledge and task records may be read/updated only through their applicable rights
+and transitions; sharing a store does not merge planners' private continuation or decision frontiers.
+No direct hidden planner-to-planner channel, shared model memory, copied conversation as an implicit
+assignment, project-wide mutable planner context or service-global "current planner" may substitute
+for those records. Common work coordination must be reconstructible from the applicable records.
+
+Shared infrastructure may enforce authority, publication, dependencies, resource claims and routing;
+it is not a common semantic planner. Transport notifications may identify a retained document/event
+and prompt its authorized reader to continue, but cannot carry unique cross-session instructions,
+decisions or work state absent from the retained records. Context/notification behavior follows
+CT-01/06/09: no whole-transcript handoff, hidden state transfer or notification-based rebind.
+Operational request journals are permitted for exact-effect reconciliation, not as a second canonical
+work/authority database; each must retain the original chat/controller binding (or the exact reserved
+future chat ID before creation). A folder or window is never sufficient to select another chat's
+unfinished creation/operation for recovery.
+
+This is a binding architectural invariant, not evidence of implementation. Concrete creation,
+service-lifetime, migration and recovery mechanisms still require their scoped design/qualification;
+existing execution/retention, current-authority and K-RUN gates remain unchanged.
+
 ## Next component designs and approval scope
 
 Prepare K-TASK, dispatch/claims/external-effect binding, mandatory context/execution profiles,
@@ -187,6 +224,13 @@ Revision 6 records the owner's explicit direction that the H1 acceptance journey
 planner-created design tasks → implementation tasks → harness-managed dependency-limited maximum
 parallel worktree execution → planner factual control and candidate assembly → passing tests →
 independent contract-based review. It does not waive earlier gates or attest implementation.
+
+Revision 7 records the owner's explicit clarification that every harness chat has its own planner
+session, all planner-session state is bound to that chat, and sessions communicate only through
+documents in the shared store, mainly tasks. The owner requested this as a mandatory rule during
+the automatic-session design pass. H1-10 records that rule; it is not blanket approval of the
+proposed native creation journal, background-service lifetime or other DP-UI-01 mechanisms, and
+does not authorize live inference, publication or qualification-gate relaxation.
 
 K-TASK revision 1 was subsequently approved with explicit planner exact-result acceptance as an
 authorized state transition; see [canonical task contract](task-contract.md). Dispatch, execution,

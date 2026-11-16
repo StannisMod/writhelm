@@ -33,7 +33,9 @@ internal class H1Options(val runtime: H1RuntimeFacts,val app: AppOptions=AppOpti
     val nativeSafety: NativeRuntimeSafety=UnavailableNativeRuntimeSafety,
     val controllerSafety: NativeControllerRuntimeSafety=UnavailableNativeControllerSafety,
     val workModelVersion:Int=2,val retentionEffectQualification:RetentionEffectQualification=RetentionEffectQualification { _,_,_,_,_->false },
-    val candidateAssemblyProof:(UUID)->JsonValue?={null}) {
+    val candidateAssemblyProof:(UUID)->JsonValue?={null},
+    val candidateAssemblyProofByController:(UUID,UUID)->JsonValue?={ operation,_->candidateAssemblyProof(operation) },
+    val candidateReviewTickets:(UUID)->CandidateReviewTicketIssuer?={null}) {
     init { require(app.admission.formatVersion==2 && commandReplyBytes in 1024..65536 && workModelVersion in setOf(2,4)) }
 }
 internal class H1Genesis(val core: ApprovalWorkflow,val auth: Collection<Auth2Record>,val work: Map<UUID,WorkState>)
@@ -292,7 +294,8 @@ internal class H1Application private constructor(private val storeId: UUID,priva
             val call=WorkInvocation(r.identity.projectId,operation,r.identity.requestKey,subject,controller,if(operation==AuthorityOperation.UPDATE_PLAN)subject else null)
             integrity(Auth2Policy(state.authority,state.projection).authorizeHistoricalWork(r.authenticatedByCredentialId,call)?.mode==AdmissionMode.EVALUATE)
         } else if(op in H1Catalog.authOperations) {
-            integrity(if(op=="replace_work_grants")state.authority.owner(c,r.identity.projectId)
+            integrity(if(op in setOf("register_project","register_controller"))state.authority.owner(c,r.identity.projectId) && c.scope==CredentialScope.Project
+                else if(op=="replace_work_grants")state.authority.owner(c,r.identity.projectId)
                 else op=="revoke_delegation" && state.authority.owner(c,r.identity.projectId) ||
                     state.authority.controller(c,r.identity.projectId)!=null && state.authority.workAllows(c,r.identity.projectId,WorkPermission.TASK_DISPATCH))
         } else {
@@ -346,6 +349,17 @@ internal class H1Application private constructor(private val storeId: UUID,priva
         if(Auth2Policy(state.authority,state.projection).sessionBinding(key,c.credential.projectId)==null)throw AppAccessFault(AppAccessProblem.FORBIDDEN)
         val caps=state.authority.policy.snapshotGrants().firstOrNull { it.projectId==c.credential.projectId && it.principalId==c.credential.principalId }?.capabilities.orEmpty()
         AppAccessView(state.basis,c.credential.projectId,c.credential.principalId,caps,c.scope,storeId)
+    }
+    /** Trusted enrollment-broker guard. Native session identity is observed by the configured
+     * native peer, not accepted from a prompt. Reserved/retired worker IDs cannot be promoted to
+     * broad controllers merely because their native sessions intentionally have no parentID. */
+    @Synchronized internal fun requireUnassignedEnrollmentSession(ownerToken:String,anchorProject:UUID,sessionId:String)=capture(ownerToken) { state,key ->
+        val owner=state.authority.authenticate(key,anchorProject) ?: throw AppAccessFault(AppAccessProblem.UNAUTHENTICATED)
+        if(owner.scope!=CredentialScope.Project || !state.authority.owner(owner,anchorProject))throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        if(state.work.values.any { work ->work.records.values.any { row ->
+            (row.payload as? WAssignmentsPayload)?.value?.intendedExecution?.nativeSessionId==sessionId ||
+                (row.payload as? WAssignmentBindingsPayload)?.value?.execution?.nativeSessionId==sessionId
+        } })throw AppAccessFault(AppAccessProblem.FORBIDDEN)
     }
     @Synchronized fun read2(token: String,bytes: ByteArray): JsonValue=capture(token) { state,key ->
         val f=StrictJson.decode(bytes,JsonLimits(bytes=16384)).fields("formatVersion","projectId","operation","subject")
@@ -480,6 +494,100 @@ internal class H1Application private constructor(private val storeId: UUID,priva
         workRequire(plan.controllerId==controller && plan.candidateChecks.isNotEmpty(),WorkProblem.BLOCKED_INPUT)
         obj("formatVersion" to num(1),"basis" to state.basis.json(),"planJSON" to str(WorkCodec(modelVersion=work.modelVersion).encodeRecord(row,true).decodeToString()))
     }
+    @Synchronized internal fun nativeIssueCandidateReviewTicket(token:String,project:UUID,controller:UUID,host:UUID,raw:String):JsonValue = capture(token) {state,key ->
+        NativeRuntimeAccess(controller,host).sourceIdentity(state,key,project)
+        val actor=state.authority.authenticate(key,project) ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        if(actor.scope!=CredentialScope.Controller(controller) || !state.authority.workAllows(actor,project,WorkPermission.TASK_PLAN) ||
+            !state.authority.workAllows(actor,project,WorkPermission.TASK_DISPATCH))throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        val ticket=CandidateReviewTicketCodec().decode(raw.toByteArray(Charsets.UTF_8))
+        if(ticket.project!=project || ticket.controller!=controller || ticket.execution.nativeHostId!=host)throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        validateCandidateReviewTicketState(state,ticket,options.nativeSafety)
+        state.requireCurrentAssignmentInputs(project,ticket.assignment)
+        val issuer=options.candidateReviewTickets(controller) ?: throw WorkFault(WorkProblem.NOT_READY)
+        val bytes=issuer.issue(state,ticket) {assembly ->nativeCandidateAssemblyPermit(token,project,controller,host,assembly)}
+        workRequire(bytes.contentEquals(CandidateReviewTicketCodec().encode(ticket)),WorkProblem.INVALID_BINDING)
+        obj("formatVersion" to num(1),"kind" to str("candidate-review-ticket"),"ticketJSON" to str(bytes.toString(Charsets.UTF_8)),
+            "ticketDigest" to digest(Digest.of(bytes)))
+    }
+    @Synchronized internal fun nativeCandidateReviewPreparation(token:String,project:UUID,controller:UUID,host:UUID,
+        planRef:WorkReference,assemblyId:UUID,checkPlanId:UUID):JsonValue = capture(token) {state,key ->
+        NativeRuntimeAccess(controller,host).sourceIdentity(state,key,project)
+        val actor=state.authority.authenticate(key,project) ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        if(actor.scope!=CredentialScope.Controller(controller) || !state.authority.workAllows(actor,project,WorkPermission.TASK_PLAN) ||
+            !state.authority.workAllows(actor,project,WorkPermission.TASK_DISPATCH))throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        val work=state.work.getValue(project)
+        val plan=(work.resolve(planRef).payload as? WDispatchPlanPayload)?.value ?: throw WorkFault(WorkProblem.INVALID_REFERENCE)
+        workRequire(plan.controllerId==controller,WorkProblem.INVALID_BINDING)
+        val issuer=options.candidateReviewTickets(controller) ?: throw WorkFault(WorkProblem.NOT_READY)
+        val evidence=issuer.preparationReceipts(project,assemblyId,checkPlanId,plan) ?: throw WorkFault(WorkProblem.NOT_READY)
+        nativeCandidateAssemblyPermit(token,project,controller,host,evidence.assemblyJSON)
+        val proposal=automaticCandidateReviewPlan(work,planRef,evidence,checkPlanId)
+        val codec=WorkCodec(modelVersion=work.modelVersion)
+        val basis=obj("formatVersion" to num(1),"projectId" to uuid(project),"reviewId" to uuid(proposal.reviewId),"controllerId" to uuid(controller),
+            "plan" to StrictJson.decode(identityCodec.encodeReference(planRef)),"assemblyId" to uuid(assemblyId),"candidate" to encodeWSnapshot(evidence.candidate),
+            "selected" to JArray(evidence.selected.map {StrictJson.decode(identityCodec.encodeReference(it))}),"checkPlanId" to uuid(checkPlanId),
+            "checks" to JArray(evidence.checks.map {obj("checkId" to str(it.checkId),"runId" to uuid(it.runId),"receiptDigest" to digest(it.receiptDigest))}),
+            "contextId" to uuid(proposal.contextId),"excludedPrincipals" to JArray(candidateReviewExcludedPrincipals(state,project,controller,evidence.selected).map(::uuid)))
+        obj("formatVersion" to num(1),"kind" to str("candidate-review-preparation"),"taskCommandJSON" to str(codec.encodeCommand(proposal.taskCommand).toString(Charsets.UTF_8)),
+            "manifestCommandJSON" to str(codec.encodeCommand(proposal.manifestCommand).toString(Charsets.UTF_8)),"selectionJSON" to str(StrictJson.encode(proposal.selection).toString(Charsets.UTF_8)),
+            "preparationId" to uuid(proposal.preparationId),"ticketBasisJSON" to str(StrictJson.encode(basis).toString(Charsets.UTF_8)))
+    }
+    @Synchronized internal fun nativeCandidateReviewReport(token:String,project:UUID,controller:UUID,host:UUID,reviewId:UUID,report:WorkReference):JsonValue = capture(token) {state,key ->
+        NativeRuntimeAccess(controller,host).sourceIdentity(state,key,project)
+        val actor=state.authority.authenticate(key,project) ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        if(actor.scope!=CredentialScope.Controller(controller) || !state.authority.workAllows(actor,project,WorkPermission.TASK_PLAN) ||
+            !state.authority.workAllows(actor,project,WorkPermission.TASK_DISPATCH))throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        val issuer=options.candidateReviewTickets(controller) ?: throw WorkFault(WorkProblem.NOT_READY)
+        val ticket=issuer.retained(reviewId) ?: throw WorkFault(WorkProblem.NOT_READY)
+        workRequire(ticket.project==project && ticket.controller==controller && ticket.execution.nativeHostId==host &&
+            issuer.currentReceipts(state,ticket),WorkProblem.NOT_READY)
+        val work=state.work.getValue(project)
+        workRequire(report.identity.family==WorkFamily.VERIFICATION_REPORTS && report.identity.key.projectId==project,WorkProblem.INVALID_REFERENCE)
+        H1ProtectedReads().readWork(state,key,WorkRead.Exact(project,report.identity,report.digest,null))
+        val row=work.resolve(report);val value=(row.payload as WVerificationReportsPayload).value
+        val assignment=work.assignment(ticket.assignment.assignmentId)
+        workRequire(assignment.executionGeneration==ticket.assignment.generation && assignment.binding==ticket.binding &&
+            work.binding(ticket.assignment).execution==ticket.execution && value.assignment==ticket.assignment && value.reviewer==ticket.execution &&
+            value.task==assignment.task && value.plan==work.task(assignment.task).verificationPlan &&
+            value.subjects.size==ticket.selected.size && value.subjects.toSet()==ticket.selected.toSet() &&
+            candidateReviewExcludedPrincipals(state,project,controller,ticket.selected).toSet()==ticket.excludedPrincipals.toSet(),WorkProblem.INVALID_BINDING)
+        val verification=(work.record(WorkFamily.VERIFICATION_PLANS,value.plan).payload as WVerificationPlansPayload).value
+        val requiredGates=verification.gates.filterNot {it.deferred}.map {it.id}
+        workRequire(requiredGates.isNotEmpty() && value.gateIds.containsAll(requiredGates),WorkProblem.NOT_READY)
+        val cut=(value.freshContextBasis as? WSourceVariant2Value)?.value?.reference ?: throw WorkFault(WorkProblem.NOT_READY)
+        workRequire(cut.identity.family==WorkFamily.SOURCE_CUTS && cut.identity.key==WorkKey.Id(project,ticket.contextId),WorkProblem.INVALID_BINDING)
+        val source=(work.resolve(cut).payload as WSourceCutsPayload).value
+        workRequire(source.assignment==ticket.assignment && source.nativeHostId==ticket.execution.nativeHostId &&
+            source.nativeSessionId==ticket.execution.nativeSessionId &&
+            value.readOnlySnapshotBasis.any {(it as? WSourceVariant1Value)?.value?.artifact==ticket.candidate},WorkProblem.NOT_READY)
+        obj("formatVersion" to num(1),"kind" to str("candidate-review-report"),"ticketDigest" to digest(CandidateReviewTicketCodec().digest(ticket)),
+            "reportJSON" to str(WorkCodec(modelVersion=work.modelVersion).encodeRecord(row,true).toString(Charsets.UTF_8)),
+            "integrationAllowed" to JBoolean(false))
+    }
+    @Synchronized internal fun nativeCandidateReviewStatus(token:String,project:UUID,controller:UUID,host:UUID,reviewId:UUID):JsonValue = capture(token) {state,key ->
+        NativeRuntimeAccess(controller,host).sourceIdentity(state,key,project)
+        val actor=state.authority.authenticate(key,project) ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        if(actor.scope!=CredentialScope.Controller(controller) || !state.authority.workAllows(actor,project,WorkPermission.TASK_PLAN) ||
+            !state.authority.workAllows(actor,project,WorkPermission.TASK_DISPATCH))throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        val issuer=options.candidateReviewTickets(controller) ?: throw WorkFault(WorkProblem.NOT_READY)
+        val ticket=issuer.retained(reviewId) ?: throw WorkFault(WorkProblem.NOT_READY)
+        workRequire(ticket.project==project && ticket.controller==controller && ticket.execution.nativeHostId==host &&
+            issuer.currentReceipts(state,ticket),WorkProblem.NOT_READY)
+        val work=state.work.getValue(project)
+        val reports=work.records.values.filter { row ->
+            val report=(row.payload as? WVerificationReportsPayload)?.value
+            report?.assignment==ticket.assignment && report.reviewer==ticket.execution &&
+                report.subjects.size==ticket.selected.size && report.subjects.toSet()==ticket.selected.toSet()
+        }
+        workRequire(reports.size<=1,WorkProblem.NOT_READY) // no latest-report or successful-subset selection
+        if(reports.isEmpty())obj("formatVersion" to num(1),"kind" to str("candidate-review-pending"),
+            "ticketDigest" to digest(CandidateReviewTicketCodec().digest(ticket)))
+        else {
+            val reference=work.reference(WorkFamily.VERIFICATION_REPORTS,reports.single().identity.key)
+            val verified=nativeCandidateReviewReport(token,project,controller,host,reviewId,reference) as JObject
+            JObject(verified.entries+("reportRefJSON" to str(identityCodec.encodeReference(reference).toString(Charsets.UTF_8))))
+        }
+    }
     @Synchronized internal fun nativeCandidateDelivery(token:String,project:UUID,controller:UUID,host:UUID,planRef:WorkReference):JsonValue {
         nativeCandidateTestPlan(token,project,controller,host,planRef)
         val selection=capture(token) { state,_ ->
@@ -519,7 +627,7 @@ internal class H1Application private constructor(private val storeId: UUID,priva
             uuid(job.getValue("runId"));val candidate=job.getValue("candidate").fields("commit","tree")
             val commit=workOid(candidate.getValue("commit"));val tree=workOid(candidate.getValue("tree"))
             workRequire(commit.algorithm==tree.algorithm,WorkProblem.INVALID_SUBJECT)
-            val proof=options.candidateAssemblyProof(uuid(assembly.entries.getValue("operationId")))
+            val proof=options.candidateAssemblyProofByController(uuid(assembly.entries.getValue("operationId")),controller)
                 ?: throw WorkFault(WorkProblem.BLOCKED_INPUT)
             workRequire(proof!==JNull,WorkProblem.BLOCKED_INPUT)
             val retained=StrictJson.decode(proof.string().toByteArray(),JsonLimits(bytes=2*1024*1024,stringBytes=1024*1024,collection=4096,tokens=100000))
@@ -584,11 +692,11 @@ internal class H1Application private constructor(private val storeId: UUID,priva
         if(subject==null) {
             require(binding==null && continuation==null)
             if(sourceIdentity)access.sourceIdentity(state,key,project)else access.identity(state,key,project)
-        } else if(packet)access.packet(state,key,project,subject,requireNotNull(binding),requireNotNull(continuation))
+        } else if(packet)access.packet(state,key,project,subject,requireNotNull(binding),requireNotNull(continuation),options.candidateReviewTickets(controller))
         else access.status(state,key,project,subject,requireNotNull(binding),continuation,options.nativeSafety)
     }
     @Synchronized internal fun nativeWorkerContext(token: String,project: UUID,controller: UUID,host: UUID): JsonValue=
-        capture(token) { state,key -> NativeWorkerContext.read(state,key,project,controller,host,options.nativeSafety) }
+        capture(token) { state,key -> NativeWorkerContext.read(state,key,project,controller,host,options.nativeSafety,options.candidateReviewTickets(controller)) }
     @Synchronized internal fun nativeRetentionPermit(token:String,project:UUID,controller:UUID,host:UUID,
         subject:WAssignmentSubject,execution:UUID,result:WSnapshot):JsonValue=
         capture(token) { state,key ->
@@ -667,7 +775,7 @@ internal class H1Application private constructor(private val storeId: UUID,priva
     @Synchronized internal fun nativePreparationContext(token:String,project:UUID,controller:UUID,host:UUID,subject:WAssignmentSubject):JsonValue=
         capture(token) { state,key -> NativePreparationContext.read(state,key,project,controller,host,subject,options.nativeSafety) }
     @Synchronized internal fun nativeInitialContext(token:String,project:UUID,controller:UUID,host:UUID,subject:WAssignmentSubject,binding:WorkReference,intent:UUID):JsonValue=
-        capture(token) { state,key -> NativeInitialContext.read(state,key,project,controller,host,subject,binding,intent,options.nativeSafety) }
+        capture(token) { state,key -> NativeInitialContext.read(state,key,project,controller,host,subject,binding,intent,options.nativeSafety,options.candidateReviewTickets(controller)) }
     companion object {
         fun initialize(directory: Path,storeId: UUID,genesis: H1Genesis,options: H1Options): H1Application {
             // This composition currently selects the existing Linux NativeGit/RuntimeOwner adapter.

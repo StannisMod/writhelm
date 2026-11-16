@@ -6,6 +6,16 @@ import { createHash, randomUUID } from "node:crypto"
 
 function unavailable(): never { throw new Error("protected native runtime unavailable") }
 const hash = (s: string) => createHash("sha256").update(s, "utf8").digest("hex")
+// Location plugins can share protected custody in one native process. Serialize their writes too;
+// the filesystem lock still refuses competing processes and every write revalidates its own root.
+type WriteQueue={tail:Promise<void>;pending:number}
+// A plugin loader can evaluate this module more than once in the SAME native process. A
+// module-local Map is therefore not a process lock. Share only scheduling on the actual process
+// object; all root verification and the exclusive filesystem lock remain authoritative.
+const queueKey=Symbol.for("dev.writhelm.native-custody-writes-v1")
+const hostQueues=process as unknown as Record<symbol,Map<string,WriteQueue>|undefined>
+if(hostQueues[queueKey]===undefined)Object.defineProperty(process,queueKey,{value:new Map<string,WriteQueue>()})
+const processWrites=hostQueues[queueKey]!
 
 /** Explicit Linux operational custody, not an authority/credential database in canonical Git.
  * Every operation revalidates root identity. Existing insecure roots are refused, not chmod-repaired.
@@ -13,8 +23,6 @@ const hash = (s: string) => createHash("sha256").update(s, "utf8").digest("hex")
 export class LinuxNativeCustody {
   private identity: string | undefined
   private initialized = false
-  private writes:Promise<void>=Promise.resolve()
-  private queuedWrites=0
   private readonly forbiddenAreas: readonly string[]
   constructor(readonly root: string, forbiddenAreas: readonly string[], private readonly capacity = 1024) {
     if (!Number.isInteger(capacity) || capacity < 1 || capacity > 1024) unavailable()
@@ -92,6 +100,9 @@ export class LinuxNativeCustody {
   /** Bounded protected startup inventory, not a model artifact/path lookup. Unknown crash leftovers
    * refuse; a missing cache must not make previously managed native sessions unmanaged. */
   async scan(kind: string): Promise<readonly Readonly<{ keyDigest: string; raw: string }>[]> {
+    return this.serialize(()=>this.scanInventory(kind))
+  }
+  private async scanInventory(kind:string):Promise<readonly Readonly<{keyDigest:string;raw:string}>[]> {
     if (!this.initialized || !/^[a-z][a-z-]{0,31}$/.test(kind)) unavailable()
     await this.verify()
     const pattern = new RegExp(`^${kind}-([0-9a-f]{64})\\.json$`)
@@ -124,12 +135,15 @@ export class LinuxNativeCustody {
   /** Bounded lifecycle-local serialization only. The existing exclusive filesystem lock and every
    * identity/owner/link/sync check remain authoritative across instances/processes. Native inbox
    * acknowledgement and its concurrent held-boundary witness must not conflict in one instance. */
-  private serialize(operation:()=>Promise<boolean>):Promise<boolean>{
-    if(this.queuedWrites>=32)unavailable()
-    this.queuedWrites++
-    const current=this.writes.then(operation)
-    this.writes=current.then(()=>undefined,()=>undefined)
-    return current.then(value=>{this.queuedWrites--;return value},error=>{this.queuedWrites--;throw error})
+  private serialize<T>(operation:()=>Promise<T>):Promise<T>{
+    let queue=processWrites.get(this.root)
+    if(!queue){queue={tail:Promise.resolve(),pending:0};processWrites.set(this.root,queue)}
+    if(queue.pending>=32)unavailable()
+    queue.pending++
+    const current=queue.tail.then(operation)
+    queue.tail=current.then(()=>undefined,()=>undefined)
+    const release=()=>{if(--queue.pending===0)processWrites.delete(this.root)}
+    return current.then(value=>{release();return value},error=>{release();throw error})
   }
   private async write(kind: string, key: string, raw: string, expectedDigest?: string): Promise<boolean> {
     if (!this.initialized) unavailable()

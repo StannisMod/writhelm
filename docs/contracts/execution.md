@@ -1,8 +1,8 @@
 # Cooperative worktree execution and immutable review
 
-Contract K-EXECUTION, revision 3. Status: owner approved the disclosed worktree/cooperative-profile,
-read-only review, separate integration and deterministic non-LLM correction scope. No role/
-runtime/isolation implementation or qualification claimed. Governing [K-HARNESS](agent-workflow.md),
+Contract K-EXECUTION, revision 4. Status: owner approved the disclosed worktree/cooperative-profile,
+read-only review, separate integration and deterministic non-LLM correction scope. No operational
+runtime/isolation qualification claimed. Governing [K-HARNESS](agent-workflow.md),
 [K-TASK](task-contract.md), [K-DISPATCH](dispatch.md), [K-CONTEXT](context-continuity.md).
 
 ## EX-01 — Initial profile E-COOP-1, honest assurance
@@ -81,6 +81,47 @@ The applicator is not an LLM, semantic reviewer or independent verifier. It cann
 immutable inputs, grant scope, accept the result, integrate into another target or publish merely
 because patch application succeeded. Existing per-platform/profile and physical-effect gates apply.
 
+## EX-09 — Phase-specific machine admission; platform verification is project tests
+
+Owner accepted on 2026-11-16. Verification of the platform implementation belongs to this project's
+development/release tests, not a model review or a six-campaign evidence registration required for
+each assignment. Tests must establish advertised platform/adapter guarantees; a passed or declared
+profile alone never grants service authority or proves an unsupported capability.
+
+- **Reserve/prepare:** check current controller authority, task/dependency readiness, exact available
+  mandatory inputs, resource/assignment conflicts and ability to prepare an isolated work area.
+  Do not require model execution, result/review evidence or the full platform qualification bundle.
+- **Bind:** check the actual created native session/workspace, canonical task/execution identity,
+  scoped delegation/credentials and binding consistency. Binding does not authorize execution.
+- **Start/resume:** recheck current authority and exact inputs, actual deployment/model/route
+  configuration, applied role/tool restrictions, stop state and the original operation's outcome.
+  No additional AI verifier. Unknown prior effects and unconfirmed conflicting writers remain held.
+- **Result acceptance:** exact artifacts/diff, required actual project checks and independent
+  substantive review/remediation apply here. Integration requires its own applicable authority.
+
+Runtime checks remain machine checks of the current operation. Platform tests do not run anew for
+every assignment or normal restart. Restart revalidates current process/session identity, authority,
+bindings and retained obligations; it does not require recollecting six qualification campaigns.
+Unsupported operations fail explicitly at their relevant boundary (for example, unavailable resume),
+not as a blanket denial of independent supported preparation/work.
+
+Replace the shared qualifiedProfiles prerequisite across reserve/bind/start/resume with these
+phase-specific checks. Do not implement this by returning qualified=true or weakening reviewer
+permissions, exact-input validation, current authority, unknown-outcome or recovery protections.
+This supersedes contrary per-assignment full-campaign requirements/proposals in H1 task records,
+including QC-EXACT-01 as the proposed next implementation step. It does not authorize live calls,
+paid experiments, abnormal faults, integration or publication.
+
+Implementation status: the local source now separates passive preparation/binding from exact
+current-operation execution admission, active native access and retention. Execution observations
+are tied to the current head, command fingerprint, binding and profile; native read-only preflight
+checks deployment/model/session/permissions without waking a model or changing permissions.
+The initial Linux adapter explicitly refuses resume; this does not block supported preparation or
+initial start. Unknown prior effects, new-process adoption and unconfirmed writers remain held.
+Project tests, not historical campaign registration, verify these mechanisms. This implementation
+record does not claim installed H1 acceptance, semantic independent review, OS confinement or
+Windows/macOS runtime verification.
+
 ## Approval provenance/readiness
 
 On 2026-11-05 owner challenged predicted file-edit allowlists; planner proposed exclusive worktrees
@@ -94,3 +135,7 @@ commit/push authorization follows from this record.
 Revision 3 records the subsequent owner-approved non-LLM correction route described in TASK-08.
 It preserves E-COOP-1's stated assurance and does not qualify a new native process/filesystem adapter
 or supply missing protocol, authorship, permission or recovery formats.
+
+Revision 4 records the owner's 2026-11-16 approval of phase-specific machine admission and explicit
+clarification that platform implementation verification means tests of this project. This is an
+accepted design change. The implementation status above is separate from operational acceptance.

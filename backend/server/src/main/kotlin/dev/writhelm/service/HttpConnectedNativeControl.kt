@@ -53,6 +53,17 @@ internal class HttpConnectedNativeControl(origin: String,proof: ByteArray): Conn
     override fun initialProof(intent:java.util.UUID):JsonValue?=try {
         call("initial-proof","intentId" to uuid(intent),maximum=1024*1024,stringMaximum=512*1024)
     }catch(_:Exception){null}
+    fun executionAdmission(state:H1BoundState,project:java.util.UUID,subject:WAssignmentSubject,purpose:String,epoch:String):Boolean=try {
+        val work=state.work.getValue(project)
+        val a=work.assignment(subject.assignmentId)
+        val binding=requireNotNull(a.binding);val execution=work.binding(subject).execution
+        val request=StrictJson.encode(obj("subject" to obj("assignmentId" to uuid(subject.assignmentId),
+            "executionGeneration" to str(subject.generation.toString()),"bindingJSON" to str(identityCodec.encodeReference(binding).decodeToString())),
+            "sessionID" to str(execution.nativeSessionId),"profileJSON" to str(WorkCodec().encodeRecord(work.record(WorkFamily.PROFILES,a.profile),true).decodeToString()),
+            "purpose" to str(purpose),"epoch" to str(epoch))).decodeToString()
+        val proof=call("execution-admission","requestJSON" to str(request)).fields("requestDigest","epoch")
+        digest(proof.getValue("requestDigest"))==Digest.of(request.toByteArray()) && proof.getValue("epoch").string()==epoch
+    }catch(_:Exception){false}
     override fun resultDiffProof(assignment:java.util.UUID,generation:Long,result:WSnapshot):JsonValue?=try {
         call("result-diff-proof","assignmentId" to uuid(assignment),"executionGeneration" to str(generation.toString()),
             "resultJSON" to str(StrictJson.encode(encodeWSnapshot(result)).decodeToString()),maximum=2*1024*1024,stringMaximum=1024*1024)
@@ -63,6 +74,9 @@ internal class HttpConnectedNativeControl(origin: String,proof: ByteArray): Conn
     }catch(_:Exception){null}
     fun candidateAssemblyProof(operationId:java.util.UUID):JsonValue?=try {
         call("candidate-assembly-proof","operationId" to uuid(operationId),maximum=2*1024*1024,stringMaximum=1024*1024)
+    }catch(_:Exception){null}
+    fun candidateInputsProof(operationId:java.util.UUID,requestJSON:String):JsonValue?=try {
+        call("candidate-inputs-proof","operationId" to uuid(operationId),"requestJSON" to str(requestJSON),maximum=1024*1024,stringMaximum=262144)
     }catch(_:Exception){null}
     private fun envelopeCall(operation: String,e: ConnectedEnvelope)=call(operation,"key" to str(key(e)),"digest" to digest(Digest.of(e.bytes())))
     /** Trusted packet provisioner seam for the dependent context stage. Current service digest and

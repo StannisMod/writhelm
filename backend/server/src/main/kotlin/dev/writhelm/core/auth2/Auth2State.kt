@@ -65,6 +65,8 @@ internal class Auth2State private constructor(
     fun authorizeCommand(presented: PresentedCredential, command: Auth3Command): ScopedCredential? {
         val project=command.projectId; val c=authenticate(presented,project) ?: return null
         val allowed=when(val p=command.payload) {
+            is Auth3Payload.RegisterProject -> owner(c,project) && c.scope==CredentialScope.Project
+            is Auth3Payload.RegisterController -> owner(c,project) && c.scope==CredentialScope.Project
             is Auth3Payload.ReplaceWorkGrants -> owner(c,project)
             is Auth3Payload.RegisterDelegation -> p.binding.projectId==project && dispatch(c,project,p.binding.controllerId)
             is Auth3Payload.RotateDelegatedCredential -> ownsDelegation(c,project,p.delegationId,p.credentialId)
@@ -101,6 +103,30 @@ internal class Auth2State private constructor(
             return Auth3Transition.Success(next,command.payload.operation,id,replaced,auth.credential.id,effects)
         }
         return when(val p=command.payload) {
+            is Auth3Payload.RegisterProject -> {
+                if(p.newProjectId in projects)return reject(Auth2Problem.AUTH_DUPLICATE_ID)
+                if(p.ownerCredentialId in credentials)return reject(Auth2Problem.AUTH_DUPLICATE_CREDENTIAL)
+                val principal=auth.credential.principalId;val enrollment=Enrollment(principal,p.newProjectId)
+                if(enrollment in guards || enrollment in workGrants || policy.snapshotGrants().any { it.projectId==p.newProjectId })return reject(Auth2Problem.AUTH_INVALID_BINDING)
+                reserveRecords(4)
+                val credential=ScopedCredential(Credential(p.ownerCredentialId,storeId,p.newProjectId,principal,p.verifierDigest,CredentialStatus.ACTIVE,0),CredentialScope.Project)
+                success(copy(projects=projects+(p.newProjectId to ProjectBinding(p.newProjectId,principal)),
+                    credentials=credentials+(p.ownerCredentialId to credential),guards=guards+(enrollment to 0L),
+                    workGrants=workGrants+(enrollment to WorkGrant(enrollment,0,WorkPermission.entries)),
+                    policy=AccessPolicy(policy.snapshotGrants()+Grant(principal,p.newProjectId,Capability.entries.toSet()))),p.newProjectId)
+            }
+            is Auth3Payload.RegisterController -> {
+                if(p.principalId in principals || p.controllerId in controllers) return reject(Auth2Problem.AUTH_DUPLICATE_ID)
+                if(p.credentialId in credentials) return reject(Auth2Problem.AUTH_DUPLICATE_CREDENTIAL)
+                val enrollment=Enrollment(p.principalId,project)
+                if(enrollment in guards || enrollment in workGrants || policy.snapshotGrants().any { it.principalId==p.principalId })return reject(Auth2Problem.AUTH_INVALID_BINDING)
+                reserveRecords(5)
+                val credential=ScopedCredential(Credential(p.credentialId,storeId,project,p.principalId,p.verifierDigest,CredentialStatus.ACTIVE,0),CredentialScope.Controller(p.controllerId))
+                success(copy(principals=principals+p.principalId,credentials=credentials+(p.credentialId to credential),
+                    guards=guards+(enrollment to 0L),workGrants=workGrants+(enrollment to WorkGrant(enrollment,0,WorkPermission.entries)),
+                    controllers=controllers+(p.controllerId to ControllerBinding(p.controllerId,project,p.principalId)),
+                    policy=AccessPolicy(policy.snapshotGrants()+Grant(p.principalId,project,setOf(Capability.READ,Capability.PLAN,Capability.PROPOSE)))),p.controllerId)
+            }
             is Auth3Payload.ReplaceWorkGrants -> {
                 val e=Enrollment(p.principalId,project)
                 val old=workGrants[e] ?: return reject(Auth2Problem.AUTH_TARGET_NOT_FOUND)
@@ -214,7 +240,8 @@ internal class Auth2State private constructor(
     }
     private fun copy(principals: Set<UUID> = this.principals, credentials: Map<UUID,ScopedCredential> = this.credentials,
         guards: Map<Enrollment,Long> = this.guards, workGrants: Map<Enrollment,WorkGrant> = this.workGrants,
-        delegations: Map<UUID,Delegation> = this.delegations, policy: AccessPolicy = this.policy) =
+        delegations: Map<UUID,Delegation> = this.delegations, policy: AccessPolicy = this.policy,
+        controllers:Map<UUID,ControllerBinding> = this.controllers,projects:Map<UUID,ProjectBinding> = this.projects) =
         Auth2State(storeId,basis,principals,projects,credentials,guards,controllers,workGrants,delegations,policy)
     private fun checkBudgets() {
         reserveRecords(0)

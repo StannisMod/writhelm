@@ -54,6 +54,12 @@ class NativePreparationFactsTest {
             proof=witness()
             assertNotNull(observer.observe(requireNotNull(captured),project,CBindAssignment(f.assignment,1,f.intent,0,f.intended.nativeHostId,
                 f.intended.nativeSessionId,f.workspace,listOf(WSourceVariant1Value(WSourceVariant1("artifact",snapshot))),emptyList())))
+            val wrongModel=JObject(model.entries+("variant" to str("unexpected-variant")))
+            proof=witness(j=JObject(job.entries+("model" to wrongModel)),n=JObject(native.entries+("model" to wrongModel)))
+            assertIs<LogicalOutcome.Rejected>(bind().receipt.outcome)
+            // Pinned native 2.2.5 materializes the absent profile variant as literal default.
+            val nativeDefault=JObject(model.entries+("variant" to str("default")))
+            proof=witness(j=JObject(job.entries+("model" to nativeDefault)),n=JObject(native.entries+("model" to nativeDefault)))
             assertIs<LogicalOutcome.Success>(bind().receipt.outcome)
             val bound=app.coordinationCapture(plannerToken,project).work.assignment(f.assignment)
             assertEquals("bound",bound.state);assertNull(bound.currentIntent)

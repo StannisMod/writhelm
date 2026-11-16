@@ -12,7 +12,7 @@ import java.util.UUID
  * checkpoint extraction. Sources are selected from the existing delegated task/base closure;
  * mutable progress and controller-only blocker/assessment records are not recursively copied. */
 internal object NativeAssignmentPacket {
-    fun render(state: H1BoundState,project: UUID,subject: WAssignmentSubject): List<Pair<String,String>> {
+    fun render(state: H1BoundState,project: UUID,subject: WAssignmentSubject,reviewTickets:CandidateReviewTicketIssuer?=null): List<Pair<String,String>> {
         state.requireCurrentContinuation(project,subject)
         val work=state.work.getValue(project);val a=work.assignment(subject.assignmentId)
         val worker=state.authority.credentials.values.firstOrNull { it.scope==CredentialScope.Assignment(a.delegationId!!) &&
@@ -63,6 +63,17 @@ internal object NativeAssignmentPacket {
             }
             else -> Unit // Mutable assignment status/progress is restored separately, not frozen as base.
         } }
+        if(a.intendedExecution.template=="reviewer-v1") {
+            val issuer=reviewTickets ?: throw WorkFault(WorkProblem.NOT_READY)
+            val ticket=issuer.forAssignment(subject) ?: throw WorkFault(WorkProblem.NOT_READY)
+            workRequire(ticket.project==project && ticket.controller==a.intendedExecution.controllerId && ticket.binding==a.binding &&
+                ticket.execution==work.binding(subject).execution && issuer.currentReceipts(state,ticket) &&
+                candidateReviewExcludedPrincipals(state,project,ticket.controller,ticket.selected).toSet()==ticket.excludedPrincipals.toSet() &&
+                ticket.execution.principalId !in ticket.excludedPrincipals,WorkProblem.NOT_READY)
+            val bytes=CandidateReviewTicketCodec().encode(ticket)
+            add("candidate-review-ticket",bytes,obj("ticket" to StrictJson.decode(bytes),
+                "obligations" to str("Review the exact immutable candidate commit/tree in this service ticket against all mandatory task/input/verification requirements. Do not edit the candidate or integrate/publish it. Capture the fresh source cut with the ticket contextId, and publish a canonical verification report for exactly the selected subjects using the service tools. Include the ticket candidate in readOnlySnapshotBasis. Blocking findings must retain concrete scenario, expected/actual behavior and evidence. Missing required input, check or snapshot access holds review; never infer a pass.")))
+        }
         workRequire(entries.isNotEmpty(),WorkProblem.INCOMPLETE_HANDOFF)
         return entries.toSortedMap().entries.map { it.key to it.value }
     }

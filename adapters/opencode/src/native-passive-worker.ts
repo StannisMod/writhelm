@@ -73,8 +73,12 @@ export class NativePassiveWorkers {
       throw new Error("passive Git preparation requires one exact registered clean code base")
     const agent=this.config.agents[intended.template as "executor-v1"|"reviewer-v1"]
     const model=basis.profile.payload.model
-    if(!agent||!model?.providerId||!model.modelId||basis.profile.payload.qualification!=="qualified")nativeUnavailable()
-    const modelRef={providerID:model.providerId,id:model.modelId,...(model.variant===null?{}:{variant:model.variant})}
+    // Passive receiver creation pins the requested identity; it neither executes the model nor
+    // promotes a profile's historical qualification label into execution permission.
+    if(!agent||!model?.providerId||!model.modelId)nativeUnavailable()
+    // Pinned native 2.2.5 stores an omitted variant as the explicit native default. Pin that
+    // representation before create/recovery rather than accepting an arbitrary returned variant.
+    const modelRef={providerID:model.providerId,id:model.modelId,variant:model.variant??"default"}
     const directory=path.join(this.config.worktreeParent,a.workspaceId)
     const key=contextJSON([assignmentId,generation])
     const controller=await this.registry.inspect(this.controllerSessionID)

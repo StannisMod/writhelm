@@ -8,10 +8,20 @@ import { LinuxNativeCustody } from "./native-runtime-custody.js"
 import { contextJSON } from "./native-context-codec.js"
 import { exactJSON } from "./strict-json.js"
 import { closedObject, nativeUnavailable, uuidPattern, type NativeSubject } from "./native-runtime-client.js"
+import { reviewerToolAllowed } from "./native-context-policy.js"
 
 const parse=(raw:string)=>exactJSON(raw,nativeUnavailable)
 const same=(a:unknown,b:unknown)=>contextJSON(a)===contextJSON(b)
+// Pinned native 2.2.5 persists an omitted model variant as explicit default.
+const sameModel=(a:any,b:any)=>a&&b&&same({...a,variant:a.variant??"default"},{...b,variant:b.variant??"default"})
 const hash=(raw:string)=>createHash("sha256").update(raw).digest("hex")
+/** The same final native policy is used for original release and isolated permission-engine probes.
+ * This restricts native actions; it is not an OS sandbox or a qualification assertion. */
+export function initialReleasePermissions(permissions:readonly Readonly<{action:string;resource:string;effect:"allow"|"ask"|"deny"}>[],template:string){
+  const restricted=[...permissions,{action:"external_directory",resource:"*",effect:"deny" as const},{action:"subagent",resource:"*",effect:"deny" as const}]
+  if(template==="reviewer-v1")for(const action of ["edit","shell","execute"])restricted.push({action,resource:"*",effect:"deny"})
+  return restricted
+}
 type Original={raw:string;digest:string;packet:string;profileJSON:string;deploymentJSON:string;epoch:string}
 type Gate={original:Original;envelope:any;closed:boolean;wait:Promise<void>;resolve:()=>void;reject:(e:Error)=>void;
   held:Promise<void>;heldResolve:()=>void;heldReject:(e:Error)=>void}
@@ -23,6 +33,7 @@ type Native=Pick<OpenCodeClient,"session">
 export class NativeInitialAdapter {
   private readonly gates=new Map<string,Gate>()
   private closed=false
+  private registered=false
   constructor(private readonly ctx:Plugin.Context,private readonly native:Native,private readonly registry:NativeCredentialRegistry,
     private readonly custody:LinuxNativeCustody,private readonly deployment:LinuxNativeCustody,private readonly controllerSessionID:string,
     private readonly connected:(sessionID:string)=>boolean=()=>false,
@@ -78,9 +89,12 @@ export class NativeInitialAdapter {
     return contextJSON(current)===gate.original.packet
   }
   private model(gate:Gate){
-    const d=parse(gate.original.deploymentJSON),p=parse(gate.original.profileJSON).payload
+    return this.deploymentModel(gate.original.profileJSON,gate.original.deploymentJSON)
+  }
+  private deploymentModel(profileJSON:string,deploymentJSON:string){
+    const d=parse(deploymentJSON),p=parse(profileJSON).payload
     const selected={providerID:p.model.providerId,id:p.model.modelId,...(p.model.variant===null?{}:{variant:p.model.variant})}
-    if(d.formatVersion?.value!=="1"||d.profileKeyJSON!==contextJSON(parse(gate.original.profileJSON).key)||!same(d.model,selected)||
+    if(d.formatVersion?.value!=="1"||d.profileKeyJSON!==contextJSON(parse(profileJSON).key)||!same(d.model,selected)||
       d.routeID!==p.route||typeof d.effortOptionKey!=="string"||typeof d.nativeOptions?.[d.effortOptionKey]!=="string"||
       d.nativeOptions[d.effortOptionKey]!==p.effort||!d.nativeOptions.maxTokens||BigInt(d.nativeOptions.maxTokens.value??d.nativeOptions.maxTokens)>BigInt(p.outputReserveTokens.value))nativeUnavailable()
     if(d.baseURL!==null){
@@ -95,7 +109,7 @@ export class NativeInitialAdapter {
       else {const raw=(value as any)?.value;if(typeof raw!=="string"||!/^(0|[1-9][0-9]*)$/.test(raw)||BigInt(raw)>2147483647n)nativeUnavailable();options[key]=Number(raw)}
     }
     if(typeof options.maxTokens!=="number"||options.maxTokens<1)nativeUnavailable()
-    if(p.platform!=="linux"||p.qualification!=="qualified"||!Array.isArray(p.permissions))nativeUnavailable()
+    if(p.platform!=="linux"||!Array.isArray(p.permissions))nativeUnavailable()
     const actions:Record<string,string>={read:"read",glob:"glob",grep:"grep",shell:"shell",edit:"edit",write:"edit",patch:"edit",execute:"execute",
       question:"question",subagent:"subagent",external_directory:"external_directory"}
     const permissions:Array<{action:string;resource:string;effect:"allow"|"ask"|"deny"}>=[{action:"*",resource:"*",effect:"deny"}]
@@ -125,11 +139,70 @@ export class NativeInitialAdapter {
       await this.admitPrompt(event)
     })
     await this.ctx.session.hook("context",async event=>{if(this.applies(event.sessionID))await this.admitContext(event.sessionID,event)})
-    await this.ctx.tool.hook("execute.before",async event=>{if(this.applies(event.sessionID))await this.admitTool(event.sessionID)})
+    await this.ctx.tool.hook("execute.before",async event=>{if(this.applies(event.sessionID))await this.admitTool(event.sessionID,event.tool)})
     await this.ctx.session.hook("model.request",async event=>{
       if(!this.applies(event.sessionID))return
       await this.admitModel(event)
     })
+    this.registered=true
+  }
+  /** Read-only service capture: no current-policy RPC, permission mutation, prompt or model call.
+   * Resume is not supported by this initial lifecycle; it cannot masquerade as a fresh start. */
+  async admission(requestJSON:string){
+    if(this.closed||!this.registered)nativeUnavailable()
+    const r=closedObject(parse(requestJSON),["subject","sessionID","profileJSON","purpose","epoch"])
+    if(!["start","bound-access","access","retention"].includes(r.purpose)||typeof r.profileJSON!=="string"||typeof r.sessionID!=="string")nativeUnavailable()
+    const subject=closedObject(r.subject,["assignmentId","executionGeneration","bindingJSON"])
+    if(subject.executionGeneration!=="0")nativeUnavailable()
+    const receiver=await this.registry.inspect(r.sessionID)
+    if(receiver?.scope!=="assignment"||receiver.epoch!==r.epoch||receiver.assignmentId!==subject.assignmentId||
+      receiver.executionGeneration!==subject.executionGeneration||receiver.bindingJSON!==subject.bindingJSON)nativeUnavailable()
+    const deployment=await this.deployment.read("execution-profile",contextJSON(parse(r.profileJSON).key))
+    if(deployment===undefined)nativeUnavailable()
+    const profile=this.deploymentModel(r.profileJSON,deployment)
+    const info=await this.native.session.get({sessionID:r.sessionID})
+    if(info.id!==r.sessionID||info.parentID||info.fork||info.revert||info.location.directory!==receiver.workRoot||
+      !sameModel(info.model,profile.selected))nativeUnavailable()
+    const denyAll=[{action:"*",resource:"*",effect:"deny"}]
+    let original:Original|undefined
+    const originals=await this.custody.scan("initial-original")
+    if(originals.length>256)nativeUnavailable()
+    for(const row of originals){
+      const value=parse(row.raw) as Original,e=parse(value.raw)
+      if(e.nativeSessionId!==r.sessionID)continue
+      if(original||value.epoch!==r.epoch||value.profileJSON!==r.profileJSON||value.deploymentJSON!==deployment||
+        contextJSON(e.binding)!==subject.bindingJSON||e.assignmentId!==subject.assignmentId||e.executionGeneration!==subject.executionGeneration)nativeUnavailable()
+      const witness=await this.witness(e.intentId)
+      if(!witness||(witness.heldJSON===null&&r.purpose!=="bound-access"))nativeUnavailable()
+      original=value
+    }
+    if(r.purpose==="bound-access"&&original!==undefined){
+      // An original initial call is still held behind native deny-all and registered hooks.
+      // This read grants neither ACTIVE nor permission to repeat its pending/unknown dispatch.
+      if(!same(info.permissions,denyAll)||await this.custody.read("initial-release",parse(original.raw).intentId)!==undefined)nativeUnavailable()
+    }else if(r.purpose==="start"||original===undefined){
+      if(!["start","bound-access"].includes(r.purpose)||!same(info.permissions,denyAll)||info.cost!==0)nativeUnavailable()
+      const [context,inbox]=await Promise.all([this.native.session.context({sessionID:r.sessionID}),this.native.session.inbox.list({sessionID:r.sessionID})])
+      if(context.length||inbox.length)nativeUnavailable()
+    }else {
+      // Canonical binding is opaque here; the immutable original packet carries the actual role.
+      const entries=parse(original.packet)
+      const bindings=entries.filter((v:any)=>v.key.startsWith("writhelm-record-")).map((v:any)=>parse(v.value)).filter((v:any)=>v.family==="assignment-bindings"&&
+        v.key?.assignmentId===subject.assignmentId)
+      const entry=bindings.length===1?bindings[0]:undefined
+      // Use the service-rendered assignment entry, never a caller's role assertion.
+      if(!entry)nativeUnavailable()
+      const template=entry.payload?.intendedExecution?.template
+      if(!["executor-v1","reviewer-v1"].includes(template))nativeUnavailable()
+      const permissions=initialReleasePermissions(profile.permissions,template)
+      const firstRelease=await this.custody.read("initial-release",parse(original.raw).intentId)===undefined
+      if(!same(info.permissions,permissions)&&!(r.purpose==="access"&&firstRelease&&same(info.permissions,denyAll)))nativeUnavailable()
+      const installed=await this.ctx.session.instructions.entry.list({sessionID:r.sessionID})
+      if(!entries.every((v:any)=>installed.some(p=>p.key===v.key&&p.value===v.value)))nativeUnavailable()
+    }
+    const after=await this.native.session.get({sessionID:r.sessionID})
+    if(this.closed||!same(after,info)||await this.deployment.read("execution-profile",contextJSON(parse(r.profileJSON).key))!==deployment)nativeUnavailable()
+    return {requestDigest:hash(requestJSON),epoch:receiver.epoch}
   }
   async admitPrompt(event:SessionPrompt){
     const gate=this.gates.get(event.sessionID);if(!gate||this.closed)nativeUnavailable()
@@ -167,7 +240,8 @@ export class NativeInitialAdapter {
     const profile=this.model(gate)
     await this.contextPolicy?.(e.nativeSessionId,gate.original.profileJSON)
     const info=await this.native.session.get({sessionID:e.nativeSessionId})
-    if(info.id!==e.nativeSessionId||info.parentID||info.fork||info.revert||info.location.directory!==receiver.workRoot||!same(info.model,profile.selected))nativeUnavailable()
+    if(info.id!==e.nativeSessionId||info.parentID||info.fork||info.revert||info.location.directory!==receiver.workRoot||
+      !sameModel(info.model,profile.selected))nativeUnavailable()
     if(retained===undefined){
       const [context,inbox]=await Promise.all([this.native.session.context({sessionID:e.nativeSessionId}),this.native.session.inbox.list({sessionID:e.nativeSessionId})])
       if(context.length||inbox.length||info.cost!==0||!same(info.permissions,[{action:"*",resource:"*",effect:"deny"}]))nativeUnavailable()
@@ -220,7 +294,7 @@ export class NativeInitialAdapter {
     const sessionID=event.sessionID,gate=this.gates.get(sessionID);if(!gate||this.closed)nativeUnavailable()
     const {selected,options}=this.model(gate)
     await this.contextPolicy?.(sessionID,gate.original.profileJSON)
-      if(!same(event.model,selected))nativeUnavailable()
+      if(!sameModel(event.model,selected))nativeUnavailable()
       for(const key of Object.keys(event.options))delete event.options[key]
       Object.assign(event.options,options)
       // The reviewer receives a read/report surface, not assessed-code mutation or nested agents.
@@ -228,7 +302,7 @@ export class NativeInitialAdapter {
       if(binding?.scope!=="assignment")nativeUnavailable()
       const frame=await this.frame(gate),a=parse(frame.assignmentJSON).payload
       if(a.intendedExecution.template==="reviewer-v1")for(const name of Object.keys(event.tools))
-        if(!["read","writhelm_work_read","writhelm_work_command"].includes(name))delete event.tools[name]
+         if(!reviewerToolAllowed(name))delete event.tools[name]
   }
   async admitModel(event:SessionModelRequest){
     const gate=this.gates.get(event.sessionID);if(!gate||this.closed)nativeUnavailable()
@@ -238,15 +312,16 @@ export class NativeInitialAdapter {
       return
     }
     const {d,selected}=this.model(gate)
-    if(event.kind!=="primary"||!same(event.model,selected)||(event.baseURL??null)!==d.baseURL)nativeUnavailable()
+    if(event.kind!=="primary"||!sameModel(event.model,selected)||(event.baseURL??null)!==d.baseURL)nativeUnavailable()
     await this.contextPolicy?.(event.sessionID,gate.original.profileJSON)
     await this.admitTool(event.sessionID)
   }
-  async admitTool(sessionID:string){
+  async admitTool(sessionID:string,toolName?:string){
     const gate=this.gates.get(sessionID)
     if(!gate||this.closed||gate.closed)nativeUnavailable()
     const complete=await this.packet(gate),frame=await this.frame(gate)
     if(this.gates.get(sessionID)!==gate||this.closed||gate.closed||!complete||!frame.active)nativeUnavailable()
+    if(toolName!==undefined&&parse(frame.assignmentJSON).payload.intendedExecution.template==="reviewer-v1"&&!reviewerToolAllowed(toolName))nativeUnavailable()
   }
   async awaitBoundary(sessionID:string,signal:AbortSignal){
     const gate=this.gates.get(sessionID);if(!gate||this.closed||signal.aborted)nativeUnavailable()
@@ -281,9 +356,8 @@ export class NativeInitialAdapter {
     const frame=await this.frame(gate)
     const witness=await this.witness(gate.envelope.intentId)
     if(!frame.active||!await this.packet(gate)||!witness?.heldJSON)nativeUnavailable()
-    const {permissions}=this.model(gate),a=parse(frame.assignmentJSON).payload
-    permissions.push({action:"external_directory",resource:"*",effect:"deny"},{action:"subagent",resource:"*",effect:"deny"})
-    if(a.intendedExecution.template==="reviewer-v1")for(const action of ["edit","shell","execute"])permissions.push({action,resource:"*",effect:"deny"})
+    const a=parse(frame.assignmentJSON).payload
+    const permissions=initialReleasePermissions(this.model(gate).permissions,a.intendedExecution.template)
     const expected=contextJSON({formatVersion:1,sessionID,digest:gate.original.digest,permissionsJSON:contextJSON(permissions)})
     const previous=await this.custody.read("initial-release",gate.envelope.intentId)
     if(previous!==undefined&&previous!==expected)nativeUnavailable()

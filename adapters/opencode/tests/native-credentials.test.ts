@@ -8,7 +8,7 @@ import { createHash } from "node:crypto"
 import type { Plugin } from "@opencode/plugin"
 import type { ToolContext } from "@opencode/plugin/promise/tool"
 import { NativeCredentialRegistry } from "../src/native-credentials.js"
-import { NativeRuntimeClient } from "../src/native-runtime-client.js"
+import { NativeRuntimeClient, NativeRuntimeReadHold } from "../src/native-runtime-client.js"
 import { LinuxNativeCustody } from "../src/native-runtime-custody.js"
 import { LinuxWorkRequestCustody } from "../src/connected-tools.js"
 import { ProtectedNativeBridge } from "../src/native-bridge.js"
@@ -18,6 +18,18 @@ import type { SessionApi } from "@opencode/client/promise/api"
 
 const id = "00000000-0000-0000-0000-000000000001"
 const other = "00000000-0000-0000-0000-000000000002"
+
+test("native read retry exhaustion preserves a sanitized admission hold and original request",async()=>{
+  const requests:string[]=[]
+  const client=new NativeRuntimeClient("http://127.0.0.1:12345",Buffer.alloc(32,2).toString("base64url"),id,id,id,id,
+    (async(_url,init)=>{requests.push(init!.body as string);return new Response("private-response-sentinel",{status:429})}) as typeof fetch)
+  await assert.rejects(client.identity(`wh1.${id}.${other}.${Buffer.alloc(32,3).toString("base64url")}`),error=>{
+    assert.ok(error instanceof NativeRuntimeReadHold);assert.equal(error.status,429)
+    assert.equal(error.message.includes("private-response-sentinel"),false);return true
+  })
+  assert.equal(requests.length,9,"One read plus the existing eight bounded retries; no widened budget")
+  assert.equal(new Set(requests).size,1,"Retry never invents another command/request payload")
+})
 
 test("real local credential transport with MOCK service policy/native session: prepare, bind, reopen, current identity loss", async () => {
   const configured = process.env.WRITHELM_NATIVE_TEST_ROOT
@@ -31,7 +43,7 @@ test("real local credential transport with MOCK service policy/native session: p
   const generation = "9223372036854775807"
   const bindingJSON = `{"family":"assignment-bindings","key":{"projectId":"${id}","assignmentId":"${id}","generation":${generation}},"digest":"${"a".repeat(64)}"}`
   const subject = { assignmentId: id, executionGeneration: generation, bindingJSON }
-  let deny = false, principal = id, nativeSessionId = "ses_fixture", location = work, pausing = false
+  let deny = false, readHold=false, principal = id, nativeSessionId = "ses_fixture", location = work, pausing = false
   let envelopeDigest: string | null = null
   let freshEnvelope = false
   const server = createServer(async (request, response) => {
@@ -40,6 +52,7 @@ test("real local credential transport with MOCK service policy/native session: p
     const input = JSON.parse(Buffer.concat(chunks).toString("utf8"))
     assert.equal(request.headers["x-writhelm-native-proof"], proof)
     const credentialId = request.headers.authorization!.split(".")[2]
+    if(readHold){response.writeHead(503);response.end("private-response-sentinel");return}
     if (deny) { response.writeHead(403); response.end("{}"); return }
     response.setHeader("Content-Type", "application/json")
     const controller = credentialId === other
@@ -77,6 +90,11 @@ test("real local credential transport with MOCK service policy/native session: p
     assert.equal((await registry.resolve(actual))?.scope, "assignment")
     const reopened = new NativeCredentialRegistry(ctx, custody, service, origin, requests, "a".repeat(64))
     assert.equal((await reopened.resolve(actual))?.scope, "assignment")
+    readHold=true
+    await assert.rejects(reopened.resolve(actual),error=>error instanceof NativeRuntimeReadHold&&error.status===503)
+    assert.equal(reopened.bound("ses_fixture"),true,"Transient read refusal is not an unbound session")
+    readHold=false
+    assert.equal((await reopened.resolve(actual))?.scope,"assignment")
     assert.deepEqual(await reopened.restoreAll(), ["ses_fixture"])
     assert.equal(reopened.managed("ses_fixture"), true)
     assert.equal(await reopened.resolve({ ...actual, sessionID: "ses_unbound" as ToolContext["sessionID"] }), undefined)
@@ -91,6 +109,24 @@ test("real local credential transport with MOCK service policy/native session: p
     assert.equal(await newIncarnation.resolve(actual), undefined) // no silent epoch adoption
     await registry.prepare(id, other)
     await registry.bind("ses_controller", other, work)
+    const originalController=await custody.read("session","ses_controller")
+    const controllerAfterRestart=new NativeCredentialRegistry(ctx,custody,service,origin,requests,"b".repeat(64))
+    const resumed=await controllerAfterRestart.inspect("ses_controller")
+    assert.equal(resumed?.principalId,id);assert.equal(resumed?.credentialId,other)
+    assert.equal(resumed?.scope,"controller");assert.equal(resumed?.epoch,"b".repeat(64))
+    assert.equal(await custody.read("session","ses_controller"),originalController) // historical epoch is not rewritten
+    assert.equal((await custody.scan("controller-connection")).length,1)
+    assert.deepEqual(await controllerAfterRestart.restoreAll(),[])
+    assert.equal(controllerAfterRestart.bound("ses_controller"),true)
+    assert.equal(controllerAfterRestart.bound("ses_fixture"),false)
+    await assert.rejects(controllerAfterRestart.inspect("ses_fixture")) // worker epoch is still strict
+    for(const failure of ["principal","revocation","location"]){
+      principal=failure==="principal"?other:id;deny=failure==="revocation";location=failure==="location"?area:work
+      const refused=new NativeCredentialRegistry(ctx,custody,service,origin,requests,"c".repeat(64))
+      await assert.rejects(refused.inspect("ses_controller"))
+    }
+    principal=id;deny=false;location=work
+    assert.equal((await custody.scan("controller-connection")).length,1) // rejected identities never publish a connection
     const bridge = new ProtectedNativeBridge(registry, custody, "ses_controller", id)
     assert.equal(bridge.managed("ses_fixture"), true) // freshly bound sessions are guarded before a first envelope
     const rawJSON = `{"assignment":{"assignmentId":"${id}","generation":${generation}},"binding":${bindingJSON},"nativeHostId":"${id}","nativeSessionId":"ses_fixture"}`

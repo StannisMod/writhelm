@@ -60,7 +60,12 @@ export class LinuxGitWitness {
   async publishCandidateOnce(source:string,candidateId:string,expected:GitObject,next:GitObject,signal:AbortSignal):Promise<void>{
     if(!uuidPattern.test(candidateId)||expected.algorithm!==next.algorithm||
       ![expected.hex,next.hex].every(hex=>new RegExp(`^[0-9a-f]{${expected.algorithm==="sha1"?40:64}}$`).test(hex)))nativeUnavailable()
-    await this.run(source,["update-ref",`refs/heads/writhelm-candidate-${candidateId}`,next.hex,expected.hex],signal)
+    const ref=`refs/heads/writhelm-candidate-${candidateId}`
+    const observed=(await this.run(source,["for-each-ref","--format=%(objectname)",ref],signal)).toString("utf8").trim()
+    // Fresh service-owned candidates have no branch yet. Empty successful enumeration, not an
+    // arbitrary Git error, establishes absence. CAS still excludes concurrent/foreign publication.
+    if(observed!==""&&observed!==expected.hex)nativeUnavailable()
+    await this.run(source,["update-ref",ref,next.hex,observed===""?"0".repeat(expected.hex.length):expected.hex],signal)
   }
   /** Explicit Linux immutable-object check adapter, not an arbitrary process/project-test runner.
    * Reads one blob from the selected candidate without checkout, filters or worktree writes. */
@@ -95,6 +100,29 @@ export class LinuxGitWitness {
     await this.qualifySource(source,snapshot,signal)
     const after=(await this.run(source,["show-ref","--verify","--hash",ref],signal)).toString("utf8").trim()
     if(after!==actual)nativeUnavailable()
+  }
+  /** Read-only original candidate publication witness; object existence alone is not retention. */
+  async verifyCandidateRef(source:string,candidateId:string,snapshot:GitSnapshot,signal:AbortSignal):Promise<void>{
+    if(!uuidPattern.test(candidateId)||snapshot.retainedLocatorId!==candidateId||!snapshot.commit)nativeUnavailable()
+    await this.qualifySource(source,snapshot,signal)
+    const ref=`refs/heads/writhelm-candidate-${candidateId}`
+    const actual=(await this.run(source,["for-each-ref","--format=%(objectname)",ref],signal)).toString("utf8").trim()
+    if(actual!==snapshot.commit.hex)nativeUnavailable()
+    await this.qualifySource(source,snapshot,signal)
+  }
+  async verifyReachableSnapshot(source:string,snapshot:GitSnapshot,anchor:GitSnapshot,signal:AbortSignal):Promise<void>{
+    if(!snapshot.commit||!anchor.commit||snapshot.repositoryId!==anchor.repositoryId)nativeUnavailable()
+    await this.qualifySource(source,snapshot,signal);await this.qualifySource(source,anchor,signal)
+    await this.run(source,["merge-base","--is-ancestor",snapshot.commit.hex,anchor.commit.hex],signal)
+  }
+  /** Observe immutable objects, not an executor's mutable worktree or a writer-fencing claim. */
+  async observeRetainedDiff(source:string,base:GitSnapshot,result:GitSnapshot,signal:AbortSignal){
+    await this.verifyRetainedRef(source,result,signal)
+    await this.verifyReachableSnapshot(source,base,result,signal)
+    if(!base.commit||!result.commit)nativeUnavailable()
+    const bytes=await this.run(source,["diff","--no-ext-diff","--no-textconv","--no-color","--binary","--full-index",base.commit.hex,result.commit.hex,"--"],signal)
+    await this.verifyRetainedRef(source,result,signal)
+    return {sha256:createHash("sha256").update(bytes).digest("hex"),byteLength:bytes.length}
   }
   /** Low-level, uninstalled one-shot effect. The caller MUST first durably record the exact
    * authorized operation and MUST NOT retry this effect after dispatch, including on error or

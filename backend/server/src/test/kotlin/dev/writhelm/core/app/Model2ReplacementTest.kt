@@ -33,7 +33,7 @@ class Model2ReplacementTest {
             ReinspectedIsolation(Utf8Content.fromBytes(Files.readAllBytes(artifact)),proof,oldArea,planned,
                 mapOf(f.resource to oldArea,newResource to if(alias)oldArea else planned))
         })
-        val delegate=H1RuntimeFacts { state,_ ->H1ObservedFacts(state.basis,f.runtimeFacts,f.observations.qualifiedProfiles) }
+        val delegate=H1RuntimeFacts { state,command ->H1ObservedFacts(state.basis,f.runtimeFacts,f.observations.qualifiedProfiles,NativeExecutionAdmission.expected(state,command)) }
         val options=H1Options(ReplacementRuntimeFacts(delegate,custody,f.controller))
         var app=H1Application.initialize(path,storeId,H1Genesis(f.base.core,f.base.authority.records(),f.base.work),options)
         try {

@@ -67,7 +67,7 @@ export class NativeContextExtraction {
   assertProfile(profileRecordJSON: string): void {
     const record = exactJSON(profileRecordJSON, nativeUnavailable), p = record.payload
     if (record.family !== "profiles" || !equal(record.key, exactJSON(this.#profile.profileJSON, nativeUnavailable)) || !p
-      || p.qualification !== "qualified" || p.route !== this.#profile.routeID
+      || p.route !== this.#profile.routeID
       || p.effort !== this.#profile.nativeOptions[this.#profile.effortOptionKey]
       || p.model?.providerId !== this.#profile.model.providerID || p.model?.modelId !== this.#profile.model.id
       || (p.model?.variant ?? undefined) !== this.#profile.model.variant) nativeUnavailable()

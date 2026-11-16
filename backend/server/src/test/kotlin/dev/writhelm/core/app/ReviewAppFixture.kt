@@ -82,13 +82,14 @@ internal class ReviewAppFixture {
         install(key(plannerKey) { bridge.work(base,bind,it,H1ObservedFacts(head,observations.facts.copy(native=mapOf(intent to prepare)),observations.qualifiedProfiles)) })
         val startId=id(111);val startCorrelation=id(112)
         val request=WorkCommand(id(113),project,CRequestNativeTransitionOperation(CRequestNativeTransition(assignment,2,startId,startCorrelation,"start",null,emptyList())))
-        install(key(plannerKey) { bridge.work(base,request,it,observations) })
+        install(key(plannerKey) { bridge.work(base,request,it,H1ObservedFacts(head,observations.facts,emptySet(),NativeExecutionAdmission.expected(base,request))) })
         val start=WorkNativeObservation(subject,startId,startCorrelation,"start","confirmed",listOf(source),execution,false,"bound")
         val observe=WorkCommand(id(114),project,CObserveNativeTransitionOperation(CObserveNativeTransition(assignment,3,startId,0,"confirmed",listOf(source),emptyList())))
         install(key(plannerKey) { bridge.work(base,observe,it,H1ObservedFacts(head,observations.facts.copy(native=mapOf(startId to start)),observations.qualifiedProfiles)) })
     }
     fun publishedActiveApp(onCapture: ()->Unit={},publication: PublicationDriver=PublicationDriver.Native): H1Application {
-        val options=H1Options(H1RuntimeFacts { state,_ -> onCapture();H1ObservedFacts(state.basis,runtimeFacts,observations.qualifiedProfiles) },AppOptions(admission=AdmissionPolicy(formatVersion=2),publication=publication))
+        val options=H1Options(H1RuntimeFacts { state,command -> onCapture();H1ObservedFacts(state.basis,runtimeFacts,observations.qualifiedProfiles,
+            NativeExecutionAdmission.expected(state,command)) },AppOptions(admission=AdmissionPolicy(formatVersion=2),publication=publication))
         val app=H1Application.initialize(directory(),storeId,H1Genesis(base.core,base.authority.records(),base.work),options)
         fun publish(command: WorkCommand) {
             val result=assertIs<CommandResult.Settled>(app.execute(plannerToken,codec.encodeCommand(command)))

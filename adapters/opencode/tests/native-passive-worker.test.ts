@@ -169,7 +169,7 @@ async function fixture(){
   const frame={assignmentJSON:JSON.stringify(assignment),intentJSON:JSON.stringify({family:"native-intents",key:assignment.payload.currentIntent,
     payload:{assignment:{assignmentId:id(8),generation:0},operation:"prepare",outcome:"pending",expectedSession:intended.nativeSessionId,expectedWorkspace:id(10)}}),
     taskJSON:JSON.stringify({family:"task-revisions",key,payload:{state:"executable",base:{code:[snapshot]}}}),
-    profileJSON:JSON.stringify({family:"profiles",key:profileKey,payload:{qualification:"qualified",model:{providerId:"MOCK",modelId:"no-call",variant:null}}}),
+    profileJSON:JSON.stringify({family:"profiles",key:profileKey,payload:{qualification:"unqualified",qualificationEvidence:[],model:{providerId:"MOCK",modelId:"no-call",variant:null}}}),
     manifestJSON:JSON.stringify({family:"input-manifests",key:manifestKey})}
   let readable=true,lost=false,creates=0,sessions=0,startup:string|undefined
   const inventory:Array<{directory:string;strategy:string}>=[]

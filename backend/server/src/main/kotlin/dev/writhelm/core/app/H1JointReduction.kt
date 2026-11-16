@@ -317,6 +317,25 @@ internal class H1JointReduction {
             is Auth3Transition.Rejected -> H1JointCandidate(base,base.core,base.authority,base.work,Evaluation(LogicalOutcome.Rejected("auth",transition.problem.name),emptyList()))
             is Auth3Transition.Success -> {
                 var core=base.core;var work=base.work;val changes=ArrayList<RecordChange>()
+                (command.payload as? Auth3Payload.RegisterProject)?.let { enrollment ->
+                    val snapshot=core.snapshot(8192);val owner=transition.candidate.projects.getValue(enrollment.newProjectId).ownerPrincipalId
+                    integrity(snapshot.grants.none { it.projectId==enrollment.newProjectId })
+                    val capabilities=Capability.entries.toSet()
+                    core=withGrants(snapshot,snapshot.grants+Grant(owner,enrollment.newProjectId,capabilities))
+                    val grant=obj("principalId" to uuid(owner),"projectId" to uuid(enrollment.newProjectId))
+                    changes+=RecordChange(RecordKey("core","grants",grant),StrictJson.encode(CoreRecordCodec.envelope("grants",grant,
+                        obj("capabilities" to JArray(capabilities.map { str(it.name) }.sortedBy { it.string() })))))
+                    work=frozenMap(work+(enrollment.newProjectId to WorkState.empty(enrollment.newProjectId,modelVersion=work.values.firstOrNull()?.modelVersion ?: 2)))
+                }
+                (command.payload as? Auth3Payload.RegisterController)?.let { enrollment ->
+                    val snapshot=core.snapshot(8192)
+                    integrity(snapshot.grants.none { it.principalId==enrollment.principalId })
+                    val capabilities=setOf(Capability.READ,Capability.PLAN,Capability.PROPOSE)
+                    core=withGrants(snapshot,snapshot.grants+Grant(enrollment.principalId,command.projectId,capabilities))
+                    val grant=obj("principalId" to uuid(enrollment.principalId),"projectId" to uuid(command.projectId))
+                    changes+=RecordChange(RecordKey("core","grants",grant),StrictJson.encode(CoreRecordCodec.envelope("grants",grant,
+                        obj("capabilities" to JArray(capabilities.map { str(it.name) }.sortedBy { it.string() })))))
+                }
                 transition.enrollmentEffects?.let { enrollment ->
                     integrity(command.payload is Auth3Payload.RegisterDelegation)
                     val e=enrollment.enrollment;val snapshot=core.snapshot(8192)
@@ -366,7 +385,9 @@ internal class H1JointReduction {
             is CRequestNativeTransitionOperation -> if(op.value.transition in setOf("start","resume"))state.assignment(op.value.assignmentId).profile else null
             else -> null
         }
-        if(profile!=null && state.reference(WorkFamily.PROFILES,profile) !in observations.qualifiedProfiles)
+        val executionRequested=(command.operation as? CRequestNativeTransitionOperation)?.value?.transition in setOf("start","resume")
+        if(executionRequested && (observations.executionAdmission==null ||
+            observations.executionAdmission!=NativeExecutionAdmission.expected(base,command)))
             return H1JointCandidate(base,base.core,base.authority,base.work,Evaluation(LogicalOutcome.Rejected("work","NOT_READY"),emptyList()))
         // Knowledge facts come from the actual core at H, not the adapter's proposed grant/source sets.
         val snapshot=base.core.snapshot(8192);val catalog=RevisionCatalog(snapshot.revisions)
@@ -524,7 +545,8 @@ internal class H1JointReduction {
     private fun withGrants(s: WorkflowSnapshot,grants: List<Grant>)=ApprovalWorkflow.restoreValidated(
         WorkflowSnapshot(s.revisions,grants,s.proposals,s.requests,s.resolutions,s.approvals,s.continuity,s.assessments,s.manifests,s.heads,s.generations,s.blocked))
 }
-internal class H1ObservedFacts(val basis: GitOid,facts: WorkExternalFacts,qualifiedProfiles: Set<WorkReference>) {
+internal class H1ObservedFacts(val basis: GitOid,facts: WorkExternalFacts,qualifiedProfiles: Set<WorkReference>,
+    val executionAdmission:NativeExecutionAdmission?=null) {
     init {
         var entries=qualifiedProfiles.size.toLong()+facts.knowledgeSources.size+facts.approvedDecisions.size+facts.retainedSnapshots.size+
             facts.native.size+facts.sourceCuts.size+facts.targets.size+facts.completedAssignments.size+facts.isolatedAssignments.size+

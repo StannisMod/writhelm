@@ -94,8 +94,12 @@ internal class H1BoundaryValidator(private val cache: H1SnapshotCache) {
     }
     private fun validateAuthPreservation(h: H1BoundState,c: H1BoundState,r: Receipt) {
         val a=h.authority;val b=c.authority
-        integrity(a.projects==b.projects && a.controllers==b.controllers && b.principals.containsAll(a.principals))
-        if(r.identity.operation!="register_delegation")integrity(a.principals==b.principals && a.guards.keys==b.guards.keys && a.delegations.keys==b.delegations.keys)
+        if(r.identity.operation!="register_project")integrity(a.projects==b.projects)
+        else integrity(b.projects.entries.containsAll(a.projects.entries))
+        integrity(b.principals.containsAll(a.principals))
+        if(r.identity.operation!="register_controller")integrity(a.controllers==b.controllers)
+        else integrity(b.controllers.entries.containsAll(a.controllers.entries))
+        if(r.identity.operation !in setOf("register_project","register_controller","register_delegation"))integrity(a.principals==b.principals && a.guards.keys==b.guards.keys && a.delegations.keys==b.delegations.keys)
         a.credentials.forEach { (id,old) ->
             val next=b.credentials[id] ?: fail(StoreProblem.INTEGRITY)
             integrity(old.scope==next.scope)
@@ -126,6 +130,48 @@ internal class H1BoundaryValidator(private val cache: H1SnapshotCache) {
             return
         }
         val success=r.outcome as? LogicalOutcome.Success
+        if(op=="register_project") {
+            integrity(actor.scope==CredentialScope.Project && a.owner(actor,project))
+            if(success!=null) {
+                val target=uuid(success.result);val principal=actor.credential.principalId
+                val enrollment=Enrollment(principal,target)
+                integrity(target !in a.projects && c.authority.projects.keys==a.projects.keys+target && c.authority.principals==a.principals)
+                integrity(c.authority.projects[target]?.ownerPrincipalId==principal && c.authority.guards.keys==a.guards.keys+enrollment && c.authority.guards[enrollment]==0L)
+                val keys=c.authority.credentials.filterKeys { it !in a.credentials }
+                integrity(keys.size==1)
+                val key=keys.values.single()
+                integrity(key.scope==CredentialScope.Project && key.credential.projectId==target && key.credential.principalId==principal &&
+                    key.credential.status==CredentialStatus.ACTIVE && key.credential.generation==0L && key.credential.replacedBy==null)
+                integrity(Auth3CommandCodec().fingerprint(Auth3Command(r.identity.requestKey,project,
+                    Auth3Payload.RegisterProject(target,key.credential.id,key.credential.verifierDigest))).hex==r.fingerprint)
+                integrity(c.authority.policy.snapshotGrants().single { it.principalId==principal && it.projectId==target }.capabilities==dev.writhelm.core.workflow.Capability.entries.toSet())
+                integrity(c.authority.workGrants[enrollment]?.permissions==WorkPermission.entries.toSet() && c.authority.workGrants[enrollment]?.generation==0L)
+                integrity(c.authority.controllers==a.controllers && c.authority.delegations==a.delegations)
+                integrity(c.work.getValue(target).records.isEmpty())
+            }
+            return
+        }
+        if(op=="register_controller") {
+            integrity(actor.scope==CredentialScope.Project && a.owner(actor,project))
+            if(success!=null) {
+                val binding=c.authority.controllers[uuid(success.result)] ?: fail(StoreProblem.INTEGRITY)
+                val principal=binding.principalId;val enrollment=dev.writhelm.core.auth.Enrollment(principal,project)
+                integrity(binding.controllerId !in a.controllers && principal !in a.principals && binding.projectId==project)
+                integrity(c.authority.controllers.keys==a.controllers.keys+binding.controllerId && c.authority.principals==a.principals+principal)
+                integrity(c.authority.guards.keys==a.guards.keys+enrollment && c.authority.guards[enrollment]==0L)
+                val keys=c.authority.credentials.filterKeys { it !in a.credentials }
+                integrity(keys.size==1 && keys.values.single().let { it.scope==CredentialScope.Controller(binding.controllerId) &&
+                    it.credential.principalId==principal && it.credential.projectId==project && it.credential.status==CredentialStatus.ACTIVE && it.credential.generation==0L })
+                val key=keys.values.single().credential
+                integrity(Auth3CommandCodec().fingerprint(Auth3Command(r.identity.requestKey,project,
+                    Auth3Payload.RegisterController(binding.controllerId,principal,key.id,key.verifierDigest))).hex==r.fingerprint)
+                integrity(c.authority.policy.snapshotGrants().single { it.principalId==principal && it.projectId==project }.capabilities==
+                    setOf(dev.writhelm.core.workflow.Capability.READ,dev.writhelm.core.workflow.Capability.PLAN,dev.writhelm.core.workflow.Capability.PROPOSE))
+                integrity(c.authority.workGrants[enrollment]?.permissions==WorkPermission.entries.toSet() && c.authority.workGrants[enrollment]?.generation==0L)
+                integrity(c.authority.delegations==a.delegations)
+            }
+            return
+        }
         if(op=="replace_work_grants") { integrity(a.owner(actor,project));return }
         if(op=="register_delegation") {
             integrity(a.workAllows(actor,project,WorkPermission.TASK_DISPATCH))
@@ -367,7 +413,7 @@ internal class H1BoundaryValidator(private val cache: H1SnapshotCache) {
         val profile=(state.record(WorkFamily.PROFILES,a.profile).payload as WProfilesPayload).value
         integrity(task.state=="executable" && task.unresolved.isEmpty() && task.executionProfile==a.profile)
         integrity(manifest.task==a.task && manifest.base==task.base && manifest.knownGaps.isEmpty())
-        integrity(profile.qualification=="qualified" && profile.qualificationEvidence.isNotEmpty())
+        integrity(profile.outputReserveTokens+profile.toolReserveTokens+profile.compactionReserveTokens<profile.contextTokens)
         integrity(task.approvedDesign.all { h.core.validationDecisionApproved(it) })
         validateDelegation(h,a)
     }

@@ -8,6 +8,30 @@ import java.security.MessageDigest
 import java.util.Base64
 import java.util.UUID
 
+/** One shared service, separately bound native controller endpoints. Startup/broker code registers
+ * endpoints; no request can supply a controller selector or install/replace a peer. Ambiguous proof
+ * matches deny rather than picking the last registered controller. */
+internal class NativeRuntimeEndpointRouter:AutoCloseable {
+    private val endpoints=linkedMapOf<UUID,NativeRuntimeEndpoint>()
+    private var closed=false
+    @Synchronized fun register(controller:UUID,endpoint:NativeRuntimeEndpoint) {
+        check(!closed)
+        val previous=endpoints[controller]
+        require(previous==null || previous===endpoint) { "Controller endpoint already registered" }
+        require(previous!=null || endpoints.size<256) { "Native controller capacity unavailable" }
+        endpoints[controller]=endpoint
+    }
+    @Synchronized fun select(proof:String?):NativeRuntimeEndpoint? {
+        if(closed)return null
+        return endpoints.values.filter {it.accepts(proof)}.singleOrNull()
+    }
+    @Synchronized override fun close() {
+        closed=true
+        endpoints.values.forEach {it.close()}
+        endpoints.clear()
+    }
+}
+
 /** Optional private host transport, not a model tool or canonical command/read version.
  * Both the separately retained native-host proof AND an actual scoped service credential are
  * required. No caller-selected actor or authority administration. The optional connect callback
@@ -60,7 +84,7 @@ internal class NativeRuntimeEndpoint(private val app: H1Application,private val 
             else JsonLimits(bytes=16384,stringBytes=8192,collection=32,tokens=256)) as? JObject
             ?: throw ServiceFault("INVALID_INPUT",400)
         val operation=decoded.entries["operation"]?.string() ?: throw ServiceFault("INVALID_INPUT",400)
-        if(candidate && operation !in setOf("candidate-assembly-permit","candidate-test-plan","candidate-test-permit","candidate-delivery"))throw ServiceFault("INVALID_INPUT",400)
+        if(candidate && operation !in setOf("candidate-assembly-permit","candidate-test-plan","candidate-test-permit","candidate-delivery","candidate-review-ticket","candidate-review-report","candidate-review-status","candidate-review-preparation"))throw ServiceFault("INVALID_INPUT",400)
         val fields=when(operation) {
             "identity","source-identity","worker-context","connect" -> decoded.fields("formatVersion","operation","projectId")
             "controller-context" -> decoded.fields("formatVersion","operation","projectId","profileJSON")
@@ -68,6 +92,10 @@ internal class NativeRuntimeEndpoint(private val app: H1Application,private val 
             "candidate-assembly-permit" -> decoded.fields("formatVersion","operation","projectId","requestJSON")
             "candidate-test-plan" -> decoded.fields("formatVersion","operation","projectId","planRefJSON")
             "candidate-delivery" -> decoded.fields("formatVersion","operation","projectId","planRefJSON")
+            "candidate-review-ticket" -> decoded.fields("formatVersion","operation","projectId","ticketJSON")
+            "candidate-review-report" -> decoded.fields("formatVersion","operation","projectId","reviewId","reportRefJSON")
+            "candidate-review-status" -> decoded.fields("formatVersion","operation","projectId","reviewId")
+            "candidate-review-preparation" -> decoded.fields("formatVersion","operation","projectId","planRefJSON","assemblyId","checkPlanId")
             "candidate-test-permit" -> decoded.fields("formatVersion","operation","projectId","planRefJSON","assemblyJSON","jobJSON")
             "dispatch-materialization" -> decoded.fields("formatVersion","operation","projectId","planId","taskJSON","newTaskJSON","verificationPlanJSON","manifestJSON","taskRequestId","manifestRequestId")
             "reservation-retry" -> decoded.fields("formatVersion","operation","projectId","reservationJSON")
@@ -85,6 +113,16 @@ internal class NativeRuntimeEndpoint(private val app: H1Application,private val 
             if(operation=="candidate-delivery")app.nativeCandidateDelivery(token,project,controller,host,plan)
             else if(operation=="candidate-test-plan")app.nativeCandidateTestPlan(token,project,controller,host,plan)
             else app.nativeCandidateTestPermit(token,project,controller,host,fields.getValue("assemblyJSON").string(),plan,fields.getValue("jobJSON").string())
+        } else if(operation=="candidate-review-preparation") {
+            app.nativeCandidateReviewPreparation(token,project,controller,host,WorkIdentityCodec().decodeReference(fields.getValue("planRefJSON").string().toByteArray()),
+                uuid(fields.getValue("assemblyId")),uuid(fields.getValue("checkPlanId")))
+        } else if(operation=="candidate-review-status") {
+            app.nativeCandidateReviewStatus(token,project,controller,host,uuid(fields.getValue("reviewId")))
+        } else if(operation=="candidate-review-report") {
+            app.nativeCandidateReviewReport(token,project,controller,host,uuid(fields.getValue("reviewId")),
+                WorkIdentityCodec().decodeReference(fields.getValue("reportRefJSON").string().toByteArray()))
+        } else if(operation=="candidate-review-ticket") {
+            app.nativeIssueCandidateReviewTicket(token,project,controller,host,fields.getValue("ticketJSON").string())
         } else if(operation=="candidate-assembly-permit") {
             app.nativeCandidateAssemblyPermit(token,project,controller,host,fields.getValue("requestJSON").string())
         } else if(operation=="connect") {

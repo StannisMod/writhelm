@@ -115,11 +115,21 @@ writer fencing. Connected-work synthetic continuation retains its separate proto
 the same worker's admission when its actual continuation gate exists.
 
 On a same-incarnation plugin reload, bounded protected initial-original inventory rebuilds closed
-gates. Only the exact still-bound generation, unchanged qualified profile/packet, original held
+gates. Only the exact still-bound generation, unchanged profile/deployment/packet, original held
 boundary and current canonical ACTIVE may restore admission; this sends no prompt or canonical
 start/observe command. Pending, revoked, changed or another-incarnation receivers stay held. Invalid
 protected original records are not treated as absence. New-process incarnation adoption and actual
 writer recovery remain separate unimplemented/unqualified gates, not implied by plugin reload.
+
+EX-09 runtime admission does not consume a historical campaign registry. Passive preparation may
+use an `unqualified` profile while keeping the receiver deny-all and issuing no model request.
+The private read-only `execution-admission` observation binds the service-selected profile and
+canonical receiver to the connected epoch, protected deployment, actual native model and applied
+permissions. Initial start requires the fresh passive surface; active reads/retention require the
+original held lifecycle and matching immutable packet/role restrictions. Missing/changed facts hold,
+never rewrite permissions or retry an uncertain effect. This initial adapter refuses resume rather
+than treating a paused/unknown operation as a new initial start. Existing native prompt, context,
+model and execute-before hooks still enforce current service authority at the actual effect boundary.
 
 Native permission release retains its exact original target before the first update. Reconciliation
 of the same target does not post another update. An observed changed permission set, including a
@@ -143,7 +153,7 @@ plugin alongside the Promise primary entrypoint. A governed deployment must expl
 enabling only the primary does not authorize generic generation/compaction. The companion reads
 the same protected bootstrap root, registers native hooks in the host lifetime Scope and starts no
 service, model or second compaction scheduler. Extraction calls remain direct host Effects, never
-`runPromise` nested inside a Promise hook. Missing/unqualified profiles hold.
+`runPromise` nested inside a Promise hook. Missing or mismatched deployment/profile configuration holds.
 
 For a worker, its current canonical profile key selects the protected `execution-profile` record.
 For the controller, `controller-context/current` contains `{formatVersion:1,profileKeyJSON,

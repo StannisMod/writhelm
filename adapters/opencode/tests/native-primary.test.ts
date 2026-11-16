@@ -4,15 +4,368 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import * as fs from "node:fs/promises"
 import path from "node:path"
+import { hostname } from "node:os"
+import { createHash } from "node:crypto"
+import { linuxHostEpoch } from "../src/native-host-identity.js"
 import type { Plugin } from "@opencode/plugin"
-import { registerPrimaryGovernor, primaryInstructions } from "../src/native-primary.js"
+import { registerPrimaryGovernor, primaryInstructions, registerAutomaticPrimaryGovernor } from "../src/native-primary.js"
 import { NativeCredentialRegistry } from "../src/native-credentials.js"
 import { LinuxNativeCustody } from "../src/native-runtime-custody.js"
 import { boundedPlanningKnowledgeChannel } from "../src/connected-tools.js"
 import primaryServer from "../src/primary-server.js"
-import { installFreshPrimaryPolicy, primaryPermissionRules, requirePrimaryPolicy } from "../src/primary-policy.js"
+import { installFreshPrimaryPolicy, primaryPermissionRules, primaryPolicyStatements, requirePrimaryPolicy } from "../src/primary-policy.js"
+import { AutomaticEnrollmentClient, provisionAutomaticPrimary } from "../src/primary-bootstrap.js"
+import { NativeSessionToolRouter } from "../src/native-runtime.js"
+import { registerAutomaticClientUI } from "../src/primary-tui.js"
 
 const id="00000000-0000-0000-0000-000000000001"
+test("native UI persists ordinary sessions and recovers an uncertain creation without a second create",async()=>{
+  const state:{pending:null|{sessionID:string;directory:string}}={pending:null},sessions=new Map<string,any>()
+  const created:string[]=[],lookedUp:string[]=[],routes:unknown[]=[],commands:any[]=[]
+  let loaded=false,lost=true
+  const context={app:{version:"2.2.5"},location:{directory:"/synthetic/ui-project"},
+    storage:{memory:()=>[state,(mutate:(draft:typeof state)=>void)=>mutate(state)],store:()=>[{pending:null},()=>{}]},
+    data:{location:{agent:{sync:async()=>{loaded=true}}}},
+    client:{rpc:()=>({createController:async({sessionID}:any,options:any)=>{
+      if(!sessions.has(sessionID))await (context as any).client.session.create({id:sessionID,location:options.location})
+      return {kind:"governed-planning",role:"controller",sessionID,projectId:id}
+    },admitController:async({sessionID}:any)=>({kind:"governed-planning",role:"controller",sessionID,projectId:id})}),session:{create:async(input:any)=>{
+      assert.ok(loaded);assert.deepEqual(Object.keys(input).sort(),["id","location"])
+      created.push(input.id);const session={id:input.id,location:input.location};sessions.set(input.id,session)
+      if(lost)throw Error("MOCK lost reply after native creation")
+      return session
+    },get:async({sessionID}:any)=>{lookedUp.push(sessionID);if(!sessions.has(sessionID))throw Error("MOCK unavailable native session");return sessions.get(sessionID)}}},
+    keymap:{layer:(factory:()=>any)=>commands.push(factory())},
+    ui:{router:{current:()=>({type:"home"}),navigate:(route:unknown)=>routes.push(route)},toast:{show:()=>{}}},
+  } as unknown as Parameters<typeof registerAutomaticClientUI>[0]
+  const first=registerAutomaticClientUI(context,()=>{})
+  await assert.rejects(first.create());assert.equal(created.length,1);assert.ok(state.pending)
+  first.close();lost=false
+  const reopened=registerAutomaticClientUI(context,()=>{})
+  await reopened.create()
+  assert.equal(created.length,1);assert.deepEqual(lookedUp,[created[0]])
+  assert.deepEqual(routes,[{type:"session",sessionID:created[0]}]);assert.equal(state.pending,null)
+  assert.equal(commands[0].commands[0].id,"session.new")
+  assert.equal(commands[0].commands[0].bind,"<leader>n")
+  await reopened.create();assert.equal(created.length,2);assert.notEqual(created[0],created[1])
+  reopened.close();await assert.rejects(reopened.create())
+})
+test("unresolved UI creation is retained and held rather than silently minting another session",async()=>{
+  const state={pending:{sessionID:"ses_retained",directory:"/synthetic/ui-project"}}
+  let creates=0,navigations=0
+  const context={app:{version:"2.2.5"},location:{directory:"/synthetic/ui-project"},
+    storage:{memory:()=>[state,()=>{}],store:()=>[{pending:null},()=>{}]},data:{location:{agent:{sync:async()=>{}}}},
+    client:{rpc:()=>({createController:async()=>{throw Error("MOCK unresolved original server creation")}}),session:{get:async()=>{throw Error("MOCK unavailable")},create:async()=>{creates++;throw Error("must not recreate")}}},
+    keymap:{layer:()=>{}},ui:{router:{current:()=>({type:"home"}),navigate:()=>{navigations++}},toast:{show:()=>{}}},
+  } as unknown as Parameters<typeof registerAutomaticClientUI>[0]
+  const lifecycle=registerAutomaticClientUI(context,()=>{})
+  await assert.rejects(lifecycle.create());await assert.rejects(lifecycle.create())
+  assert.equal(creates,0);assert.equal(navigations,0);assert.equal(state.pending.sessionID,"ses_retained")
+  lifecycle.close()
+})
+test("UI New session uses the active native location and checks but never claims the legacy pending store",async()=>{
+  const state:{pending:null|{sessionID:string;directory:string}}={pending:null}
+  const active={directory:"/synthetic/second-project"};let key="",created=0
+  const context={app:{version:"2.2.5"},location:{directory:"/synthetic/first-project"},
+    storage:{memory:()=>[state,(mutate:(draft:typeof state)=>void)=>mutate(state)],store:(selected:string)=>{key=selected;return [{pending:null},()=>{}]}},
+    data:{location:{agent:{sync:async(location:unknown)=>assert.deepEqual(location,active)}}},
+    client:{rpc:()=>({createController:async({sessionID}:any,options:any)=>{
+      await (context as any).client.session.create({id:sessionID,location:options.location})
+      return {kind:"governed-planning",role:"controller",sessionID,projectId:id}
+    },admitController:async({sessionID}:any)=>({kind:"governed-planning",role:"controller",sessionID,projectId:id})}),session:{get:async({sessionID}:any)=>({id:sessionID,location:active}),create:async(input:any)=>{
+      assert.deepEqual(input.location,active);created++;return {id:input.id,location:active}
+    }}},keymap:{layer:()=>{}},
+    ui:{router:{current:()=>({type:"session",sessionID:"ses_active"}),navigate:()=>{}},toast:{show:()=>{}}},
+  } as unknown as Parameters<typeof registerAutomaticClientUI>[0]
+  const lifecycle=registerAutomaticClientUI(context,()=>{})
+  assert.equal(created,0);await lifecycle.create();assert.equal(created,1)
+  assert.equal(key,"automatic-session-intent-v1-"+createHash("sha256").update(active.directory).digest("hex"))
+  lifecycle.close()
+})
+test("UI waits for current server admission and holds invalid replies without recreating native sessions",async()=>{
+  for(const failure of ["unavailable","worker","wrong-session"]){
+    const state:{pending:null|{sessionID:string;directory:string}}={pending:null}
+    let creates=0,navigations=0,release!:()=>void,command!:()=>Promise<void>
+    const barrier=new Promise<void>(resolve=>{release=resolve}),holds:string[]=[]
+    const context={app:{version:"2.2.5"},location:{directory:"/synthetic/admission"},
+      storage:{memory:()=>[state,(mutate:(draft:typeof state)=>void)=>mutate(state)],store:()=>[{pending:null},()=>{}]},
+      data:{location:{agent:{sync:async()=>{}}}},
+      client:{session:{create:async(input:any)=>{creates++;return {id:input.id,location:input.location}},
+        get:async()=>({id:state.pending!.sessionID,location:{directory:state.pending!.directory}})},
+        rpc:()=>({createController:async({sessionID}:any)=>{
+          if(!creates)creates++
+          return {kind:"governed-planning",role:"controller",sessionID,projectId:id}
+        },admitController:async({sessionID}:any)=>{
+          await barrier
+          if(failure==="unavailable")throw Error("MOCK missing RPC")
+          return {kind:"governed-planning",role:failure==="worker"?"worker":"controller",
+            sessionID:failure==="wrong-session"?"ses_other":sessionID,projectId:id}
+        }})},keymap:{layer:(factory:()=>any)=>{command=factory().commands[0].run}},
+      ui:{router:{current:()=>({type:"home"}),navigate:()=>{navigations++}}},
+    } as unknown as Parameters<typeof registerAutomaticClientUI>[0]
+    const lifecycle=registerAutomaticClientUI(context,stage=>{holds.push(stage)})
+    while(!state.pending)await Promise.resolve()
+    const queued=command()
+    assert.equal(navigations,0);release();await lifecycle.initial;await queued
+    assert.deepEqual(holds,["server-admission"]);assert.ok(state.pending)
+    await assert.rejects(lifecycle.create());assert.equal(creates,1);assert.equal(navigations,0)
+    lifecycle.close()
+  }
+})
+test("restored UI routes revalidate native identity and current authority without creating sessions",async()=>{
+  for(const failure of ["none","identity","authority"]){
+    let release!:()=>void,finished=false,creates=0,stores=0,navigations=0
+    const barrier=new Promise<void>(resolve=>{release=resolve}),holds:string[]=[],admissions:string[]=[]
+    const location={directory:"/synthetic/restored"}
+    const context={app:{version:"2.2.5"},storage:{store:()=>{stores++;throw Error("must not create intent")}},
+      client:{session:{get:async()=>({id:failure==="identity"?"ses_foreign":"ses_restored",location}),
+        create:async()=>{creates++;throw Error("must not create")}},
+        rpc:()=>({admitController:async({sessionID}:any,options:any)=>{
+          admissions.push(sessionID);assert.deepEqual(options.location,location);await barrier
+          if(failure==="authority")throw Error("MOCK revoked authority")
+          return {kind:"governed-planning",role:"controller",sessionID,projectId:id}
+        }})},keymap:{layer:()=>{}},
+      ui:{router:{current:()=>({type:"session",sessionID:"ses_restored"}),navigate:()=>{navigations++}}},
+    } as unknown as Parameters<typeof registerAutomaticClientUI>[0]
+    const lifecycle=registerAutomaticClientUI(context,stage=>{holds.push(stage)})
+    void lifecycle.initial.then(()=>{finished=true})
+    await Promise.resolve();await Promise.resolve()
+    if(failure!=="identity")assert.equal(finished,false)
+    release();await lifecycle.initial
+    assert.equal(creates,0);assert.equal(stores,0);assert.equal(navigations,0)
+    assert.deepEqual(admissions,failure==="identity"?[]:["ses_restored"])
+    assert.deepEqual(holds,failure==="none"?[]:[failure==="identity"?"restored-native-session":"server-admission"])
+    lifecycle.close()
+  }
+})
+test("New session received during initial admission creates a distinct session after admission completes",async()=>{
+  const state:{pending:null|{sessionID:string;directory:string}}={pending:null}
+  let release!:()=>void,command!:()=>Promise<void>,creates=0,admissions=0
+  const barrier=new Promise<void>(resolve=>{release=resolve}),routes:string[]=[]
+  const location={directory:"/synthetic/early-new"}
+  const context={app:{version:"2.2.5"},location,
+    storage:{memory:()=>[state,(mutate:(draft:typeof state)=>void)=>mutate(state)],store:()=>[{pending:null},()=>{}]},
+    data:{location:{agent:{sync:async()=>{}}}},
+    client:{session:{get:async({sessionID}:any)=>({id:sessionID,location}),create:async(input:any)=>{creates++;return {id:input.id,location}}},
+      rpc:()=>({createController:async({sessionID}:any)=>{creates++;return {kind:"governed-planning",role:"controller",sessionID,projectId:id}},admitController:async({sessionID}:any)=>{
+        if(++admissions===1)await barrier
+        return {kind:"governed-planning",role:"controller",sessionID,projectId:id}
+      }})},keymap:{layer:(factory:()=>any)=>{command=factory().commands[0].run}},
+    ui:{router:{current:()=>({type:"home"}),navigate:(route:any)=>{routes.push(route.sessionID)}}},
+  } as unknown as Parameters<typeof registerAutomaticClientUI>[0]
+  const lifecycle=registerAutomaticClientUI(context,()=>assert.fail("unexpected hold"))
+  while(admissions===0)await Promise.resolve()
+  const requested=command();assert.equal(creates,1);release();await requested
+  assert.equal(creates,2);assert.equal(routes.length,2);assert.notEqual(routes[0],routes[1])
+  lifecycle.close()
+})
+test("two UI contexts in one folder create distinct chats without mutating a shared pending slot",async()=>{
+  const durable:{pending:null|{sessionID:string;directory:string}}={pending:null}
+  let creates=0,updates=0
+  const chats=new Set<string>()
+  const holds:string[]=[]
+  // View-local memory survives reload; shared durable storage is read only for legacy refusal.
+  const context=()=>({app:{version:"2.2.5"},location:{directory:"/synthetic/concurrent"},
+    storage:{memory:()=>{const local={pending:null};return [local,(mutate:any)=>mutate(local)]},store:()=>[durable,async(mutate:(draft:typeof durable)=>void)=>{updates++;mutate(durable)}]},
+    data:{location:{agent:{sync:async()=>{}}}},
+    client:{session:{get:async({sessionID}:any)=>({id:sessionID,location:{directory:"/synthetic/concurrent"}})},
+      rpc:()=>({createController:async({sessionID}:any)=>{creates++;chats.add(sessionID);return {kind:"governed-planning",role:"controller",sessionID,projectId:id}},admitController:async({sessionID}:any)=>({kind:"governed-planning",role:"controller",sessionID,projectId:id})})},
+    keymap:{layer:()=>{}},ui:{router:{current:()=>({type:"home"}),navigate:()=>{}}},
+  } as unknown as Parameters<typeof registerAutomaticClientUI>[0])
+  const a=registerAutomaticClientUI(context(),stage=>{holds.push(stage)}),b=registerAutomaticClientUI(context(),stage=>{holds.push(stage)})
+  await Promise.all([a.initial,b.initial])
+  assert.equal(creates,2);assert.equal(chats.size,2);assert.deepEqual(holds,[]);assert.equal(durable.pending,null)
+  assert.equal(updates,0);a.close();b.close()
+})
+test("a new view cannot adopt or erase an ambiguous legacy per-folder creation",async()=>{
+  const legacy={pending:{sessionID:"ses_legacy",directory:"/synthetic/legacy"}}
+  const holds:string[]=[];let rpcCalls=0,memoryCalls=0
+  const context={app:{version:"2.2.5"},location:{directory:legacy.pending.directory},
+    storage:{store:()=>[legacy,()=>assert.fail("must not clear legacy state")],memory:()=>{memoryCalls++;throw Error("must not claim")}},
+    client:{rpc:()=>{rpcCalls++;throw Error("must not dispatch")}},keymap:{layer:()=>{}},
+    ui:{router:{current:()=>({type:"home"}),navigate:()=>assert.fail("must not navigate")}},
+  } as unknown as Parameters<typeof registerAutomaticClientUI>[0]
+  const lifecycle=registerAutomaticClientUI(context,stage=>{holds.push(stage)})
+  await lifecycle.initial;assert.deepEqual(holds,["intent-store"])
+  assert.equal(rpcCalls,0);assert.equal(memoryCalls,0);assert.equal(legacy.pending.sessionID,"ses_legacy")
+  lifecycle.close()
+})
+test("trusted automatic provisioning creates a protected reusable bootstrap and refuses conflicting profiles",async()=>{
+  const base=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(base)
+  const area=await fs.mkdtemp(path.join(base,"automatic-provision-")),work=path.join(area,"work")
+  await fs.mkdir(work)
+  const config={root:path.join(area,"private"),forbiddenAreas:[work],storeId:id,
+    serviceOrigin:"http://127.0.0.1:18671",nativeOrigin:"http://127.0.0.1:18672",
+    nativeRegistrationFile:path.join(area,"native-registration.json"),clientPolicyFile:path.join(area,"profile/opencode.json"),
+    plugin:path.join(area,"plugin"),schemas:{"work-command3":"explicit synthetic schema"}}
+  await provisionAutomaticPrimary(config)
+  const custody=new LinuxNativeCustody(path.join(config.root,"bootstrap"),[work]);await custody.initialize()
+  const first=await custody.read("automatic-bootstrap","current");assert.ok(first)
+  const descriptor=JSON.parse(first)
+  assert.match(descriptor.enrollmentProof,/^[A-Za-z0-9_-]{43}$/)
+  assert.equal(Object.hasOwn(descriptor,"ownerToken"),false)
+  await provisionAutomaticPrimary(config);assert.equal(await custody.read("automatic-bootstrap","current"),first)
+  await assert.rejects(provisionAutomaticPrimary({...config,storeId:"00000000-0000-0000-0000-000000000002"}))
+  assert.equal(await custody.read("automatic-bootstrap","current"),first)
+  const insecure={plugins:[config.plugin],permissions:[...primaryPermissionRules,{action:"shell",resource:"*",effect:"allow"}],policies:primaryPolicyStatements}
+  const bytes=JSON.stringify(insecure);await fs.writeFile(config.clientPolicyFile,bytes)
+  await assert.rejects(provisionAutomaticPrimary(config))
+  assert.equal(await fs.readFile(config.clientPolicyFile,"utf8"),bytes)
+  assert.equal(await custody.read("automatic-bootstrap","current"),first)
+})
+test("Linux native identity uses OS hostname while retaining PID, origin and executable pins",async()=>{
+  const origin="http://127.0.0.1:18671"
+  const info={version:"2.2.5",pid:process.pid,hostname:hostname(),urls:[origin],paths:{tmp:"/synthetic"}}
+  const digest=createHash("sha256").update(await fs.readFile("/proc/self/exe")).digest("hex")
+  assert.match(await linuxHostEpoch(info,origin,digest),/^[a-f0-9]{64}$/)
+  for(const changed of [{...info,hostname:hostname()+"-wrong"},{...info,pid:process.pid+1},
+    {...info,urls:["http://127.0.0.1:18672"]},{...info,version:"wrong"}])
+    await assert.rejects(linuxHostEpoch(changed,origin,digest))
+  await assert.rejects(linuxHostEpoch(info,"http://0.0.0.0:18671",digest))
+  await assert.rejects(linuxHostEpoch(info,origin,"0".repeat(64)))
+})
+test("shared custody serializes separate location instances without weakening exclusive records",async()=>{
+  const base=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(base)
+  const root=await fs.mkdtemp(path.join(base,"shared-custody-")),work=path.join(root,"work");await fs.mkdir(work)
+  const independent=await import(new URL("../src/native-runtime-custody.js?independent-plugin",import.meta.url).href)
+  const a=new LinuxNativeCustody(path.join(root,"private"),[work]),b=new independent.LinuxNativeCustody(path.join(root,"private"),[work]) as LinuxNativeCustody
+  await a.initialize();await b.initialize()
+  const results=await Promise.all(Array.from({length:16},(_,i)=>(i%2?a:b).retain("sample",String(i),String(i))))
+  assert.ok(results.every(Boolean))
+  for(let i=0;i<8;i++){
+    const [,inventory]=await Promise.all([a.retain("sample",`scan-${i}`,String(i)),b.scan("sample")])
+    assert.equal(inventory.length,17+i)
+  }
+  await assert.rejects(b.retain("sample","0","conflicting bytes"))
+  assert.equal(await a.read("sample","0"),"0")
+})
+test("native fallback policy compares exact rule fields independently of JSON object key order",async()=>{
+  const base=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(base)
+  const work=await fs.mkdtemp(path.join(base,"policy-order-")),file=path.join(work,"opencode.json")
+  const rules=primaryPolicyStatements.map(rule=>({effect:rule.effect,resource:rule.resource,action:rule.action}))
+  await fs.writeFile(file,JSON.stringify({policies:rules}));await requirePrimaryPolicy(work)
+  await fs.writeFile(file,JSON.stringify({policies:rules.map((rule,i)=>i===0?{...rule,effect:"allow"}:rule)}))
+  await assert.rejects(requirePrimaryPolicy(work))
+  await fs.writeFile(file,JSON.stringify({policies:rules.map((rule,i)=>i===0?{...rule,extra:true}:rule)}))
+  await assert.rejects(requirePrimaryPolicy(work))
+})
+test("shared runtime tools dispatch by session binding not the last registered project",async()=>{
+  const transforms=new Set<(editor:any)=>void>(),tools=new Map<string,any>()
+  const rebuild=()=>{tools.clear();for(const transform of transforms)transform({add:(tool:any)=>tools.set(tool.name,tool)})}
+  const ctx={session:{},permission:{},tool:{transform:async(callback:(editor:any)=>void)=>{
+    transforms.add(callback)
+    try{rebuild()}catch(error){transforms.delete(callback);rebuild();throw error}
+    return {dispose:async()=>{transforms.delete(callback);rebuild()}}
+  }}} as unknown as Plugin.Context
+  const router=new NativeSessionToolRouter(ctx)
+  let ambiguous=false
+  const a=router.context("ses_a",async sid=>sid==="ses_a"||sid==="ses_worker_a")
+  const b=router.context("ses_b",async sid=>sid==="ses_b"||ambiguous&&sid==="ses_a")
+  const definition=(owner:string)=>({name:"writhelm_work_command",description:"scoped command",options:{codemode:false},
+    input:{type:"object",properties:{}},execute:async(_:unknown,actual:any)=>({content:owner+":"+actual.sessionID})})
+  const first=await a.tool.transform(editor=>editor.add(definition("project-a")))
+  const captured=tools.get("writhelm_work_command")
+  const second=await b.tool.transform(editor=>editor.add(definition("project-b")))
+  assert.equal((await captured.execute({}, {sessionID:"ses_a"})).content,"project-a:ses_a")
+  assert.equal((await captured.execute({}, {sessionID:"ses_b"})).content,"project-b:ses_b")
+  assert.equal((await captured.execute({}, {sessionID:"ses_worker_a"})).content,"project-a:ses_worker_a")
+  await assert.rejects(captured.execute({}, {sessionID:"ses_unregistered"}))
+  ambiguous=true;await assert.rejects(captured.execute({}, {sessionID:"ses_a"}));ambiguous=false
+  await first.dispose()
+  await assert.rejects(captured.execute({}, {sessionID:"ses_a"}))
+  assert.equal((await captured.execute({}, {sessionID:"ses_b"})).content,"project-b:ses_b")
+  router.close();await assert.rejects(captured.execute({}, {sessionID:"ses_b"}));await second.dispose()
+})
+test("automatic lifecycle enrolls distinct sessions before context and coalesces creation/prompt races",{timeout:10000},async()=>{
+  const base=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(base)
+  const root=await fs.mkdtemp(path.join(base,"automatic-primary-")),work=path.join(root,"work");await fs.mkdir(work)
+  const hooks=new Map<string,(event:any)=>Promise<void>>(),queue:any[]=[]
+  let wake:(()=>void)|undefined
+  const emit=(sessionID:string)=>{queue.push({data:{sessionID}});wake?.()}
+  const sessions=new Map(["ses_first","ses_second","ses_failed"].map(sessionID=>[sessionID,{id:sessionID,location:{directory:work},permissions:[]}]))
+  const hook=(domain:string)=>(name:string,callback:(event:any)=>Promise<void>)=>{
+    hooks.set(domain+":"+name,callback);return Promise.resolve({dispose:async()=>{hooks.delete(domain+":"+name)}})
+  }
+  const ctx={app:{version:"2.2.5"},location:{directory:work,project:{id:"native_project"}},
+    session:{get:async({sessionID}:any)=>sessions.get(sessionID),context:async()=>[],
+      update:async({sessionID,permissions}:any)=>{sessions.get(sessionID)!.permissions=permissions},hook:hook("session")},
+    tool:{hook:hook("tool")},permission:{hook:hook("permission")},
+    event:{subscribe:({signal}:any)=>({async *[Symbol.asyncIterator](){
+      signal.addEventListener("abort",()=>wake?.(),{once:true})
+      while(!signal.aborted){if(queue.length)yield queue.shift();else await new Promise<void>(resolve=>{wake=resolve})}
+    }})}} as unknown as Plugin.Context
+  let enter!:()=>void,release!:()=>void
+  const entered=new Promise<void>(resolve=>{enter=resolve}),released=new Promise<void>(resolve=>{release=resolve})
+  const enrollments:string[]=[],activations:string[]=[],closed:string[]=[]
+  const toolAdmissions:Array<{sessionID:string;toolName:string|undefined}>=[]
+  const enrollment={openSession:async(sessionID:string)=>{
+    enrollments.push(sessionID)
+    return {sessionID,workRoot:work,projectId:id,controllerId:id,principalId:id,credentialId:id,token:"MOCK_SCOPED_SECRET_NOT_IN_CONTEXT"}
+  }}
+  const governor=await registerAutomaticPrimaryGovernor(ctx,new LinuxNativeCustody(path.join(root,"private"),[work]),enrollment,async binding=>{
+    activations.push(binding.sessionID)
+    if(binding.sessionID==="ses_first"){enter();await released}
+    if(binding.sessionID==="ses_failed")throw Error("MOCK unavailable native runtime")
+    return {sessionID:binding.sessionID,projectId:id,workRoot:work,role:"controller" as const,current:async()=>{},
+      admitPrompt:async()=>{},admitContext:async()=>{},admitModel:async()=>{},admitTool:async(sessionID:string,toolName?:string)=>{toolAdmissions.push({sessionID,toolName})},admitGenerate:async()=>{},admitCompaction:async()=>{},
+      close:async()=>{closed.push(binding.sessionID)}}
+  },async()=>undefined)
+  try {
+    emit("ses_foreign_unavailable")
+    emit("ses_first");await entered
+    const first=hooks.get("session:prompt")!({sessionID:"ses_first",prompt:{text:"ordinary owner task"}})
+    const second={sessionID:"ses_second",system:[] as any[],tools:{shell:{},read:{},question:{},writhelm_work_command:{}}}
+    await hooks.get("session:context")!(second)
+    assert.deepEqual(Object.keys(second.tools),["read","question","writhelm_work_command"])
+    assert.ok(second.system.some(part=>part.text.startsWith(primaryInstructions)))
+    assert.equal(JSON.stringify(second).includes("MOCK_SCOPED_SECRET"),false)
+    assert.equal(enrollments.filter(session=>session==="ses_first").length,1)
+    release();await first;await governor.ensure("ses_first")
+    assert.equal(activations.filter(session=>session==="ses_first").length,1)
+    await assert.rejects(hooks.get("tool:execute.before")!({sessionID:"ses_second",tool:"shell"}))
+    await hooks.get("tool:execute.before")!({sessionID:"ses_second",tool:"read"})
+    assert.deepEqual(toolAdmissions,[{sessionID:"ses_second",toolName:"read"}],"Actual tool identity must reach the scoped runtime guard")
+    await assert.rejects(hooks.get("session:model.request")!({sessionID:"ses_failed",kind:"primary"}))
+    await assert.rejects(hooks.get("session:prompt")!({sessionID:"ses_failed",prompt:{text:"retry"}}))
+    assert.equal(activations.filter(session=>session==="ses_failed").length,1)
+    const permission={sessionID:"ses_failed",action:"edit",effect:"allow"}
+    await hooks.get("permission:evaluate")!(permission);assert.equal(permission.effect,"deny")
+  }finally{release();await governor.close()}
+  assert.deepEqual(closed.sort(),["ses_first","ses_second"])
+})
+test("automatic enrollment sends only native session identity and never accepts mismatched scoped credentials",async()=>{
+  const proof=new Uint8Array(32).fill(7),secret=Buffer.alloc(32,9).toString("base64url")
+  let calls=0
+  const expected={formatVersion:1,kind:"session-enrolled",sessionID:"ses_new",workRoot:"/synthetic/test-project",projectId:id,
+    controllerId:id,principalId:id,credentialId:id,token:`wh1.${id}.${id}.${secret}`}
+  let reply:unknown=expected
+  const client=new AutomaticEnrollmentClient("http://127.0.0.1:18671",proof,id,async(url,options)=>{
+    calls++;assert.equal(url,"http://127.0.0.1:18671/internal/enrollment/v1")
+    assert.deepEqual(JSON.parse(options!.body as string),{formatVersion:1,operation:"open-session",sessionID:"ses_new"})
+    const headers=options!.headers as Record<string,string>
+    assert.equal(headers["X-Writhelm-Enrollment-Proof"],Buffer.from(proof).toString("base64url"))
+    assert.equal(headers.Authorization,undefined)
+    assert.equal(options!.redirect,"error")
+    return new Response(JSON.stringify(reply),{status:200})
+  })
+  assert.equal((await client.openSession("ses_new")).token,expected.token)
+  reply={...expected,sessionID:"ses_other"};await assert.rejects(client.openSession("ses_new"))
+  reply={...expected,token:expected.token.replace(`wh1.${id}.`,"wh1.00000000-0000-0000-0000-000000000002.")}
+  await assert.rejects(client.openSession("ses_new"))
+  reply={...expected,ownerToken:expected.token};await assert.rejects(client.openSession("ses_new"))
+  await assert.rejects(client.openSession("../../project"));assert.equal(calls,4)
+  let uncertainCalls=0
+  const uncertain=new AutomaticEnrollmentClient("http://127.0.0.1:18671",proof,id,async()=>{uncertainCalls++;throw Error("MOCK lost enrollment reply")})
+  await assert.rejects(uncertain.openSession("ses_new"));assert.equal(uncertainCalls,1)
+  let busyCalls=0
+  const busy=new AutomaticEnrollmentClient("http://127.0.0.1:18671",proof,id,async()=>{
+    busyCalls++;return busyCalls===1?new Response("",{status:429}):new Response(JSON.stringify(expected),{status:200})
+  })
+  assert.equal((await busy.openSession("ses_new")).token,expected.token);assert.equal(busyCalls,2)
+  let failedCalls=0
+  const failed=new AutomaticEnrollmentClient("http://127.0.0.1:18671",proof,id,async()=>{failedCalls++;return new Response("",{status:503})})
+  await assert.rejects(failed.openSession("ses_new"));assert.equal(failedCalls,1)
+})
 test("package server entrypoint refuses absent trusted bootstrap instead of presenting GUI-only governance",async()=>{
   const previous=process.env.WRITHELM_PRIMARY_ROOT
   delete process.env.WRITHELM_PRIMARY_ROOT

@@ -22,7 +22,7 @@ import java.net.http.HttpResponse
 
 /** Actual portable CORE/AUTH composition. All external/native observations are explicitly synthetic;
  * no qualified native runtime, source custody, model or physical completion is implied. */
-internal class JointFixture(val snapshot:WSnapshot=WSnapshot(id(80),WorkGitOid("sha1","2".repeat(40)),WorkGitOid("sha1","3".repeat(40)),null,id(81))) {
+internal class JointFixture(val snapshot:WSnapshot=WSnapshot(id(80),WorkGitOid("sha1","2".repeat(40)),WorkGitOid("sha1","3".repeat(40)),null,id(81)),includeKnowledgeInput:Boolean=false) {
     val head=GitOid("sha1","1".repeat(40));val controller=id(60);val assignment=id(61);val delegation=id(62)
     val worker=id(63);val workerKey=id(64);val workspace=id(65);val resource=WorkKey.Resource(project,id(66))
     val intent=id(67);val correlation=id(68);val task=WorkKey.TaskRevision(project,id(69),0)
@@ -46,9 +46,11 @@ internal class JointFixture(val snapshot:WSnapshot=WSnapshot(id(80),WorkGitOid("
         core=value(core.pin(Actor(planner),project,id(94),id(95),listOf(revision.x()),listOf(revision.contextReference()),emptyList(),id(93))).state
         val ks=core.snapshot();val kr=CoreRecordCodec.records(ks).single { it.family=="manifests" }
         val pinned=WBase(listOf(snapshot),id(94),Digest.of(StrictJson.encode(CoreRecordCodec.envelope(kr.family,kr.key,kr.payload()))))
-        val criterion=WCriterion(id(96),"bounded output",emptyList())
+        val knowledgeInput=WSourceVariant0Value(WSourceVariant0("knowledge",revision.x()))
+        val criterion=WCriterion(id(96),"bounded output",if(includeKnowledgeInput)listOf(knowledgeInput) else emptyList())
         fun record(key: WorkKey,payload: WorkPayload)=WorkRecord(WorkRecordIdentity(payloadFamily(payload),key),payload)
-        val m=record(manifestKey,WInputManifestsPayload(WInputManifests(task,pinned,applicability,listOf(WManifestItem(source,true,"exact input",emptyList())),source,emptyList())))
+        val m=record(manifestKey,WInputManifestsPayload(WInputManifests(task,pinned,applicability,listOf(WManifestItem(source,true,"exact input",emptyList()))+
+            if(includeKnowledgeInput)listOf(WManifestItem(knowledgeInput,true,"exact pinned canonical knowledge",emptyList())) else emptyList(),source,emptyList())))
         manifest=WorkReference(m.identity,codec.digest(m))
         val work=WorkState.restore(project,listOf(
             record(task,WTaskRevisionsPayload(WTaskRevisions("research","executable","bounded research",pinned,WScope("pinned inputs","workspace","routine",emptyList()),emptyList(),emptyList(),listOf(criterion),listOf("changed meaning"),"result",profile,plan,emptyList(),emptyList()))),
@@ -62,7 +64,7 @@ internal class JointFixture(val snapshot:WSnapshot=WSnapshot(id(80),WorkGitOid("
         g.authority.credentials.values.forEach { auth+=Auth2Record.Key(ScopedCredential(it,if(it.principalId==planner)CredentialScope.Controller(controller) else CredentialScope.Project)) }
         auth+=Auth2Record.Controller(ControllerBinding(controller,project,planner))
         base=H1BoundState.checked(storeId,head,core,auth,mapOf(project to work))
-        observations=H1ObservedFacts(head,WorkExternalFacts(emptySet(),emptySet(),setOf(snapshot),emptyMap(),emptyMap(),emptySet(),emptySet(),emptySet(),setOf(manifest),emptyMap(),emptyMap(),emptySet()),setOf(work.reference(WorkFamily.PROFILES,profile)))
+        observations=H1ObservedFacts(head,WorkExternalFacts(if(includeKnowledgeInput)setOf(revision.x()) else emptySet(),emptySet(),setOf(snapshot),emptyMap(),emptyMap(),emptySet(),emptySet(),emptySet(),setOf(manifest),emptyMap(),emptyMap(),emptySet()),setOf(work.reference(WorkFamily.PROFILES,profile)))
         runtimeFacts=observations.facts
     }
     fun <T> key(id: java.util.UUID,block: (PresentedCredential)->T)=requireNotNull(CredentialVerifier.parse(token(id))).use(block)
@@ -82,14 +84,17 @@ internal class JointFixture(val snapshot:WSnapshot=WSnapshot(id(80),WorkGitOid("
         install(key(plannerKey) { bridge.work(base,bind,it,H1ObservedFacts(head,observations.facts.copy(native=mapOf(intent to prepare)),observations.qualifiedProfiles)) })
         val startId=id(111);val startCorrelation=id(112)
         val request=WorkCommand(id(113),project,CRequestNativeTransitionOperation(CRequestNativeTransition(assignment,2,startId,startCorrelation,"start",null,emptyList())))
-        install(key(plannerKey) { bridge.work(base,request,it,observations) })
+        install(key(plannerKey) { bridge.work(base,request,it,H1ObservedFacts(head,observations.facts,emptySet(),NativeExecutionAdmission.expected(base,request))) })
         val start=WorkNativeObservation(subject,startId,startCorrelation,"start","confirmed",listOf(source),execution,false,"bound")
         val observe=WorkCommand(id(114),project,CObserveNativeTransitionOperation(CObserveNativeTransition(assignment,3,startId,0,"confirmed",listOf(source),emptyList())))
         install(key(plannerKey) { bridge.work(base,observe,it,H1ObservedFacts(head,observations.facts.copy(native=mapOf(startId to start)),observations.qualifiedProfiles)) })
     }
-    fun publishedActiveApp(onCapture: ()->Unit={},publication: PublicationDriver=PublicationDriver.Native,modelVersion:Int=2,root:java.nio.file.Path=directory(),diffControl:NativeResultDiffProofControl?=null): H1Application {
-        val baseFacts=H1RuntimeFacts { state,_ -> capturedRuntimeState=state;onCapture();H1ObservedFacts(state.basis,runtimeFacts,observations.qualifiedProfiles) }
-        val options=H1Options(if(diffControl==null)baseFacts else NativeResultDiffFacts(baseFacts,diffControl),AppOptions(admission=AdmissionPolicy(formatVersion=2),publication=publication),workModelVersion=modelVersion)
+    fun publishedActiveApp(onCapture: ()->Unit={},publication: PublicationDriver=PublicationDriver.Native,modelVersion:Int=2,root:java.nio.file.Path=directory(),diffControl:NativeResultDiffProofControl?=null,
+        runtimeOptions:((H1RuntimeFacts)->H1Options)?=null): H1Application {
+        val baseFacts=H1RuntimeFacts { state,command -> capturedRuntimeState=state;onCapture();H1ObservedFacts(state.basis,runtimeFacts,
+            observations.qualifiedProfiles,NativeExecutionAdmission.expected(state,command)) } // explicit synthetic execution probe
+        val runtime=if(diffControl==null)baseFacts else NativeResultDiffFacts(baseFacts,diffControl)
+        val options=runtimeOptions?.invoke(runtime) ?: H1Options(runtime,AppOptions(admission=AdmissionPolicy(formatVersion=2),publication=publication),workModelVersion=modelVersion)
         val work=if(modelVersion==2)base.work else base.work.mapValues { (_,w)->WorkState.restore(w.projectId,w.records.values,w.bodies.values,modelVersion=modelVersion) }
         val app=H1Application.initialize(root,storeId,H1Genesis(base.core,base.authority.records(),work),options)
         fun publish(command: WorkCommand) {
@@ -109,6 +114,120 @@ internal class JointFixture(val snapshot:WSnapshot=WSnapshot(id(80),WorkGitOid("
 }
 
 class H1JointBindingTest {
+    @Test fun passiveAccessRechecksProcessAndHostWithoutConfigurationOrCampaignRegistry() {
+        val f=JointFixture();f.reserve()
+        val epoch="a".repeat(64)
+        var process:ObservedNativeProcess?=ObservedNativeProcess("test",Digest.of("test-runtime".toByteArray()),epoch)
+        var configurationReads=0
+        val environment=ControllerProfileEnvironment(project,f.controller,f.intended.nativeHostId,epoch,{process},{
+            configurationReads++;null
+        })
+        val qualification=ControllerPhaseAdmission(project,environment)
+        val subject=WAssignmentSubject(f.assignment,0)
+        assertTrue(qualification.safeAccess(f.base,subject))
+        assertEquals(0,configurationReads)
+        assertFalse(qualification.safeAccess(f.base,subject.copy(generation=1)))
+        val wrongHost=ControllerProfileEnvironment(project,f.controller,id(1910),epoch,{process},{null})
+        assertFalse(wrongHost.preparation(f.base,subject))
+        process=process!!.copy(epoch="b".repeat(64))
+        assertFalse(qualification.safeAccess(f.base,subject))
+        process=null
+        assertFalse(qualification.safeAccess(f.base,subject))
+    }
+    @Test fun `shared HTTP native router keeps two controller credentials and proofs isolated`() {
+        val f=JointFixture();val codec=Auth3CommandCodec()
+        f.publishedActiveApp(modelVersion=4).use { app ->
+            val controller=id(73001);val principal=id(73002);val credential=id(73003)
+            val enrollment=Auth3Command(id(73004),project,Auth3Payload.RegisterController(controller,principal,credential,
+                CredentialVerifier.digest(storeId,project,principal,credential,secret(73003))))
+            assertIs<LogicalOutcome.Success>(assertIs<CommandResult.Settled>(app.execute(ownerToken,codec.encode(enrollment))).receipt.outcome)
+            val router=NativeRuntimeEndpointRouter();val proof1=ByteArray(32){1};val proof2=ByteArray(32){2}
+            val endpoint1=WrithelmService(app).nativeEndpoint(project,f.controller,f.intended.nativeHostId,proof1)
+            val endpoint2=WrithelmService(app).nativeEndpoint(project,controller,id(73005),proof2)
+            router.register(f.controller,endpoint1);router.register(controller,endpoint2)
+            assertFailsWith<IllegalArgumentException> {router.register(controller,endpoint1)}
+            val port=java.net.ServerSocket(0,1,InetAddress.getByName("127.0.0.1")).use {it.localPort}
+            val origin="http://127.0.0.1:$port";val adapter=HttpAdapter(WrithelmService(app),HttpProfile(origin),nativeEndpoints=router)
+            val server=embeddedServer(CIO,host="127.0.0.1",port=port){adapter.install(this)}.start(wait=false)
+            val client=HttpClient.newHttpClient()
+            fun query(key:String,proof:ByteArray):HttpResponse<String> {
+                val request=HttpRequest.newBuilder(URI("$origin/internal/native/v1"))
+                    .header("Content-Type","application/json").header("Authorization","Bearer $key")
+                    .header("X-Writhelm-Native-Proof",java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(proof))
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(StrictJson.encode(obj("formatVersion" to num(1),"operation" to str("identity"),"projectId" to uuid(project))))).build()
+                return client.send(request,HttpResponse.BodyHandlers.ofString())
+            }
+            try {
+                val first=query(plannerToken,proof1);assertEquals(200,first.statusCode())
+                val second=query(token(credential),proof2);assertEquals(200,second.statusCode())
+                assertTrue(first.body().contains(planner.toString()));assertTrue(second.body().contains(principal.toString()))
+                assertEquals(403,query(plannerToken,proof2).statusCode())
+                assertEquals(403,query(token(credential),proof1).statusCode())
+                endpoint2.close();assertEquals(403,query(token(credential),proof2).statusCode())
+                assertEquals(200,query(plannerToken,proof1).statusCode())
+            } finally {server.stop(0,5000);runBlocking {adapter.mcp.close()};router.close()}
+        }
+    }
+    @Test fun `trusted broker adds a second project in the same store without cross project authority`() {
+        val f=JointFixture();val root=directory();val codec=Auth3CommandCodec()
+        val target=id(72001);val key=id(72002)
+        val command=Auth3Command(id(72003),project,Auth3Payload.RegisterProject(target,key,
+            CredentialVerifier.digest(storeId,target,owner,key,secret(72002))))
+        val controller=Auth3Command(id(72004),target,Auth3Payload.RegisterController(id(72005),id(72006),id(72007),
+            CredentialVerifier.digest(storeId,target,id(72006),id(72007),secret(72007))))
+        f.publishedActiveApp(modelVersion=4,root=root).use { app ->
+            assertEquals(403,WrithelmService(app).command(ownerToken,codec.encode(command)).status)
+            assertIs<CommandResult.Denied>(app.execute(plannerToken,codec.encode(command)))
+            val before=app.coordinationCapture(plannerToken,project).work.records
+            val registered=assertIs<CommandResult.Settled>(app.execute(ownerToken,codec.encode(command)))
+            assertIs<LogicalOutcome.Success>(registered.receipt.outcome);assertEquals(5,registered.receipt.writes.size)
+            assertTrue(assertIs<CommandResult.Settled>(app.execute(ownerToken,codec.encode(command))).commandReplayed)
+            assertEquals(target,app.inspectAccess(token(key)).projectId)
+            assertIs<CommandResult.Denied>(app.execute(ownerToken,codec.encode(controller)))
+            assertIs<LogicalOutcome.Success>(assertIs<CommandResult.Settled>(app.execute(token(key),codec.encode(controller))).receipt.outcome)
+            assertEquals(target,app.inspectAccess(token(id(72007))).projectId)
+            assertEquals(before,app.coordinationCapture(plannerToken,project).work.records)
+            assertTrue(app.coordinationCapture(token(id(72007)),target).work.records.isEmpty())
+        }
+        H1Application.open(root,storeId,H1Options(UnavailableH1RuntimeFacts,workModelVersion=4)).use { app ->
+            assertTrue(assertIs<CommandResult.Settled>(app.execute(ownerToken,codec.encode(command))).commandReplayed)
+            assertTrue(assertIs<CommandResult.Settled>(app.execute(token(key),codec.encode(controller))).commandReplayed)
+            assertEquals(target,app.inspectAccess(token(id(72007))).projectId)
+        }
+    }
+    @Test fun `owner registers distinct session controllers atomically and cold replay preserves authority`() {
+        val f=JointFixture();val root=directory()
+        val codec=Auth3CommandCodec()
+        fun command(n:Int)=Auth3Command(id(71000+n),project,Auth3Payload.RegisterController(id(71100+n),id(71200+n),id(71300+n),
+            CredentialVerifier.digest(storeId,project,id(71200+n),id(71300+n),secret(71300+n))))
+        val first=command(1);val second=command(2)
+        f.publishedActiveApp(modelVersion=4,root=root).use { app ->
+            assertEquals(403,WrithelmService(app).command(ownerToken,codec.encode(first)).status)
+            assertIs<CommandResult.Denied>(app.execute(plannerToken,codec.encode(first)))
+            val before=app.coordinationCapture(plannerToken,project).work.records
+            for(command in listOf(first,second)) {
+                val result=assertIs<CommandResult.Settled>(app.execute(ownerToken,codec.encode(command)))
+                assertIs<LogicalOutcome.Success>(result.receipt.outcome)
+                assertEquals(6,result.receipt.writes.size)
+                assertTrue(result.receipt.writes.all { it.beforeDigest==null && it.afterDigest!=null })
+                assertTrue(assertIs<CommandResult.Settled>(app.execute(ownerToken,codec.encode(command))).commandReplayed)
+                val p=command.payload as Auth3Payload.RegisterController
+                val access=app.inspectAccess(token(p.credentialId))
+                assertEquals(CredentialScope.Controller(p.controllerId),access.scope)
+                assertEquals(p.principalId,access.principalId)
+                assertIs<CommandResult.Denied>(app.execute(token(p.credentialId),codec.encode(command.copy(requestKey=id(71999)))))
+            }
+            assertEquals(before,app.coordinationCapture(plannerToken,project).work.records)
+            val duplicate=first.copy(requestKey=id(71998))
+            assertEquals("AUTH_DUPLICATE_ID",assertIs<LogicalOutcome.Rejected>(assertIs<CommandResult.Settled>(app.execute(ownerToken,codec.encode(duplicate))).receipt.outcome).code)
+        }
+        H1Application.open(root,storeId,H1Options(UnavailableH1RuntimeFacts,workModelVersion=4)).use { app ->
+            assertTrue(assertIs<CommandResult.Settled>(app.execute(ownerToken,codec.encode(first))).commandReplayed)
+            val access=app.inspectAccess(token(id(71301)))
+            assertEquals(CredentialScope.Controller(id(71101)),access.scope)
+            assertEquals(setOf(Capability.READ,Capability.PLAN,Capability.PROPOSE),access.capabilities)
+        }
+    }
     @Test fun `worker report needs matching observed facts and planner reads exact retained result`() {
         val f=JointFixture();f.publishedActiveApp().use { app ->
             val service=WrithelmService(app);val worker=token(f.workerKey);val subject=WAssignmentSubject(f.assignment,0)
@@ -613,7 +732,7 @@ class H1JointBindingTest {
             assertEquals(ReservationRetryEligibility.HOLD,app.reservationRetryEligibility(plannerToken,project,f.controller,originalBytes))
             assertFailsWith<AppAccessFault> { app.reservationRetryEligibility(ownerToken,project,f.controller,originalBytes) }
             val held=assertIs<CommandResult.Settled>(app.execute(plannerToken,f.codec.encodeCommand(f.reserveCommand())))
-            assertEquals("NOT_READY",assertIs<LogicalOutcome.Rejected>(held.receipt.outcome).code)
+            assertEquals("BLOCKED_INPUT",assertIs<LogicalOutcome.Rejected>(held.receipt.outcome).code)
             assertTrue(held.receipt.writes.isEmpty())
             val child=assertIs<CommandResult.Settled>(app.execute(plannerToken,successorBytes))
             assertIs<LogicalOutcome.Success>(child.receipt.outcome);assertFalse(child.commandReplayed)
@@ -638,14 +757,14 @@ class H1JointBindingTest {
             val lateReserve=lateOriginal.copy(requestKey=id(5317),operation=CReserveAssignmentOperation(latePayload.copy(
                 assignmentId=id(5319),workspaceId=id(5320),intentId=id(5321),
                 intendedExecution=latePayload.intendedExecution.copy(executionId=id(5322),nativeSessionId="ses_late_attempt"))))
-            assertEquals("NOT_READY",assertIs<LogicalOutcome.Rejected>(assertIs<CommandResult.Settled>(app.execute(plannerToken,f.codec.encodeCommand(lateReserve))).receipt.outcome).code)
+            assertEquals("BLOCKED_INPUT",assertIs<LogicalOutcome.Rejected>(assertIs<CommandResult.Settled>(app.execute(plannerToken,f.codec.encodeCommand(lateReserve))).receipt.outcome).code)
             val lateRef=app.coordinationCapture(plannerToken,project).work.reference(WorkFamily.DISPATCH_PLANS,WorkKey.Id(project,latePlan.planId))
             val lateBind=bindCodec.encode(DispatchAttemptCommand(id(5318),DispatchAttempt(lateRef,lateEntry.preparationId,lateReserve)))
             assertEquals(StoreProblem.DENIED,assertIs<CommandResult.Refused>(app.execute(plannerToken,lateBind)).problem)
             allowSynthetic=true
             val heldAgain=assertIs<CommandResult.Settled>(app.execute(plannerToken,f.codec.encodeCommand(f.reserveCommand())))
             assertTrue(heldAgain.commandReplayed)
-            assertEquals("NOT_READY",assertIs<LogicalOutcome.Rejected>(heldAgain.receipt.outcome).code)
+            assertEquals("BLOCKED_INPUT",assertIs<LogicalOutcome.Rejected>(heldAgain.receipt.outcome).code)
             val reserve=successorReserve
             val assigned=assertIs<CommandResult.Settled>(app.execute(plannerToken,f.codec.encodeCommand(reserve)))
             assertIs<LogicalOutcome.Success>(assigned.receipt.outcome)
@@ -846,7 +965,7 @@ class H1JointBindingTest {
             assertIs<LogicalOutcome.Success>(result.receipt.outcome)
             assertEquals(terms,app.coordinationCapture(plannerToken,project).work.task(task))
             val reserve=assertIs<CommandResult.Settled>(app.execute(plannerToken,f.codec.encodeCommand(f.reserveCommand())))
-            assertEquals("NOT_READY",assertIs<LogicalOutcome.Rejected>(reserve.receipt.outcome).code)
+            assertEquals("BLOCKED_INPUT",assertIs<LogicalOutcome.Rejected>(reserve.receipt.outcome).code)
             assertTrue(reserve.receipt.writes.isEmpty())
         }
         H1Application.open(root,storeId,options).use { app ->
@@ -917,9 +1036,8 @@ class H1JointBindingTest {
         assertEquals(setOf(profile),capture().qualifiedProfiles);assertTrue(capture().facts.verifiedPackets.isEmpty())
         profileProof=null;packetProof=expectedPacket
         assertTrue(capture().qualifiedProfiles.isEmpty());assertEquals(setOf(f.manifest),capture().facts.verifiedPackets)
-        val denied=f.key(plannerKey) { f.bridge.work(f.base,command,it,capture()) }
-        assertEquals("NOT_READY",assertIs<LogicalOutcome.Rejected>(denied.evaluation.outcome).code)
-        assertTrue(denied.evaluation.changes.isEmpty())
+        val prepared=f.key(plannerKey) { f.bridge.work(f.base,command,it,capture()) }
+        assertIs<LogicalOutcome.Success>(prepared.evaluation.outcome)
         profileProof=expectedProfile.copy(project=id(777));packetProof=expectedPacket.copy(task=f.task.copy(taskId=id(778)))
         assertTrue(capture().qualifiedProfiles.isEmpty());assertTrue(capture().facts.verifiedPackets.isEmpty())
         val priorCalls=calls
@@ -1074,7 +1192,7 @@ class H1JointBindingTest {
             artifacts=listOf(result.copy(repositoryId=id(5815)))))))
         assertTrue(facts.capture(f.base,forged).facts.submittedDiffs.isEmpty());assertEquals(previous,calls)
     }
-    @Test fun reservationNeedsBothQualifiedProfileAndVerifiedPacketWithoutCreatingClaimsOnRefusal() {
+    @Test fun reservationNeedsVerifiedInputsButNotExecutionCampaignsWithoutCreatingClaimsOnRefusal() {
         val f=JointFixture()
         fun attempt(facts: H1ObservedFacts)=f.key(plannerKey) { f.bridge.work(f.base,f.reserveCommand(),it,facts) }
         fun rejected(candidate: H1JointCandidate,code: String) {
@@ -1082,10 +1200,53 @@ class H1JointBindingTest {
             assertTrue(candidate.evaluation.changes.isEmpty())
             assertEquals(f.base.work.getValue(project).records,candidate.work.getValue(project).records)
         }
-        rejected(attempt(H1ObservedFacts(f.head,f.observations.facts,emptySet())),"NOT_READY")
+        assertIs<LogicalOutcome.Success>(attempt(H1ObservedFacts(f.head,f.observations.facts,emptySet())).evaluation.outcome)
         rejected(attempt(H1ObservedFacts(f.head,f.observations.facts.copy(verifiedPackets=emptySet()),f.observations.qualifiedProfiles)),"BLOCKED_INPUT")
         assertIs<LogicalOutcome.Success>(attempt(f.observations).evaluation.outcome)
-        // Synthetic fixture facts establish only the fail-closed gate, not real host qualification.
+        // Synthetic input facts do not qualify execution or the real host.
+    }
+    @Test fun passiveReservationAndBindingDoNotAuthorizeStartOrIgnoreNativeIdentity() {
+        val f=JointFixture()
+        val work=f.base.work.getValue(project)
+        val records=work.records.values.map { record ->
+            if(record.identity==WorkRecordIdentity(WorkFamily.PROFILES,f.profile)) {
+                val p=(record.payload as WProfilesPayload).value
+                record.copy(payload=WProfilesPayload(p.copy(qualification="unqualified",qualificationEvidence=emptyList())))
+            }else record
+        }
+        f.base=H1BoundState.checked(storeId,f.head,f.base.core,f.base.authority.records(),
+            mapOf(project to WorkState.restore(project,records,work.bodies.values)))
+        fun observed(facts:WorkExternalFacts=f.observations.facts)=H1ObservedFacts(f.head,facts,emptySet())
+        val reserved=f.key(plannerKey) { f.bridge.work(f.base,f.reserveCommand(),it,observed()) }
+        assertIs<LogicalOutcome.Success>(reserved.evaluation.outcome);f.install(reserved)
+        f.install(f.key(plannerKey) { f.bridge.auth3(f.base,f.register(),it) })
+        val execution=WExecution(f.intended.executionId,f.worker,f.workerKey,f.intended.nativeHostId,f.intended.nativeSessionId,f.workspace)
+        val prepare=WorkNativeObservation(WAssignmentSubject(f.assignment,0),f.intent,f.correlation,"prepare","confirmed",listOf(f.source),execution,true,"reserved")
+        val bind=WorkCommand(id(1901),project,CBindAssignmentOperation(CBindAssignment(f.assignment,1,f.intent,0,
+            f.intended.nativeHostId,f.intended.nativeSessionId,f.workspace,listOf(f.source),emptyList())))
+        val missing=f.key(plannerKey) { f.bridge.work(f.base,bind,it,observed()) }
+        assertEquals("NATIVE_UNKNOWN",assertIs<LogicalOutcome.Rejected>(missing.evaluation.outcome).code)
+        assertTrue(missing.evaluation.changes.isEmpty())
+        val mismatched=f.key(plannerKey) { f.bridge.work(f.base,bind,it,observed(f.observations.facts.copy(
+            native=mapOf(f.intent to prepare.copy(execution=execution.copy(nativeSessionId="ses_wrong_receiver")))))) }
+        assertEquals("INVALID_BINDING",assertIs<LogicalOutcome.Rejected>(mismatched.evaluation.outcome).code)
+        assertTrue(mismatched.evaluation.changes.isEmpty())
+        val bound=f.key(plannerKey) { f.bridge.work(f.base,bind,it,observed(f.observations.facts.copy(native=mapOf(f.intent to prepare)))) }
+        assertIs<LogicalOutcome.Success>(bound.evaluation.outcome);f.install(bound)
+        val start=WorkCommand(id(1902),project,CRequestNativeTransitionOperation(CRequestNativeTransition(f.assignment,2,id(1903),id(1904),"start",null,emptyList())))
+        val held=f.key(plannerKey) { f.bridge.work(f.base,start,it,observed()) }
+        assertEquals("NOT_READY",assertIs<LogicalOutcome.Rejected>(held.evaluation.outcome).code)
+        assertTrue(held.evaluation.changes.isEmpty())
+        val proof=assertNotNull(NativeExecutionAdmission.expected(f.base,start))
+        for(wrong in listOf(proof.copy(command=Digest.of("another command".toByteArray())),
+            proof.copy(basis=GitOid("sha1","f".repeat(40))),proof.copy(profile=proof.binding))){
+            val rejected=f.key(plannerKey) { f.bridge.work(f.base,start,it,H1ObservedFacts(f.head,observed().facts,
+                f.observations.qualifiedProfiles,wrong)) }
+            assertEquals("NOT_READY",assertIs<LogicalOutcome.Rejected>(rejected.evaluation.outcome).code)
+            assertTrue(rejected.evaluation.changes.isEmpty())
+        }
+        val permitted=f.key(plannerKey) { f.bridge.work(f.base,start,it,H1ObservedFacts(f.head,observed().facts,emptySet(),proof)) }
+        assertIs<LogicalOutcome.Success>(permitted.evaluation.outcome) // explicit synthetic current-operation proof, no inference
     }
     @Test fun capturedRuntimeFactsAreBoundedImmutableSnapshotsNotLiveAdapterCollections() {
         val f=JointFixture();val snapshots=mutableSetOf(f.snapshot);val native=linkedMapOf<java.util.UUID,WorkNativeObservation>()
@@ -1145,6 +1306,25 @@ class H1JointBindingTest {
             f.runtimeFacts=f.runtimeFacts.copy(native=mapOf(prepare to WorkNativeObservation(subject,prepare,correlation,"prepare","confirmed",listOf(f.source),execution,true,"reserved")))
             publish(CBindAssignmentOperation(CBindAssignment(assignment,1,prepare,0,intended.nativeHostId,intended.nativeSessionId,workspace,listOf(f.source),emptyList())))
             publish(CRequestNativeTransitionOperation(CRequestNativeTransition(assignment,2,id(974),id(975),"start",null,emptyList())))
+            // Actual canonical reviewer binding/closure, explicit MOCK previously issued ticket.
+            // This tests packet admission, not production issuance or native qualification.
+            val packetState=assertNotNull(f.capturedRuntimeState)
+            val bound=packetState.work.getValue(project).assignment(assignment).binding!!
+            val ticket=CandidateReviewTicket(project,id(981),f.controller,
+                WorkReference(WorkRecordIdentity(WorkFamily.DISPATCH_PLANS,WorkKey.Id(project,id(982))),Digest.of("synthetic plan".toByteArray())),
+                id(983),r2Snapshot,listOf(r1,r2),id(984),listOf(CandidateReviewCheckReceipt("synthetic-check",id(985),Digest.of("synthetic receipt".toByteArray()))),
+                subject,bound,execution,id(986),candidateReviewExcludedPrincipals(packetState,project,f.controller,listOf(r1,r2)))
+            assertFailsWith<WorkFault> {NativeAssignmentPacket.render(packetState,project,subject)}
+            var receiptsCurrent=true
+            val ticketPort=object:CandidateReviewTicketIssuer {
+                override fun issue(state:H1BoundState,ticket:CandidateReviewTicket,authorizeAssembly:(String)->Unit):ByteArray=error("not an issuance fixture")
+                override fun forAssignment(subject:WAssignmentSubject)=ticket.takeIf {it.assignment==subject}
+                override fun currentReceipts(state:H1BoundState,ticket:CandidateReviewTicket)=receiptsCurrent
+            }
+            val mandatory=NativeAssignmentPacket.render(packetState,project,subject,ticketPort)
+            assertTrue(mandatory.any {it.first.startsWith("writhelm-candidate-review-ticket-") && it.second.contains(ticket.contextId.toString())})
+            receiptsCurrent=false
+            assertFailsWith<WorkFault> {NativeAssignmentPacket.render(packetState,project,subject,ticketPort)}
             f.runtimeFacts=f.runtimeFacts.copy(native=mapOf(id(974) to WorkNativeObservation(subject,id(974),id(975),"start","confirmed",listOf(f.source),execution,false,"bound")))
             publish(CObserveNativeTransitionOperation(CObserveNativeTransition(assignment,3,id(974),0,"confirmed",listOf(f.source),emptyList())))
             val reviewerToken=token(key);val before=app.inspectAccess(plannerToken).basis

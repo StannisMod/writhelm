@@ -6,6 +6,11 @@ import { contextJSON } from "./native-context-codec.js"
 import { createHash } from "node:crypto"
 
 export function nativeUnavailable(): never { throw new Error("native runtime unavailable or forbidden") }
+/** Known read admission/unavailability, not revoked/missing authority and never an effect receipt.
+ * Contains only an allowlisted status, not a response body, credential or provider payload. */
+export class NativeRuntimeReadHold extends Error {
+  constructor(readonly status:429|503){super(`native runtime read held (${status})`);this.name="NativeRuntimeReadHold"}
+}
 export const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export function closedObject(value: unknown, names: readonly string[]): Record<string, any> {
   if (!value || typeof value !== "object" || Array.isArray(value)
@@ -27,6 +32,56 @@ export type NativeSubject = Readonly<{ assignmentId: string; executionGeneration
 /** Real bounded HTTP private-host projection. The private host proof is not a work permission:
  * the service reauthenticates the actual scoped token at current H for every request. */
 export class NativeRuntimeClient {
+  async candidateReviewPreparation(token:string,planRefJSON:string,assemblyId:string,checkPlanId:string,signal?:AbortSignal){
+    if(!uuidPattern.test(assemblyId)||!uuidPattern.test(checkPlanId))nativeUnavailable()
+    const value=closedObject(await this.request(token,{operation:"candidate-review-preparation",planRefJSON,assemblyId,checkPlanId},signal,4*1024*1024),
+      ["formatVersion","kind","taskCommandJSON","manifestCommandJSON","selectionJSON","preparationId","ticketBasisJSON"])
+    if(value.kind!=="candidate-review-preparation"||![value.taskCommandJSON,value.manifestCommandJSON,value.selectionJSON,value.ticketBasisJSON].every(v=>typeof v==="string")||
+      typeof value.preparationId!=="string"||!uuidPattern.test(value.preparationId))nativeUnavailable()
+    const basis=exactJSON(value.ticketBasisJSON,nativeUnavailable),selection=exactJSON(value.selectionJSON,nativeUnavailable)
+    if(basis.projectId!==this.projectId||basis.controllerId!==this.controllerId||basis.assemblyId!==assemblyId||basis.checkPlanId!==checkPlanId||
+      contextJSON(basis.plan)!==contextJSON(exactJSON(planRefJSON,nativeUnavailable))||
+      selection.task?.projectId!==this.projectId||!Array.isArray(selection.reviewSubjects)||!selection.reviewSubjects.length||
+      contextJSON(selection.reviewSubjects)!==contextJSON(basis.selected))nativeUnavailable()
+    return {taskCommandJSON:value.taskCommandJSON as string,manifestCommandJSON:value.manifestCommandJSON as string,
+      selectionJSON:value.selectionJSON as string,preparationId:value.preparationId as string,ticketBasisJSON:value.ticketBasisJSON as string}
+  }
+  async candidateReviewStatus(token:string,reviewId:string,ticketDigest:string,signal?:AbortSignal){
+    if(!uuidPattern.test(reviewId)||!/^[0-9a-f]{64}$/.test(ticketDigest))nativeUnavailable()
+    const value=await this.request(token,{operation:"candidate-review-status",reviewId},signal,4*1024*1024)
+    if(value.kind==="candidate-review-pending"){
+      closedObject(value,["formatVersion","kind","ticketDigest"])
+      if(value.ticketDigest!==ticketDigest)nativeUnavailable()
+      return {kind:"pending" as const}
+    }
+    closedObject(value,["formatVersion","kind","ticketDigest","reportJSON","integrationAllowed","reportRefJSON"])
+    if(value.kind!=="candidate-review-report"||value.ticketDigest!==ticketDigest||value.integrationAllowed!==false||typeof value.reportRefJSON!=="string")nativeUnavailable()
+    const report=await this.candidateReviewReport(token,reviewId,value.reportRefJSON,ticketDigest,signal)
+    if(report.reportJSON!==value.reportJSON)nativeUnavailable()
+    return {kind:"report" as const,...report,reportRefJSON:value.reportRefJSON as string}
+  }
+  async candidateReviewReport(token:string,reviewId:string,reportRefJSON:string,ticketDigest:string,signal?:AbortSignal){
+    if(!uuidPattern.test(reviewId)||!/^[0-9a-f]{64}$/.test(ticketDigest))nativeUnavailable()
+    const reference=exactJSON(reportRefJSON,nativeUnavailable)
+    if(reference.family!=="verification-reports")nativeUnavailable()
+    const value=closedObject(await this.request(token,{operation:"candidate-review-report",reviewId,reportRefJSON},signal,4*1024*1024),
+      ["formatVersion","kind","ticketDigest","reportJSON","integrationAllowed"])
+    if(value.kind!=="candidate-review-report"||value.ticketDigest!==ticketDigest||value.integrationAllowed!==false||typeof value.reportJSON!=="string")nativeUnavailable()
+    const report=exactJSON(value.reportJSON,nativeUnavailable)
+    if(report.family!==reference.family||contextJSON(report.key)!==contextJSON(reference.key)||
+      createHash("sha256").update(value.reportJSON,"utf8").digest("hex")!==reference.digest)nativeUnavailable()
+    return {reportJSON:value.reportJSON as string,integrationAllowed:false as const}
+  }
+  async issueCandidateReviewTicket(token:string,ticketJSON:string,signal?:AbortSignal){
+    if(Buffer.byteLength(ticketJSON)>262144)nativeUnavailable()
+    const expected=exactJSON(ticketJSON,nativeUnavailable)
+    const value=closedObject(await this.request(token,{operation:"candidate-review-ticket",ticketJSON},signal,1024*1024),
+      ["formatVersion","kind","ticketJSON","ticketDigest"])
+    if(value.kind!=="candidate-review-ticket"||typeof value.ticketJSON!=="string"||Buffer.byteLength(value.ticketJSON)>262144||
+      value.ticketDigest!==createHash("sha256").update(value.ticketJSON,"utf8").digest("hex")||
+      contextJSON(exactJSON(value.ticketJSON,nativeUnavailable))!==contextJSON(expected))nativeUnavailable()
+    return {ticketJSON:value.ticketJSON as string,ticketDigest:value.ticketDigest as string}
+  }
   async candidateDelivery(token:string,planRefJSON:string,signal?:AbortSignal){
     const raw=await this.request(token,{operation:"candidate-delivery",planRefJSON},signal,4*1024*1024)
     if(raw.kind==="pending"){closedObject(raw,["formatVersion","kind"]);return null}
@@ -89,7 +144,12 @@ export class NativeRuntimeClient {
       await wait(Math.min(250*(retry+1),1000)+Math.floor(Math.random()*250), undefined, { signal: deadline })
       response = await send()
     }
-    if (!response.ok || !response.body) nativeUnavailable()
+    if (!response.ok) {
+      await response.body?.cancel()
+      if(response.status===429||response.status===503)throw new NativeRuntimeReadHold(response.status)
+      nativeUnavailable()
+    }
+    if (!response.body) nativeUnavailable()
     const parts: Uint8Array[] = []; let bytes = 0
     const reader = response.body.getReader()
     try {

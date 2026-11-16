@@ -207,7 +207,7 @@ export class NativeWorkerPreparation {
     await this.registry.bind(expected.intendedExecution.nativeSessionId,credential.credentialId,directory,
       {assignmentId:expected.assignmentId,executionGeneration:"0",bindingJSON:contextJSON(a.binding)})
     return {preparationId:id,phase:"binding-confirmed",state:a.state,currentIntent:a.currentIntent,assignmentId:expected.assignmentId,executionGeneration:"0",binding:a.binding,
-      assignmentSelector:{family:"assignments",key:current.key,generation:a.generation},nativeSessionId:expected.intendedExecution.nativeSessionId,workspaceId:expected.workspaceId}
+      assignmentSelector:{family:"assignments",key:current.key,generation:a.generation},execution:a.execution,nativeSessionId:expected.intendedExecution.nativeSessionId,workspaceId:expected.workspaceId}
   }
 }
 

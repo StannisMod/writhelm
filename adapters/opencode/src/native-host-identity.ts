@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { createHash } from "node:crypto"
+import { hostname } from "node:os"
 import * as fs from "node:fs/promises"
 import type { OpenCodeClient } from "@opencode/client"
 import type { Plugin } from "@opencode/plugin"
@@ -18,7 +19,8 @@ export async function linuxHostEpoch(info: Awaited<ReturnType<OpenCodeClient["se
   nativeOrigin: string, expectedExecutableDigest: string): Promise<string> {
   exactLoopback(nativeOrigin, nativeUnavailable)
   if (process.platform !== "linux" || info.version !== "2.2.5" || info.pid !== process.pid
-    || info.hostname !== "127.0.0.1" || !info.urls.some(url => new URL(url).origin === nativeOrigin)
+    // Pinned 2.2.5 server.info reports os.hostname(), not the listener address.
+    || info.hostname !== hostname() || !info.urls.some(url => new URL(url).origin === nativeOrigin)
     || !/^[0-9a-f]{64}$/.test(expectedExecutableDigest)) nativeUnavailable()
   const executable = await fs.open("/proc/self/exe", "r")
   let executableDigest: string

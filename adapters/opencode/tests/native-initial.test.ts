@@ -13,9 +13,11 @@ import { NativeInitialAdapter } from "../src/native-initial.js"
 import { NativeWorkerPreparation, NativeDispatchFrontier } from "../src/native-worker-preparation.js"
 import { NativeInitialStart } from "../src/native-initial-start.js"
 import { contextJSON } from "../src/native-context-codec.js"
+import { listenNativeTransport } from "../src/native-transport.js"
+import { createServer } from "node:net"
 
 const id=(n:number)=>`00000000-0000-0000-0000-${n.toString(16).padStart(12,"0")}`
-async function fixture(){
+async function fixture(template="executor-v1"){
   const base=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(base)
   const root=await fs.mkdtemp(path.join(base,"initial-")),work=path.join(root,"work");await fs.mkdir(work)
   const hooks=new Map<string,(e:any)=>Promise<void>>(),instructions:Array<{key:string;value:string}>=[],messages:any[]=[]
@@ -23,8 +25,9 @@ async function fixture(){
   const envelope={formatVersion:1,kind:"initial-start",projectId:id(1),assignmentId:id(2),executionGeneration:"0",binding,
     intentId:id(3),correlationId:id(4),nativeHostId:id(5),nativeSessionId:"ses_initial_worker",messageId:"msg_initial_original",text:"Begin exact bounded task",
     metadata:{nativeIntentId:id(3),assignmentId:id(2),executionGeneration:"0"},delivery:"queue",resume:true}
-  const raw=contextJSON(envelope),packet=contextJSON([{key:"writhelm-task",value:"EXACT pinned contract, no summary substitution"}])
-  const profile={family:"profiles",key:{projectId:id(1),profileId:id(6),revision:0},payload:{platform:"linux",qualification:"qualified",model:{providerId:"MOCK",modelId:"no-call",variant:null},
+  const raw=contextJSON(envelope),packet=contextJSON([{key:"writhelm-task",value:"EXACT pinned contract, no summary substitution"},
+    {key:"writhelm-record-binding",value:contextJSON({family:"assignment-bindings",key:binding.key,payload:{intendedExecution:{template}}})}].sort((a,b)=>a.key.localeCompare(b.key)))
+  const profile={family:"profiles",key:{projectId:id(1),profileId:id(6),revision:0},payload:{platform:"linux",qualification:"unqualified",model:{providerId:"MOCK",modelId:"no-call",variant:null},
     outputReserveTokens:512,effort:"bounded",route:"no-call",permissions:[{tool:"read",action:"allow",scope:"workspace"}]}}
   let active=false,dispatch=true,wakes=0,lost=false,suppressBoundary=false,epoch="b".repeat(64),permissions:any[]=[{action:"*",resource:"*",effect:"deny"}],boundary:Promise<void>|undefined
   let permissionUpdates=0,losePermissionReply=false,failPermissionBefore=false,policyReady=true,blockedFrame:Promise<void>|undefined,frameEntered:()=>void=()=>{}
@@ -43,13 +46,14 @@ async function fixture(){
       if(lost)throw Error("MOCK lost original prompt ack")
       return {id:i.id,type:"user",sessionID:i.sessionID,payload:{text:i.text,metadata:i.metadata},delivery:i.delivery}
     }},tool:{hook:hook("tool")}} as unknown as Plugin.Context
-  const native={session:{get:async()=>({id:envelope.nativeSessionId,location:{directory:work},model:{providerID:"MOCK",id:"no-call"},permissions,cost:0}),
+  let nativeVariant:string|undefined
+  const native={session:{get:async()=>({id:envelope.nativeSessionId,location:{directory:work},model:{providerID:"MOCK",id:"no-call",...(nativeVariant===undefined?{}:{variant:nativeVariant})},permissions,cost:0}),
     context:async()=>messages,inbox:{list:async()=>[]}}} as unknown as OpenCodeClient
   const registry={inspect:async()=>({scope:"assignment",assignmentId:id(2),executionGeneration:"0",bindingJSON:contextJSON(binding),workRoot:work,epoch}),
     initialContext:async()=>{
       if(blockedFrame){frameEntered();await blockedFrame}
       return {envelopeJSON:raw,envelopeDigest:createHash("sha256").update(raw).digest("hex"),packetJSON:packet,profileJSON:contextJSON(profile),
-        assignmentJSON:contextJSON({payload:{intendedExecution:{template:"executor-v1"}}}),active,dispatch}
+        assignmentJSON:contextJSON({payload:{intendedExecution:{template}}}),active,dispatch}
     }} as unknown as NativeCredentialRegistry
   const custody=new LinuxNativeCustody(path.join(root,"private"),[work]);await custody.initialize()
   const deployment=new LinuxNativeCustody(path.join(root,"deployment"),[work]);await deployment.initialize()
@@ -58,8 +62,10 @@ async function fixture(){
   const checkPolicy=async()=>{if(!policyReady)throw Error("MOCK effective context policy changed")}
   const create=()=>new NativeInitialAdapter(ctx,native,registry,custody,deployment,"ses_controller",()=>false,undefined,checkPolicy)
   const adapter=create();await adapter.register()
-  return {adapter,hooks,envelope,root,event,subject:{assignmentId:id(2),executionGeneration:"0",bindingJSON:contextJSON(binding)},
-    restart:create,changeEpoch:()=>{epoch="c".repeat(64)},revokePolicy:()=>{policyReady=false},
+  return {adapter,hooks,envelope,root,event,admission:(purpose:string)=>contextJSON({subject:{assignmentId:id(2),executionGeneration:"0",bindingJSON:contextJSON(binding)},
+      sessionID:envelope.nativeSessionId,profileJSON:contextJSON(profile),purpose,epoch:"b".repeat(64)}),
+    subject:{assignmentId:id(2),executionGeneration:"0",bindingJSON:contextJSON(binding)},
+    restart:create,changeEpoch:()=>{epoch="c".repeat(64)},revokePolicy:()=>{policyReady=false},nativeVariant:(value:string)=>{nativeVariant=value},
     restrict:()=>{permissions=[...permissions,{action:"read",resource:"private.txt",effect:"deny"}]},denyAll:()=>{permissions=[{action:"*",resource:"*",effect:"deny"}]},
     permissionUpdates:()=>permissionUpdates,losePermissionReply:()=>{losePermissionReply=true},failPermissionBefore:()=>{failPermissionBefore=true},
     blockFrame:()=>{
@@ -70,6 +76,74 @@ async function fixture(){
     },
     active:()=>{active=true;dispatch=false},revoke:()=>{active=false;dispatch=false},lose:()=>{lost=true},noBoundary:()=>{suppressBoundary=true},wakes:()=>wakes,boundary:()=>boundary,permissions:()=>permissions}
 }
+
+test("phase admission observes deployment identity and applied restrictions without a model call or campaign",async()=>{
+  const f=await fixture("reviewer-v1")
+  try{
+    const raw=f.admission("start")
+    const unregistered=f.restart()
+    await assert.rejects(unregistered.admission(raw));await unregistered.close()
+    assert.equal((await f.adapter.admission(raw)).requestDigest,createHash("sha256").update(raw).digest("hex"))
+    assert.equal(f.wakes(),0);assert.equal(f.permissionUpdates(),0)
+    await assert.rejects(f.adapter.admission(f.admission("resume")))
+    f.nativeVariant("wrong");await assert.rejects(f.adapter.admission(raw));f.nativeVariant("default")
+    await f.adapter.deliver(f.subject,id(3))
+    await f.adapter.awaitBoundary(f.envelope.nativeSessionId,new AbortController().signal)
+    f.active();await f.adapter.release(f.envelope.nativeSessionId);await f.boundary()
+    assert.ok(await f.adapter.admission(f.admission("access")))
+    assert.ok(await f.adapter.admission(f.admission("retention")))
+    f.restrict();await assert.rejects(f.adapter.admission(f.admission("access")))
+    f.denyAll();await assert.rejects(f.adapter.admission(f.admission("access")),
+      "An owner deny-all after the original release is a restriction, not a first activation")
+    f.changeEpoch();await assert.rejects(f.adapter.admission(raw))
+    assert.equal(f.wakes(),1)
+  }finally{await f.adapter.close()}
+})
+
+test("private phase-admission transport binds exact request and refuses missing peer proof without a wake",async()=>{
+  const f=await fixture()
+  const socket=createServer()
+  await new Promise<void>(resolve=>socket.listen(0,"127.0.0.1",resolve))
+  const port=(socket.address() as {port:number}).port
+  await new Promise<void>(resolve=>socket.close(()=>resolve()))
+  const origin=`http://127.0.0.1:${port}`,proof=Buffer.alloc(32,31)
+  const transport=await listenNativeTransport(origin,proof,{} as never,{} as never,undefined,undefined,f.adapter)
+  try{
+    const requestJSON=f.admission("start")
+    const call=(credential:string)=>fetch(origin+"/native/v1",{method:"POST",headers:{"Content-Type":"application/json","X-Writhelm-Native-Proof":credential},
+      body:JSON.stringify({formatVersion:1,operation:"execution-admission",requestJSON})})
+    const response=await call(proof.toString("base64url"));assert.equal(response.status,200)
+    const body=await response.json() as any
+    assert.equal(body.result.requestDigest,createHash("sha256").update(requestJSON).digest("hex"))
+    assert.notEqual((await call(Buffer.alloc(32,32).toString("base64url"))).status,200)
+    assert.equal(f.wakes(),0);assert.equal(f.permissionUpdates(),0)
+  }finally{await transport.close();await f.adapter.close()}
+})
+
+test("pinned native default variant matches an omitted profile variant but arbitrary variants refuse before prompt",async()=>{
+  const f=await fixture()
+  try{
+    f.nativeVariant("default");await f.adapter.prepare(f.subject,id(3))
+    f.nativeVariant("unexpected-variant");await assert.rejects(f.adapter.prepare(f.subject,id(3)))
+    assert.equal(f.wakes(),0)
+  }finally{await f.adapter.close()}
+})
+
+test("reviewer execute.before rejects cached mutation/plugin/code-mode tools independently of context filtering",async()=>{
+  const f=await fixture("reviewer-v1")
+  try{
+    await f.adapter.deliver(f.subject,id(3))
+    await f.adapter.awaitBoundary(f.envelope.nativeSessionId,new AbortController().signal)
+    f.active();await f.adapter.release(f.envelope.nativeSessionId);await f.boundary()
+    const execute=f.hooks.get("tool:execute.before")!
+    for(const tool of ["edit","write","patch","shell","execute","subagent","codemode","plugin_write","permission_update"])
+      await assert.rejects(execute({sessionID:f.envelope.nativeSessionId,tool}))
+    for(const tool of ["read","writhelm_work_read","writhelm_work_command"])
+      await execute({sessionID:f.envelope.nativeSessionId,tool})
+    f.revoke();await assert.rejects(execute({sessionID:f.envelope.nativeSessionId,tool:"read"}))
+    assert.equal(f.wakes(),1)
+  }finally{await f.adapter.close()}
+})
 
 test("initial NORMAL prompt is dispatched once; held scoped context without sessionID is required before ACTIVE release",async()=>{
   const f=await fixture()

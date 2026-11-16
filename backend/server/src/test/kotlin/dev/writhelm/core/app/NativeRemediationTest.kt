@@ -39,7 +39,7 @@ class NativeRemediationTest {
         fun base()=H1SnapshotCache(storeId).load(h)
         fun candidate(command: WorkCommand,facts: WorkExternalFacts=f.observations.facts): H1JointCandidate {
             val base=base()
-            return f.key(plannerKey) { f.bridge.work(base,command,it,H1ObservedFacts(h.oid,facts,f.observations.qualifiedProfiles)) }
+            return f.key(plannerKey) { f.bridge.work(base,command,it,H1ObservedFacts(h.oid,facts,f.observations.qualifiedProfiles,NativeExecutionAdmission.expected(base,command))) }
         }
         fun edge(command: WorkCommand,candidate: H1JointCandidate,transform: (List<RecordChange>)->List<RecordChange> = { it },reject: Boolean=false) {
             val changes=transform(candidate.evaluation.changes)

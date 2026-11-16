@@ -1,5 +1,65 @@
 # Publication policy
 
+## P38 — H1 composition and EX-09 local source checkpoint
+
+The owner's 2026-11-16 commit instruction after the EX-09 implementation authorizes this local
+checkpoint and its accumulated H1 source dependencies. It does not authorize push, live inference,
+operational integration, or acceptance of the complete H1 journey.
+
+The exact additional paths below are newly authored Writhelm AGPL-3.0-only implementation,
+synthetic tests and model-free test drivers. They provide ordinary-client lifecycle, exact candidate
+checks/review plumbing and phase-specific runtime admission. They are not private project exports,
+installed profiles, session transcripts, credentials, runtime records or test-run evidence.
+Test helpers construct disposable synthetic projects; no real instance content is included.
+Preserve dependency/license notices and review the complete staged diff before committing.
+
+```text
+adapters/opencode/src/native-automatic-review.ts
+adapters/opencode/src/native-candidate-activation.ts
+adapters/opencode/src/native-candidate-review.ts
+adapters/opencode/src/native-plan-activation.ts
+adapters/opencode/src/native-project-checks.ts
+adapters/opencode/src/native-session-creation.ts
+adapters/opencode/src/primary-rpc.ts
+adapters/opencode/src/primary-tui.ts
+adapters/opencode/tests/candidate-review-composition-client.ts
+adapters/opencode/tests/candidate-review-preparation-client.ts
+adapters/opencode/tests/candidate-review-receipts-client.ts
+adapters/opencode/tests/enrolled-candidate-activation-client.ts
+adapters/opencode/tests/native-candidate-activation.test.ts
+adapters/opencode/tests/native-candidate-review.test.ts
+adapters/opencode/tests/native-plan-activation.test.ts
+adapters/opencode/tests/native-project-checks.test.ts
+adapters/opencode/tests/native-session-creation.test.ts
+backend/server/src/main/kotlin/dev/writhelm/core/app/AutomaticCandidateReviewPlan.kt
+backend/server/src/main/kotlin/dev/writhelm/core/app/CandidateReviewTicket.kt
+backend/server/src/main/kotlin/dev/writhelm/core/app/RuntimeQualification.kt
+backend/server/src/main/kotlin/dev/writhelm/service/AutomaticClientService.kt
+backend/server/src/main/kotlin/dev/writhelm/service/AutomaticPassiveDeployment.kt
+backend/server/src/main/kotlin/dev/writhelm/service/AutomaticProjectCheckDeployment.kt
+backend/server/src/main/kotlin/dev/writhelm/service/NativeCandidateReviewInputFacts.kt
+backend/server/src/main/kotlin/dev/writhelm/service/NativeCandidateReviewReceipts.kt
+backend/server/src/main/kotlin/dev/writhelm/service/NativeCheckpointPreparation.kt
+backend/server/src/main/kotlin/dev/writhelm/service/NativeRuntimeEnvironment.kt
+backend/server/src/main/kotlin/dev/writhelm/service/ServiceCandidateReviewTickets.kt
+backend/server/src/test/kotlin/dev/writhelm/core/app/AutomaticPassiveDeploymentTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/app/AutomaticProjectCheckDeploymentTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/app/CandidateReviewServiceJourney.kt
+backend/server/src/test/kotlin/dev/writhelm/core/app/CandidateReviewTicketTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/app/InstalledCompositionHarness.kt
+backend/server/src/test/kotlin/dev/writhelm/core/app/NativeCheckpointPreparationTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/app/NativeRuntimeEnvironmentTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/app/ReviewerKnowledgeInputsTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/app/RuntimeQualificationTest.kt
+backend/server/src/test/resources/h1/automatic-ui-client.py
+backend/server/src/test/resources/h1/parallel-ui-client.py
+```
+
+Previously allowed H1 source, tests, build configuration, README/status and the owner-approved
+chat-bound planner/EX-09 contract amendments are part of the same reviewed checkpoint. The local
+canonical task, private evidence, build outputs, installation profiles and instance stores remain
+excluded. Tracking these sources is not operational acceptance or a claim of other-OS support.
+
 ## Default deny
 
 Repository publication is an explicit allowlist, not a copy or synchronization of existing projects.

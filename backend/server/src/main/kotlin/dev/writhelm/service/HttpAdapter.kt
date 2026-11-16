@@ -29,7 +29,10 @@ internal data class HttpDeliveryEvent(val control: Boolean,val status: Int)
 internal class HttpAdapter(private val service: WrithelmService,val profile: HttpProfile,
     private val beforeDelivery: suspend (HttpDeliveryEvent)->Unit={},
     private val admission: HttpAdmission=HttpAdmission(),
-    private val nativeEndpoint: NativeRuntimeEndpoint?=null) {
+    private val nativeEndpoint: NativeRuntimeEndpoint?=null,
+    private val enrollmentEndpoint:TestClientEnrollmentEndpoint?=null,
+    private val nativeEndpoints:NativeRuntimeEndpointRouter?=null) {
+    init {require(nativeEndpoint==null || nativeEndpoints==null)}
     val mcp=McpAdapter(service)
     private fun boundary(call: ApplicationCall,protected: Boolean): String? {
         val headers=call.request.headers
@@ -90,13 +93,29 @@ internal class HttpAdapter(private val service: WrithelmService,val profile: Htt
     private suspend fun prepare(call: ApplicationCall,lease: HttpAdmission.Lease): FrozenReply {
         val path=call.request.path();val method=call.request.httpMethod
         var mayPublish=false;var sdkStarted=false;var sdkFinalized=false
+        var selectedNativeEndpoint:NativeRuntimeEndpoint?=null
         try {
+            if(path=="/internal/enrollment/v1") {
+                boundary(call,false)
+                val endpoint=enrollmentEndpoint ?: stop("NOT_FOUND",404)
+                if(method!=HttpMethod.Post && method!=HttpMethod.Get)stop("INVALID_INPUT",405)
+                if(call.request.headers.contains(HttpHeaders.Authorization))stop("FORBIDDEN",403)
+                val proof=call.request.headers.getAll("X-Writhelm-Enrollment-Proof")
+                if(proof==null || proof.size!=1 || !endpoint.accepts(proof.single()))stop("FORBIDDEN",403)
+                if(method==HttpMethod.Get)return freeze(wire(service.guarded({endpoint.status()},{it})),lease,65536)
+                val bytes=body(call,4096,lease)
+                mayPublish=true // broker may have published before a transport/adapter exception
+                val reply=service.guarded({endpoint.read(bytes)},{it})
+                return freeze(wire(reply),lease,65536)
+            }
             val t=checkNotNull(boundary(call,true))
             if(path in setOf("/internal/native/v1","/internal/native/receipt/v1","/internal/native/candidate/v1")) {
-                val endpoint=nativeEndpoint ?: stop("NOT_FOUND",404)
+                if(nativeEndpoint==null && nativeEndpoints==null)stop("NOT_FOUND",404)
                 if(method!=HttpMethod.Post)stop("INVALID_INPUT",405)
                 val proof=call.request.headers.getAll("X-Writhelm-Native-Proof")
-                if(proof==null || proof.size!=1 || !endpoint.accepts(proof.single()))stop("FORBIDDEN",403)
+                if(proof==null || proof.size!=1)stop("FORBIDDEN",403)
+                selectedNativeEndpoint=nativeEndpoints?.select(proof.single()) ?: nativeEndpoint?.takeIf {it.accepts(proof.single())}
+                if(selectedNativeEndpoint==null)stop("FORBIDDEN",403)
             }
             currentCoroutineContext().ensureActive()
             val session=if(path=="/mcp")call.request.headers.getAll("MCP-Session-Id") else null
@@ -124,9 +143,9 @@ internal class HttpAdapter(private val service: WrithelmService,val profile: Htt
                 val reply=when(path) {
                     "/api/v1/commands" -> { if(method!=HttpMethod.Post)stop("INVALID_INPUT",405);mayPublish=true;wire(service.command(t,bytes)) }
                     "/api/v1/reads" -> { if(method!=HttpMethod.Post)stop("INVALID_INPUT",405);wire(service.read(t,bytes)) }
-                    "/internal/native/v1" -> wire(checkNotNull(nativeEndpoint).read(t,bytes))
-                    "/internal/native/receipt/v1" -> wire(checkNotNull(nativeEndpoint).readResultReceipt(t,bytes))
-                    "/internal/native/candidate/v1" -> wire(checkNotNull(nativeEndpoint).readCandidate(t,bytes))
+                    "/internal/native/v1" -> wire(checkNotNull(selectedNativeEndpoint).read(t,bytes))
+                    "/internal/native/receipt/v1" -> wire(checkNotNull(selectedNativeEndpoint).readResultReceipt(t,bytes))
+                    "/internal/native/candidate/v1" -> wire(checkNotNull(selectedNativeEndpoint).readCandidate(t,bytes))
                     "/mcp" -> {
                         when(method) {
                             HttpMethod.Delete -> { sdkStarted=true;mcp.delete(t,session?.single(),version?.single()).also { sdkFinalized=true } }

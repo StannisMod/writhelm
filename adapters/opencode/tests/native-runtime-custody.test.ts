@@ -74,3 +74,21 @@ test("one custody instance serializes concurrent witnesses without weakening the
   finally{await fs.rmdir(ownTestLock)} // only this exact test-owned lock, never recovery of unknown state
   assert.equal(await custody.read("observation","other"),undefined)
 })
+
+test("a foreign diagnostic probe blocks cursor publication without erasing existing observations",async()=>{
+  const configured=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(configured)
+  const area=await fs.mkdtemp(path.join(configured,"diagnostic-probe-")),work=path.join(area,"work")
+  await fs.mkdir(work)
+  const root=path.join(area,"diagnostics"),custody=new LinuxNativeCustody(root,[work]);await custody.initialize()
+  await custody.retain("activation","original","original observation")
+  const probe=path.join(root,"rpc-debug.json"),bytes=JSON.stringify({stage:"ensure-completed"})
+  await fs.writeFile(probe,bytes,{mode:0o600,flag:"wx"})
+  await assert.rejects(custody.retain("activation","new","must not bypass unknown inventory"))
+  assert.equal(await custody.read("activation","new"),undefined)
+  assert.equal(await custody.read("activation","original"),"original observation")
+  assert.equal(await fs.readFile(probe,"utf8"),bytes)
+  // Preserve only this known test-created probe outside the inventory; no general recovery cleanup.
+  await fs.rename(probe,path.join(area,"preserved-rpc-debug.json"))
+  assert.equal(await custody.retain("activation","new","new observation"),true)
+  assert.equal(await custody.read("activation","original"),"original observation")
+})

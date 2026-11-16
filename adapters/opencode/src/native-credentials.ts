@@ -6,7 +6,7 @@ import type { Plugin } from "@opencode/plugin"
 import type { ToolContext } from "@opencode/plugin/promise/tool"
 import { isLosslessNumber } from "lossless-json"
 import { LinuxNativeCustody } from "./native-runtime-custody.js"
-import { NativeRuntimeClient, closedObject, nativeUnavailable, uuidPattern, type NativeSubject } from "./native-runtime-client.js"
+import { NativeRuntimeClient, NativeRuntimeReadHold, closedObject, nativeUnavailable, uuidPattern, type NativeSubject } from "./native-runtime-client.js"
 import { boundedWorkChannel, boundedPlanningKnowledgeChannel, boundedDelegationEnrollmentChannel, boundedDispatchAttemptChannel, boundedDispatchMaterializationChannel, LinuxWorkRequestCustody, type BoundWorkChannel, type NativeWorkCredentialResolver } from "./connected-tools.js"
 import { exactJSON } from "./strict-json.js"
 
@@ -89,11 +89,12 @@ export class NativeCredentialRegistry implements NativeWorkCredentialResolver {
     if (raw === undefined) nativeUnavailable()
     return this.secret(raw, id)
   }
-  private metadata(raw: string, id: string): SessionRecord {
+  private metadata(raw: string, id: string, inventoryPreviousAssignments=false): SessionRecord {
     const v = closedObject(parse(raw), ["formatVersion", "kind", "sessionID", "hostId", "epoch", "workRoot", "principalId", "credentialId",
       "scope", "delegationId", "assignmentId", "executionGeneration", "bindingJSON"])
     if (!version(v.formatVersion) || v.kind !== "native-session-v1" || v.sessionID !== id || !session(id)
-      || v.hostId !== this.#service.hostId || v.epoch !== this.#epoch || !uuidPattern.test(v.principalId)
+      || v.hostId !== this.#service.hostId || typeof v.epoch!=="string" || !/^[0-9a-f]{64}$/.test(v.epoch)
+      || v.scope!=="controller" && v.epoch!==this.#epoch && !inventoryPreviousAssignments || !uuidPattern.test(v.principalId)
       || !uuidPattern.test(v.credentialId) || typeof v.workRoot !== "string" || !path.isAbsolute(v.workRoot)
       || !["controller", "assignment"].includes(v.scope)) nativeUnavailable()
     if (v.scope === "controller" ? v.delegationId !== null || v.assignmentId !== null || v.executionGeneration !== null || v.bindingJSON !== null
@@ -134,7 +135,23 @@ export class NativeCredentialRegistry implements NativeWorkCredentialResolver {
     const actual = await this.#ctx.session.get({ sessionID })
     if (actual.id !== sessionID || actual.revert || actual.location.directory !== value.workRoot
       || await fs.realpath(value.workRoot) !== value.workRoot) nativeUnavailable()
-    this.#known.set(sessionID, Object.freeze(value))
+    if(value.scope==="controller"){
+      if(actual.parentID||actual.fork)nativeUnavailable()
+      // The retained epoch is historical connection evidence, not the lifetime of a controller.
+      // Reconnect the same session/key only under current canonical controller authority. Never
+      // apply this projection to assignment records or rewrite their execution epoch.
+      if(value.epoch!==this.#epoch && !this.#known.has(sessionID)){
+        const key=await this.credential(value.credentialId),identity=await this.#service.identity(key.token)
+        if(identity.scope!=="controller"||identity.controllerId!==this.#service.controllerId||
+          identity.principalId!==value.principalId||identity.credentialId!==value.credentialId||
+          identity.projectId!==this.#service.projectId||identity.storeId!==this.#service.storeId||
+          identity.delegationId!==null||identity.assignmentId!==null||identity.executionGeneration!==null)nativeUnavailable()
+        await this.#custody.retain("controller-connection",`${sessionID}:${this.#epoch}`,JSON.stringify({formatVersion:1,
+          sessionID,projectId:identity.projectId,controllerId:identity.controllerId,principalId:value.principalId,
+          credentialId:value.credentialId,workRoot:value.workRoot,hostId:value.hostId,epoch:this.#epoch}))
+      }
+    }
+    this.#known.set(sessionID, Object.freeze(value.scope==="controller"?{...value,epoch:this.#epoch}:value))
     return true
   }
   managed(sessionID: string): boolean { return this.#known.get(sessionID)?.scope === "assignment" }
@@ -145,7 +162,12 @@ export class NativeCredentialRegistry implements NativeWorkCredentialResolver {
     for (const entry of await this.#custody.scan("session")) {
       const id = parse(entry.raw).sessionID
       if (typeof id !== "string" || createHash("sha256").update(id).digest("hex") !== entry.keyDigest
-        || await this.#custody.read("session", id) !== entry.raw || !await this.restore(id)) nativeUnavailable()
+        || await this.#custody.read("session", id) !== entry.raw) nativeUnavailable()
+      const historical=this.metadata(entry.raw,id,true)
+      // Inventory is not adoption: old workers remain unbound, retained and denied by restore().
+      // Their recovery must not prevent the permanent planner identity from reconnecting.
+      if(historical.scope==="assignment"&&historical.epoch!==this.#epoch)continue
+      if(!await this.restore(id))nativeUnavailable()
       if (this.managed(id)) assignments.push(id)
       if (assignments.length > 256) nativeUnavailable()
     }
@@ -303,6 +325,26 @@ export class NativeCredentialRegistry implements NativeWorkCredentialResolver {
     if((await this.inspect(sessionID))?.scope!=="controller")nativeUnavailable()
     return this.#service.candidateDelivery((await this.verifiedCredential(sessionID)).token,planRefJSON,signal)
   }
+  async issueCandidateReviewTicket(sessionID:string,ticketJSON:string,signal?:AbortSignal){
+    const binding=await this.inspect(sessionID)
+    if(binding?.scope!=="controller")nativeUnavailable()
+    return this.#service.issueCandidateReviewTicket((await this.verifiedCredential(sessionID)).token,ticketJSON,signal)
+  }
+  async candidateReviewReport(sessionID:string,reviewId:string,reportRefJSON:string,ticketDigest:string,signal?:AbortSignal){
+    const binding=await this.inspect(sessionID)
+    if(binding?.scope!=="controller")nativeUnavailable()
+    return this.#service.candidateReviewReport((await this.verifiedCredential(sessionID)).token,reviewId,reportRefJSON,ticketDigest,signal)
+  }
+  async candidateReviewStatus(sessionID:string,reviewId:string,ticketDigest:string,signal?:AbortSignal){
+    const binding=await this.inspect(sessionID)
+    if(binding?.scope!=="controller")nativeUnavailable()
+    return this.#service.candidateReviewStatus((await this.verifiedCredential(sessionID)).token,reviewId,ticketDigest,signal)
+  }
+  async candidateReviewPreparation(sessionID:string,planRefJSON:string,assemblyId:string,checkPlanId:string,signal?:AbortSignal){
+    const binding=await this.inspect(sessionID)
+    if(binding?.scope!=="controller")nativeUnavailable()
+    return this.#service.candidateReviewPreparation((await this.verifiedCredential(sessionID)).token,planRefJSON,assemblyId,checkPlanId,signal)
+  }
   async candidateTestPermit(sessionID:string,assemblyJSON:string,planRefJSON:string,jobJSON:string,signal?:AbortSignal){
     if((await this.inspect(sessionID))?.scope!=="controller")nativeUnavailable()
     return this.#service.candidateTestPermit((await this.verifiedCredential(sessionID)).token,assemblyJSON,planRefJSON,jobJSON,signal)
@@ -326,6 +368,9 @@ export class NativeCredentialRegistry implements NativeWorkCredentialResolver {
       return boundedWorkChannel(this.#service.projectId, binding.scope, this.#serviceOrigin, credential.token, 4 * 1024 * 1024,
         this.#requests, JSON.stringify([this.#service.storeId, this.#service.projectId, binding.hostId, binding.epoch,
           binding.sessionID, binding.assignmentId, binding.executionGeneration, binding.bindingJSON]))
-    } catch { return undefined }
+    } catch(error) {
+      if(error instanceof NativeRuntimeReadHold)throw error // Preserve a transient hold; never turn it into an unbound caller.
+      return undefined
+    }
   }
 }

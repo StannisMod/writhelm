@@ -13,7 +13,8 @@ internal fun interface NativeSourceProofControl { fun sourceProof(locator: UUID)
  * current-authority callback under the monitor, or copying the native transcript into Git.
  * Controller full-frontier packet verification is a separate dependent composition, not guessed. */
 internal class NativeContextFacts(private val delegate: H1RuntimeFacts,private val native: NativeSourceProofControl,
-    private val epoch: String,private val controller: Model2ControllerExecution?=null): H1RuntimeFacts {
+    private val epoch: String,private val controller: Model2ControllerExecution?=null,
+    private val reviewTickets:CandidateReviewTicketIssuer?=null): H1RuntimeFacts {
     init { require(epoch.matches(Regex("[0-9a-f]{64}"))) }
     override fun capture(state: H1BoundState,command: WorkCommand): H1ObservedFacts {
         val original=delegate.capture(state,command)
@@ -22,7 +23,7 @@ internal class NativeContextFacts(private val delegate: H1RuntimeFacts,private v
         val locator=worker?.retainedLocatorId ?: planner?.data?.source?.retainedLocatorId ?: return original
         val observed=try { if(worker!=null)workerCut(state,command,worker)else controllerCut(state,command,requireNotNull(planner)) }catch(_: Exception) { null }
         return if(observed==null)original else H1ObservedFacts(original.basis,
-            original.facts.copy(sourceCuts=original.facts.sourceCuts+(locator to observed)),original.qualifiedProfiles)
+            original.facts.copy(sourceCuts=original.facts.sourceCuts+(locator to observed)),original.qualifiedProfiles,original.executionAdmission)
     }
     private fun controllerCut(state: H1BoundState,command: WorkCommand,request: CRecordControllerContinuation): WorkRetainedCut? {
         val execution=controller ?: return null
@@ -66,7 +67,7 @@ internal class NativeContextFacts(private val delegate: H1RuntimeFacts,private v
         val mf=model.fields(*(if("variant" in model.entries)arrayOf("providerID","id","variant")else arrayOf("providerID","id")))
         workRequire(mf.getValue("providerID").string()==profile.model.providerId && mf.getValue("id").string()==profile.model.modelId &&
             mf["variant"]?.string()==profile.model.variant,WorkProblem.INVALID_SUBJECT)
-        val packet=StrictJson.encode(JArray(NativeAssignmentPacket.render(state,command.projectId,cut.assignment).map {
+        val packet=StrictJson.encode(JArray(NativeAssignmentPacket.render(state,command.projectId,cut.assignment,reviewTickets).map {
             obj("key" to str(it.first),"value" to str(it.second)) }),2*1024*1024).decodeToString()
         workRequire(digest(proof.getValue("packetDigest"))==Digest.of(packet.toByteArray(Charsets.UTF_8)),WorkProblem.DIGEST_MISMATCH)
         val messages=proof.getValue("nativeMessages").list().map { item ->

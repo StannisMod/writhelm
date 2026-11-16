@@ -59,10 +59,18 @@ export async function listenNativeTransport(origin: string, proof: Uint8Array, b
         if(!Number.isSafeInteger(selected.pid)||selected.pid<=0||selected.pid>2147483647)nativeUnavailable()
         exactLoopback(selected.nativeOrigin,nativeUnavailable)
         result={pid:selected.pid,nativeOrigin:selected.nativeOrigin}
+      } else if(input.operation==="execution-admission"){
+        closedObject(input,["formatVersion","operation","requestJSON"])
+        if(!initial||typeof input.requestJSON!=="string")nativeUnavailable()
+        result=await initial.admission(input.requestJSON)
       } else if(input.operation==="initial-proof"){
         closedObject(input,["formatVersion","operation","intentId"])
         if(!initial||typeof input.intentId!=="string")nativeUnavailable()
         result=await initial.witness(input.intentId)
+      } else if(input.operation==="candidate-inputs-proof"){
+        closedObject(input,["formatVersion","operation","operationId","requestJSON"])
+        if(!retention||typeof input.operationId!=="string"||typeof input.requestJSON!=="string")nativeUnavailable()
+        result=await retention.candidateInputsProof(input.operationId,input.requestJSON,AbortSignal.timeout(9000))
       } else if(input.operation==="candidate-assembly-proof"){
         closedObject(input,["formatVersion","operation","operationId"])
         if(!retention||typeof input.operationId!=="string")nativeUnavailable()

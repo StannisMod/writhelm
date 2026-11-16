@@ -13,7 +13,7 @@ import java.util.UUID
  * Missing/ambiguous tracker/view/memory or invalid mandatory inputs refuse before extraction. */
 internal object NativeWorkerContext {
     fun read(state: H1BoundState,key: PresentedCredential,project: UUID,controller: UUID,host: UUID,
-        safety: NativeRuntimeSafety): JsonValue {
+        safety: NativeRuntimeSafety,reviewTickets:CandidateReviewTicketIssuer?=null): JsonValue {
         val c=state.authority.authenticate(key,project) ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
         val scope=c.scope as? CredentialScope.Assignment ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
         if(!state.authority.allows(c,project,Capability.READ))throw AppAccessFault(AppAccessProblem.FORBIDDEN)
@@ -68,7 +68,7 @@ internal object NativeWorkerContext {
                 reusable[pair.first.digest]=pair.first
         }
         workRequire(reusable.size<=4096,WorkProblem.INCOMPLETE_HANDOFF)
-        val instructions=NativeAssignmentPacket.render(state,project,subject).map { obj("key" to str(it.first),"value" to str(it.second)) }
+        val instructions=NativeAssignmentPacket.render(state,project,subject,reviewTickets).map { obj("key" to str(it.first),"value" to str(it.second)) }
         return obj("formatVersion" to num(1),"basis" to state.basis.json(),"nativeReady" to JBoolean(nativeReady),"finishedHandoff" to JBoolean(finishedHandoff),"assignmentId" to uuid(subject.assignmentId),
             "executionGeneration" to str(subject.generation.toString()),"recordGeneration" to str(a.generation.toString()),
             "bindingJSON" to str(identityCodec.encodeReference(requireNotNull(a.binding)).decodeToString()),
