@@ -18,10 +18,8 @@ Writhelm is a self-hosted authority for project knowledge and governed agent wor
 harnesses. A conversation is an interface, not the canonical record. The owner can recover what
 was required, authorized, attempted, checked, accepted and integrated without reconstructing chat.
 
-These requirements describe behavior, not a Kotlin stack, table layout, HTTP route naming or
-upstream compatibility obligation. A maintained fork and a new core with selective reuse must be
-evaluated against the same requirements and scenarios. The imported upstream baseline is evidence
-of its own behavior, not evidence that Writhelm meets this specification.
+These requirements describe behavior, not a Kotlin stack, table layout or HTTP route naming.
+The Writhelm-owned core must be evaluated against these requirements and scenarios.
 
 ## Actors and terms
 
@@ -394,8 +392,8 @@ limitations, not silently dropped requirements. A milestone cannot pass by redef
 
 ## Open decisions before implementation
 
-1. Foundation direction is settled: Writhelm-owned core with selective upstream reuse, not a
-   maintained fork (architecture F3). Remaining design: component/dependency boundaries, adapted
+1. Foundation direction is settled: Writhelm-owned core (architecture F3).
+   Remaining design: component/dependency boundaries, adapted
    tests, update costs and license obligations. The comparison is not another foundation ballot.
 2. Exact authority provisioning/revocation, identities and supported initial trust/deployment mode.
 3. Persistence/publication/recovery protocol and supported durability guarantees; command retention

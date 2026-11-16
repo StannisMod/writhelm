@@ -205,8 +205,8 @@ exclusive ownership, synchronization, descendant containment and interrupted-rec
 actual target OS/profile. A build or Linux run does not establish Windows/macOS behavior. No platform
 implementation order or extra expensive process-fault run is authorized by this coverage record.
 
-All AC scenarios: **not executed for Writhelm**. The imported upstream regression suite is useful
-baseline evidence only; it does not satisfy these scenarios by similarity of feature names.
+All AC scenarios: **not executed for Writhelm**. Component tests do not satisfy these scenarios
+by similarity of feature names.
 
 ## Integrated design walkthrough W1
 

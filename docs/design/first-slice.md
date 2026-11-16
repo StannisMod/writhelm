@@ -219,13 +219,11 @@ clause's status or force all consumers to newest inputs. No claims of exhaustive
 ## FS-05 — Own-core implementation boundary
 
 Proposed engineering organization: independent own-core code/build under `backend/server/`, keeping
-the imported `backend/current/` baseline intact and not depending on its workflow/provider runtime.
-This is one Writhelm service, not a gateway. The imported root currently includes only `:current`;
-do not accidentally couple the new core to its complete fixtures/migration chain while calling it
-selective reuse. Initial Kotlin/JVM + Ktor/MCP libraries can be retained as tooling choices, with
+the standalone server independent of any external workflow/provider runtime.
+This is one Writhelm service, not a gateway. Kotlin/JVM + Ktor/MCP libraries are tooling choices, with
 their compatible versions, notices/security and actual dependency graph checked in implementation.
-Copying upstream source needs explicit component provenance; library reuse does not require importing
-its `ToolExecutionContext` or database stack. No own-core source/build paths are published by this draft.
+Copying external source needs explicit component provenance; library reuse does not require importing
+another service's execution context or database stack. No source/build paths are published by this draft.
 
 ## FS-06 — Bounded implementation sequence and readiness
 

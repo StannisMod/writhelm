@@ -29,7 +29,6 @@ contract wording, logical fields and implementation proposals.
 | `docs/workflow.md` | `287cea745b8bb4d267378f935311d69dae39c585359aa59b928f89959d534bbb` |
 | `docs/architecture.md` | `d021a397bed2e471be1018f8b9eac051e4480c70b89faf3b54d493d46aadcad3` |
 | `docs/publication.md` | `4c146dcdfa7d577c934b99ab2be5da9e47f51c715828e29ad7e38e2d866200bf` |
-| `backend/gradle/libs.versions.toml`, pinned upstream reference only | `0d8edf1275c9cfe480b7edfc5f638e018819dd475547680757a6060e73e13732` |
 
 Primary public mechanism references: SQLite WAL/foreign-key/transaction documentation and Git
 update-ref/hash-object manuals. Read actual applicable sections; do not equate documented mechanisms

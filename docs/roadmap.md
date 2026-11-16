@@ -5,7 +5,7 @@ This is a capability map, not a delivery schedule or a statement of implemented 
 
 | Phase | Deliverable | Acceptance gate |
 | --- | --- | --- |
-| 0. Contracts and foundation | Authority model; task/revision/evidence schemas; upstream extension strategy; licensing; first harness execution profiles | Owner approves the design; upstream baseline is reproducible; model/effort/context/compaction behavior is qualified with explicit gaps |
+| 0. Contracts and foundation | Authority model; task/revision/evidence schemas; standalone core; licensing; first harness execution profiles | Owner approves the design; project tests are reproducible; model/effort/context/compaction behavior is verified with explicit gaps |
 | 1. Central service | Authenticated clients, project isolation, durable workflow, retry semantics and API/MCP access | Multiple thin clients share state without canonical corpus copies in coding repositories; unauthorized mutations fail |
 | 2. Canonical knowledge | Internally managed Git, stable clause identifiers, section access, historical reads and provenance | Structural edits preserve clause identity; publication failures cannot expose uncommitted content as accepted |
 | 3. Ratification and snapshots | Exact-revision owner approval; proposed/accepted/superseded states; task and branch knowledge manifests | Changed content does not inherit approval; distinct snapshots remain complete and reproducible |
@@ -56,7 +56,7 @@ The owner approved autonomous execution of this completion plan. Existing separa
 live inference, working-profile installation, the user pilot and public push remain unchanged.
 
 1. Integrate the exact accepted portable candidate into the target source tree, preserving existing
-   work and upstream notices. Review the exact new publication paths/content and reproducible test
+   work and third-party license notices. Review the exact new publication paths/content and reproducible test
    prerequisites before tracking them. Verify the affected assembled target; retained evidence is not
    relabeled as a fresh run. Commit integration separately from this documentation checkpoint.
 2. Complete the actual service/native composition: protected scoped credentials and trusted session/

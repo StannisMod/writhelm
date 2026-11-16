@@ -12,10 +12,7 @@ Implementation in progress. Portable service/work mechanisms exist, but an opera
 service and complete H1 pilot are not qualified. The roadmap distinguishes intended capabilities
 from implemented and verified guarantees.
 
-The selected direction is a Writhelm-owned core with selective reuse, not a maintained
-[Task Orchestrator](https://github.com/jpicklyk/task-orchestrator) fork. Its pinned source baseline
-remains unchanged under `backend/` for reference and reuse qualification. That upstream baseline
-passes its tests, lint and JAR build; this is not verification of a Writhelm core.
+Writhelm has its own core and standalone server project under `backend/server/`.
 The local implementation includes immutable content/approval/input manifests, a strict state codec,
 credential/authority rules, atomic Git publication, HTTP/MCP application adapters and a native
 OpenCode Desktop plugin candidate. Bounded independent reviews and targeted combined checks have
@@ -51,8 +48,6 @@ qualification or independent live-environment observer configured; it therefore 
 The owner-directed [H1 acceptance journey](docs/acceptance.md#h1-owner-acceptance--minimum-vertical-journey)
 requires dependency-limited parallel worktree execution and independent contract-based review; it
 is an outstanding requirement, not an implemented or passed workflow.
-See [upstream provenance](docs/upstream.md).
-Writhelm is an independent project, not an official upstream distribution.
 
 ## Direction
 
@@ -71,7 +66,6 @@ Writhelm is an independent project, not an official upstream distribution.
 
 - [Roadmap](docs/roadmap.md)
 - [Architecture direction](docs/architecture.md)
-- [Upstream provenance](docs/upstream.md)
 - [Publication policy](docs/publication.md)
 - [Contributor and agent instructions](AGENTS.md)
 
@@ -80,6 +74,10 @@ Writhelm is an independent project, not an official upstream distribution.
 Writhelm is licensed under the **GNU Affero General Public License, version 3 only**
 (`AGPL-3.0-only`). See [LICENSE](LICENSE) for the full terms.
 
-Any future upstream code reuse must preserve its provenance, license and required notices.
-The imported Task Orchestrator source retains its [MIT license](backend/LICENSE) and notices;
-Writhelm additions use AGPL-3.0-only.
+Third-party code reuse must preserve its provenance, license and required notices.
+
+## Backend development
+
+The standalone server requires JDK 21. From `backend/server/`, use `bash ./gradlew test` on Linux
+or `gradlew.bat test` on Windows. Native integration tests require their separately documented
+isolated environment; a JVM test pass is not cross-platform runtime qualification.

@@ -82,7 +82,7 @@ No assessed project source was changed for the witness.
 Final corrected-source command from `backend/`, JDK 21 and the qualified cache:
 
 ```sh
-bash ./gradlew --offline --no-daemon --max-workers=1 -p server test --console=plain
+bash server/gradlew --offline --no-daemon --max-workers=1 -p server test --console=plain
 ```
 
 Completed in 10 seconds: ContentTest 23, RevisionCatalogTest 7, StructureTest 23,

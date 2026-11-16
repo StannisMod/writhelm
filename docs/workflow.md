@@ -117,4 +117,4 @@ question; this workflow does not claim that worktrees supply server transaction 
 
 [SPEC-001](tasks/SPEC-001.md) prepares [specification revision 1](specification.md) and
 [acceptance catalogue revision 1](acceptance.md). Its scope excludes behavioral implementation and
-the fork-versus-new-core decision. Those become a subsequent design task after owner ratification.
+the detailed backend design. Those become a subsequent design task after owner ratification.

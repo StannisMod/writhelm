@@ -38,10 +38,9 @@ Additional exact revision-2 drafting inputs, retained before clarification:
 | `docs/design/first-slice.md`, draft 1 | `3e7c140788f32924fea9f3ae3bd1cab8ab2f63c8003b45b6ef2d9a21b9eb19bd` |
 | `docs/tasks/DESIGN-004.md`, revision 1 | `b8266afeb2061c1ccab81591a0c86fc348503807ba02f50caaf7aab6c120ab10` |
 
-Build reference only: `backend/settings.gradle.kts`, `backend/build.gradle.kts` and
-`backend/gradle/libs.versions.toml` at imported upstream `d9efd9f1546aa3020b54467366a215d378e8bbb3`.
-They show the existing `:current` aggregator and library pins, not an approved dependency extraction
-or independently qualified own-core runtime. Public primary security/encoding docs may be consulted.
+Build references: `backend/server/settings.gradle.kts` and `backend/server/build.gradle.kts`.
+These define the standalone server, not an independently qualified runtime. Public primary
+security/encoding documentation may be consulted.
 
 ## Scope and constraints
 

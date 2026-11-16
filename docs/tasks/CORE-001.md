@@ -67,7 +67,7 @@ There is no accepted-document boolean, latest fallback, persistence, network or 
 Final bounded offline check from `backend/`, using JDK 21 and the qualified cache:
 
 ```sh
-bash ./gradlew --offline --no-daemon --max-workers=1 -p server test --console=plain
+bash server/gradlew --offline --no-daemon --max-workers=1 -p server test --console=plain
 ```
 
 Project properties bound Gradle to a 512 MiB heap/in-process compiler/two active CPUs/one worker

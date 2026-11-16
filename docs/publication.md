@@ -45,120 +45,23 @@ The root ignore rules reinforce this allowlist but are not a security boundary: 
 tracked, force-add can bypass ignores, and later changes still require review. No local evidence
 archive or private checkout is ever configured as the public repository's source directory.
 
-## Upstream import I1
+## Standalone backend build launcher
 
-Status: owner approved the selected source import with the `backend/` layout after choosing a fork.
-The paths below extend the publication manifest for this pinned snapshot, subject to the review
-gates below. Approval to import is not evidence of a passing build or approval of first-slice behavior.
-
-### Source and destination
-
-Use only the public repository `https://github.com/jpicklyk/task-orchestrator` at commit
-`d9efd9f1546aa3020b54467366a215d378e8bbb3`. Map the selected upstream paths below to
-`backend/<upstream-path>`. This is the initial development location of the fork, not a second service
-or a separately updated vendor dependency. Preserve Kotlin package names initially to avoid a
-mechanical rename obscuring functional changes.
-
-The complete upstream tree contains 1,759 files. The following deterministic selection contains
-1,382 files (16,970,971 bytes); 377 files are excluded. The counts describe the pinned tree, not a
-floating glob against a later upstream version.
+The owner authorized the standalone backend layout and relocation of its standard Gradle launcher
+on 2026-11-16. The following exact paths extend the local tracking manifest; no push is authorized:
 
 ```text
-current/**
-gradle/**
-LICENSE
-README.md
-CONTRIBUTING.md
-CHANGELOG.md
-.editorconfig
-.gitattributes
-.dockerignore
-build.gradle.kts
-settings.gradle.kts
-gradle.properties
-gradlew
-gradlew.bat
-version.properties
-Dockerfile
-docker-compose.yml
-server.json
-smithery.yaml
-.taskorchestrator/config.yaml
-deploy/global-config/.taskorchestrator/config.yaml
-.claude/skills/implement/SKILL.md
-claude-plugins/task-orchestrator/skills/orchestrate/SKILL.md
-claude-plugins/task-orchestrator/_fragments/tier-classification.md
-claude-plugins/task-orchestrator/_fragments/tier-classification.consumers.txt
-claude-plugins/task-orchestrator/_fragments/generate.mjs
+backend/server/gradlew
+backend/server/gradlew.bat
+backend/server/gradle/wrapper/gradle-wrapper.jar
+backend/server/gradle/wrapper/gradle-wrapper.properties
 ```
 
-Selection fingerprint: sort selected file records by upstream path, then concatenate UTF-8 lines
-`<git-mode> <git-blob-id> <upstream-path>\n`. SHA-256 of that manifest is
-`68f9c8d56e1aa1d95dc147c38d0658d7120df9cf9f95e867149fcd6dcf84025b`.
-This identifies the proposed bytes and executable modes; it is not a completed content/license audit.
-
-`current/**` includes production sources, migrations, tests, resources and upstream API documentation.
-The pinned tree has no symlinks or submodules. Upstream's version catalog and build scripts are
-retained for baseline reproduction, not an assertion that all dependencies have been qualified.
-
-### Why the extra files are selected
-
-Gradle configures test inputs from the tier-classification consumer manifest even before tests run.
-That manifest names the two selected skill files. Tests also read the distribution manifests and
-both selected config files directly. Retain these inputs rather than deleting tests to make a
-smaller import appear green. The fragment generator is included for reproducible maintenance.
-
-These upstream skills are inert compatibility fixtures, not adopted Writhelm SOPs. Do not install
-the plugin, run the skills, sync its config into a service, or register its distribution manifests.
-The selected configs belong to upstream, not to any owner's private project. Their continued
-inclusion depends on content review; test dependencies do not override publication policy.
-
-### Exclusions and history
-
-Exclude every unselected path, including `.idea/`, `.github/`, `.claude-plugin/`, remaining `.claude/`
-and `.taskorchestrator/` content, most plugin files, upstream site/archive documentation and scripts.
-Do not import private evaluation checkouts, reports, sessions, local fixtures or harness settings.
-
-Preserve upstream Git history locally through a separately fetched `upstream` remote and record
-the source commit in import provenance. Do not merge upstream history into public `main`, push
-upstream refs/tags or use a mirror push as part of I1. The initial public import is a selected source
-snapshot atop Writhelm's existing clean history. Later updates can be reviewed against the pinned
-baseline and applied selectively; this avoids publishing excluded files through old commits.
-
-### Notices and Writhelm-owned changes
-
-Keep the upstream MIT license verbatim at `backend/LICENSE` and preserve embedded notices.
-The root AGPL license must not overwrite it. Update the root README to distinguish MIT-derived
-source from Writhelm additions and link provenance. The approved additional path
-`docs/upstream.md` will record source URL, baseline, selection fingerprint, licensing boundary and
-any import modifications. It will contain newly written public provenance only.
-
-Keep the source snapshot byte-identical initially. In a separate reviewed change, adapt image,
-registry and runtime branding before any Writhelm distribution; imported upstream identifiers do
-not authorize publishing under upstream names. Review bundled dependency notices before shipping
-a fat JAR or container; the root license alone is not a dependency compliance inventory.
-
-### Import gates and permitted next work
-
-Review the selected content and rights, expand the allowlist to the exact
-selected paths and add the provenance file. Never broadly unignore all of `backend/` without an
-exact-path manifest check. Check imported bytes and modes against the pinned Git tree, inspect the
-complete staged diff and publish only after the review passes. Do not run upstream automation on
-import or enable CI/release workflows implicitly.
-
-Two binary inputs need specific qualification: `gradle/wrapper/gradle-wrapper.jar` (verify against
-the appropriate official Gradle checksum) and
-`current/src/test/resources/upgrade/golden-v17-3.16.sqlite` (inspect contents and trace the upstream
-fixture generator to establish that it contains synthetic data). Any private data, unexplained
-artifact or incompatible rights stops import and requires an amended proposal, not a silent omission.
-
-Then reproduce the unchanged baseline with JDK 21 and the pinned Gradle wrapper: run
-`:current:test` (including its serial-test finalizer), `:current:ktlintCheck` and `:current:jar`
-from `backend/`. Dependency/toolchain downloads are distinct from model calls; use isolated local
-build storage. Record failures honestly, do not weaken tests, and qualify dependency licenses
-before declaring the baseline ready. No live models, embeddings or paid experiments are authorized.
-
-Implementation of the proposed first-slice behavior still requires separate design approval.
+Preserve the standard launcher license notices. The wrapper JAR SHA-256 is
+`91a239400bb638f36a1795d8fdf7939d532cdc7d794d1119b7261aac158b1e60`;
+its properties select Gradle 8.11.1. Build artifacts, caches and local reference projects remain
+outside the publication manifest. Third-party source requires its own scoped provenance/license
+review before future reuse; no broad source import is authorized.
 
 ## Specification/contract/task scope P2 — local tracking and commit authorized
 
@@ -202,8 +105,8 @@ are excluded from this proposed publication scope.
 
 Status: the owner's 2026-11-03 commit instruction authorizes local tracking/commit of the exact
 completed own-core paths below, not a public push or independent implementation acceptance. This is newly authored
-Writhelm AGPL-3.0-only code, not an upstream source extraction or an export of private project code.
-Track only the named source/build files after full review. Preserve the imported baseline; keep
+Writhelm AGPL-3.0-only code, not an export of private project code.
+Track only the named source/build files after full review; keep
 build artifacts, caches, evidence and unlisted future files ignored. No force-add or broad source export.
 
 Exact proposed source/build paths:
@@ -230,7 +133,7 @@ backend/server/src/test/kotlin/dev/writhelm/core/workflow/WorkflowRecordsTest.kt
 ```
 
 The independent small build reuses the already qualified wrapper/cache as development tooling;
-no upstream implementation or fixture is copied into the new core. Dependency versions/tooling are
+no external implementation or fixture is copied into the core. Dependency versions/tooling are
 public inputs, not permission to distribute dependencies without notice review. Exclude build/JAR
 outputs, Gradle/Kotlin caches, local test reports, machine paths, raw evidence and prototype artifacts.
 Inspect the exact source diff/provenance and the complete staged diff before committing. Future new
@@ -279,7 +182,7 @@ backend/server/src/test/kotlin/dev/writhelm/core/codec/CodecFixture.kt
 Accompanying existing-path changes are limited to `.gitignore`, this publication record,
 `backend/server/build.gradle.kts`, `RevisionCatalog.kt`, `ApprovalWorkflow.kt` and `WorkflowRecords.kt`
 under their already named P3 paths. They add the pinned JSON dependency, internal snapshot access and
-the accepted checked-generation refusal; original tests/settings/imported source remain unchanged.
+the accepted checked-generation refusal; existing tests and settings remain unchanged.
 The new direct dependency is referenced, not vendored or distributed. Artifact license/security
 qualification remains open. Build output, caches, raw XML/logs and worker/reviewer scratch stay ignored.
 Later reviewer/implementation tasks and worker source paths need their own scoped tracking decision.
@@ -455,7 +358,7 @@ in-repository fixtures while retaining explicit input overrides; native componen
 own prerequisite-checked task, not a silent passing native gate in the portable selection.
 
 Provenance: Writhelm-owned AGPL-3.0-only portable work/auth/publication/application and OpenCode adapter
-source, plus synthetic tests and structural schemas. Preserve upstream MIT notices and imported wrapper
+source, plus synthetic tests and structural schemas. Preserve third-party license notices and standard wrapper
 bytes. The four individually named `src/generated` validators/declarations are code generated from the
 selected synthetic service/profile schemas for this adapter, not an export of runtime state or a
 bundled dependency tree. Package manifests/lock and build scripts identify the original dependency
@@ -481,7 +384,7 @@ Provenance: newly authored Writhelm AGPL-3.0-only service/native adapter code an
 The scope includes private-transport implementations, protected operational custody and scoped
 credential resolution, exact assignment-packet rendering, explicit fresh H1 setup and composition.
 Tests include actual local HTTP/Git/application boundaries with explicitly mocked external native
-effects. Preserve upstream notices; no dependency binaries or upstream implementation are added.
+effects. Preserve third-party notices; no dependency binaries or external implementation are added.
 
 Private candidates, task handoffs, manifests, review drafts, logs/XML, runtime stores, generated
 credentials/proofs, compiled output, toolchains and session history remain excluded. The checked
@@ -498,7 +401,7 @@ permission to install a working profile or run live models.
 
 Provenance: newly authored Writhelm AGPL-3.0-only task-shaped source/checkpoint/compaction/restoration
 and read-only native workflow presentation code, with deterministic synthetic test inputs. Existing
-upstream notices remain unchanged. Tests distinguish actual checked service/Git/HTTP boundaries
+third-party notices remain unchanged. Tests distinguish actual checked service/Git/HTTP boundaries
 from mocked native/provider effects and DOM fixtures. No dependency implementation is imported.
 
 Source/content review excludes private candidates, tasks/checkpoints/manifests, session histories,
@@ -556,7 +459,7 @@ historical N-case acceptance or installed-host evidence. No live/model call, sta
 
 Following the owner's approved deterministic non-LLM correction direction, admit only the two exact
 P24 exceptions in `.gitignore`, corresponding changes to admitted primary instructions/tests/README
-and this publication/ignore record. Newly authored AGPL-3.0-only pure text preparation and synthetic tests; no upstream source
+and this publication/ignore record. Newly authored AGPL-3.0-only pure text preparation and synthetic tests; no external source
 or dependencies are imported. The kernel has no filesystem, process, session, model or service effect.
 
 Private design/task/evidence/session material, actual project patches, source inventories, artifacts

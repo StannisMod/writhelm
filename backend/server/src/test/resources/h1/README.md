@@ -17,7 +17,7 @@ overridden by `WRITHELM_STORE_TEST_ROOT` / `WRITHELM_APP_TEST_ROOT`. Synthetic A
 `build/test-runtime/evidence`; `API_EVIDENCE_ROOT` may explicitly override it. Runtime outputs are
 never committed.
 
-From `backend/server`, with a qualified JDK 21, run `bash ../gradlew test` on Linux, or the corresponding
+From `backend/server`, with a qualified JDK 21, run `bash ./gradlew test` on Linux, or the corresponding
 Gradle wrapper invocation on another platform. Running these tests does not qualify that platform's
 service adapters. No source default selects a developer's home, shared cache or private artifact root.
 
