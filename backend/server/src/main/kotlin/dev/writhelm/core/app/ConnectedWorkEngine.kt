@@ -38,9 +38,22 @@ internal interface ConnectedNativeControl {
     fun pause(target: ConnectedBindingTarget,intent: WorkKey.Id)
     /** Retained exact native facts, if known. A closed gate/interrupt reply cannot supply fencing. */
     fun reconcilePause(target: ConnectedBindingTarget,intent: WorkKey.Id): WorkNativeObservation?
+    fun cooperativePauseHeld(target:ConnectedBindingTarget,intent:WorkKey.Id):Boolean=false
     fun deliver(envelope: ConnectedEnvelope): NativeConnectedOutcome
     fun reconcile(envelope: ConnectedEnvelope): NativeConnectedOutcome
     fun release(envelope: ConnectedEnvelope)
+}
+
+/** Service-owned identity plus an immutable original native observation; never caller-supplied
+ * pause readiness, and deliberately not writer fencing. Claims/work-area ownership remain held. */
+private fun pauseObservation(native:ConnectedNativeControl,work:WorkState,key:WorkKey.Id):WorkNativeObservation? {
+    val i=(work.record(WorkFamily.NATIVE_INTENTS,key).payload as WNativeIntentsPayload).value
+    val target=ConnectedRuntimeFacts.bindingTarget(work,i.assignment)
+    native.reconcilePause(target,key)?.let {return it}
+    if(i.operation!="pause"||!native.cooperativePauseHeld(target,key))return null
+    return WorkNativeObservation(i.assignment,key.id,i.correlationId,"pause","confirmed",
+        listOf(WSourceVariant2Value(WSourceVariant2("work",target.binding))),work.binding(i.assignment).execution,
+        false,"active",cooperativePause=true)
 }
 
 /** Small protected Linux artifact custody, not canonical authority. Store original exact operation
@@ -121,7 +134,7 @@ internal class ConnectedRuntimeFacts(private val delegate: H1RuntimeFacts,privat
             val op=nativeObserve.value
             val intent=(work.record(WorkFamily.NATIVE_INTENTS,WorkKey.Id(command.projectId,op.intentId)).payload as WNativeIntentsPayload).value
             if(intent.operation=="pause") {
-                native.reconcilePause(bindingTarget(work,intent.assignment),WorkKey.Id(command.projectId,op.intentId))?.let {
+                pauseObservation(native,work,WorkKey.Id(command.projectId,op.intentId))?.let {
                     nativeFacts[op.intentId]=it
                 }
             }
@@ -225,21 +238,22 @@ internal class ConnectedWorkEngine(private val app: H1Application,private val pr
         publish(CRequestNativeTransitionOperation(CRequestNativeTransition(subject.assignmentId,a.generation,intent.id,
             stable("${intent.id}:correlation"),"pause",a.checkpoint,emptyList())),"${intent.id}:request")
         pauseAndReconcile(target,intent)
-        // observe_native_transition still requires actual writer-fenced facts. Remain pausing
-        // until that existing protocol supplies them; closing admission is not such a fact.
+        // Confirmation requires a separate original cooperative-pause observation or writer
+        // fencing; merely closing admission supplies neither. Claims remain held in both cases.
     }
     private fun pauseAndReconcile(target: ConnectedBindingTarget,intent: WorkKey.Id) {
         custody.retain(intent.id,"dispatch",StrictJson.encode(obj("assignment" to encodeWAssignmentSubject(target.assignment),
             "binding" to StrictJson.decode(identityCodec.encodeReference(target.binding)),"nativeHostId" to uuid(target.nativeHostId),
             "nativeSessionId" to str(target.nativeSessionId),"intent" to StrictJson.decode(identityCodec.encodeKey(intent)))))
         native.pause(target,intent)
-        val proof=native.reconcilePause(target,intent) ?: return
-        val work=capture().work;val a=work.assignment(target.assignment.assignmentId)
+        val work=capture().work
+        val proof=pauseObservation(native,work,intent) ?: return
+        val a=work.assignment(target.assignment.assignmentId)
         val i=(work.record(WorkFamily.NATIVE_INTENTS,intent).payload as WNativeIntentsPayload).value
         workRequire(ConnectedRuntimeFacts.bindingTarget(work,target.assignment)==target && a.currentIntent==intent && i.assignment==target.assignment && i.operation=="pause" &&
             proof.assignment==i.assignment && proof.intentId==intent.id && proof.correlationId==i.correlationId &&
             proof.operation=="pause" && proof.outcome in setOf("unknown","confirmed") &&
-            proof.execution==work.binding(target.assignment).execution && (proof.outcome!="confirmed" || proof.writersFenced),WorkProblem.NATIVE_UNKNOWN)
+            proof.execution==work.binding(target.assignment).execution && (proof.outcome!="confirmed" || proof.writersFenced || proof.cooperativePause),WorkProblem.NATIVE_UNKNOWN)
         if(i.outcome==proof.outcome)return
         publish(CObserveNativeTransitionOperation(CObserveNativeTransition(target.assignment.assignmentId,a.generation,intent.id,i.generation,
             proof.outcome,proof.sources,emptyList())),"${intent.id}:${i.generation}:${proof.outcome}")
@@ -260,7 +274,8 @@ internal class ConnectedWorkEngine(private val app: H1Application,private val pr
             val retired=existing.mapNotNull { (it.payload as WContinuationsPayload).value.supersedes?.key }.toSet()
             val tip=existing.filter { it.identity.key !in retired }.singleOrNull()
             val plan=preparation.plan(captured,subject)
-            if(tip==null) {
+            val previous=tip?.payload?.let {(it as WContinuationsPayload).value}
+            if(tip==null || previous?.phase=="resume-confirmed" && assignment.state=="paused") {
                 workRequire(assignment.state in setOf("paused","bound"),WorkProblem.INVALID_TRANSITION)
                 val coverage=inspector.coverage(subject,WorkGitOid(captured.basis.algorithm,captured.basis.hex))
                 val envelope=ConnectedRuntimeFacts.provisionalEnvelope(work,captured.basis,subject)
@@ -269,7 +284,8 @@ internal class ConnectedWorkEngine(private val app: H1Application,private val pr
                 if(!native.hold(envelope))throw WorkFault(WorkProblem.NATIVE_UNKNOWN)
                 val op=CPrepareContinuationOperation(CPrepareContinuation(key,CPrepareContinuationData(plan.origin,subject,requireNotNull(assignment.binding),
                     assignment.checkpoint,plan.sourceCheckpoint,pairs,coverage,assignment.generation,plan.before,plan.after,plan.mode,plan.rebind,plan.basis,
-                    envelope.messageId,CPrepareContinuationDataNotification(body.digest,body.sizeBytes.toLong()),null),
+                    envelope.messageId,CPrepareContinuationDataNotification(body.digest,body.sizeBytes.toLong()),
+                    previous?.let {CPrepareContinuationDataSupersedes(tip.identity.key as WorkKey.Id,it.generation)}),
                     if(body.digest in work.bodies)emptyList() else listOf(CPrepareContinuationBodiesItem(body.digest,text))))
                 publish(op,"${key.id}:prepare")
                 return@repeat

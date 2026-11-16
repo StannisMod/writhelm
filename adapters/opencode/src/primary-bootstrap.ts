@@ -10,18 +10,141 @@ import { NativeRuntimeClient, nativeUnavailable, uuidPattern, closedObject } fro
 import { exactJSON } from "./strict-json.js"
 import { exactLoopback } from "./strict-json.js"
 import { installFreshPrimaryPolicy, requirePrimaryPolicyFile, primaryPermissionRules, primaryPolicyStatements } from "./primary-policy.js"
+import { decodeNativeExecutionDeployment } from "./native-initial.js"
+import { decodeNativeContextPolicy } from "./native-context-policy.js"
+import { pathToFileURL } from "node:url"
+import type { OpenCodeClient } from "@opencode/client"
+import { assertNativeContextPolicy } from "./native-context-policy.js"
+
+/** Native registry is the source of execution settings and credentials remain native-owned.
+ * Canonical task/profile identity is still authoritative: inheritance cannot rewrite it. */
+export async function provisionHarnessExecutionDeployment(config:Readonly<{
+  root:string;projectId:string;forbiddenAreas:readonly string[];sessionID:string;workRoot:string;profileRecordJSON:string
+}>,native:Pick<OpenCodeClient,"session"|"model"|"config">){
+  const before=await native.session.get({sessionID:config.sessionID})
+  if(before.id!==config.sessionID||before.revert||before.location.directory!==config.workRoot)nativeUnavailable()
+  const inventory=await native.model.list({location:{directory:config.workRoot}})
+  const selected:{providerID:string;id:string;variant?:string}|undefined=before.model??await native.model.default({location:{directory:config.workRoot}}).then(r=>
+    r.data?{providerID:r.data.providerID,id:r.data.id}:undefined)
+  if(!selected)throw new Error("OpenCode has no selected available execution model")
+  const model=inventory.data.find(m=>m.enabled&&m.providerID===selected.providerID&&m.id===selected.id)
+  if(!model)nativeUnavailable()
+  const variant=selected.variant??"default",override=model.variants.find(v=>v.id===variant)
+  if(variant!=="default"&&!override)nativeUnavailable()
+  // Model.Info is materialized by OpenCode after provider/model transforms. Never retain its
+  // headers/body/settings wholesale: they can contain credentials and private provider metadata.
+  const settings={...model.settings,...override?.settings}
+  const p=exactJSON(config.profileRecordJSON,nativeUnavailable).payload
+  const expected={providerID:p?.model?.providerId,id:p?.model?.modelId,variant:p?.model?.variant??"default"}
+  if(contextJSON({...selected,variant})!==contextJSON(expected))nativeUnavailable()
+  const effortKeys=["reasoningEffort","effort"].filter(key=>typeof settings[key]==="string")
+  if(p.effort!=="native-default"&&(effortKeys.length!==1||settings[effortKeys[0]!]!==p.effort))
+    throw new Error("canonical effort does not match an observable OpenCode effort setting")
+  const effortOptionKey=p.effort==="native-default"?null:effortKeys[0]!
+  const reserve=(v:any)=>{const n=Number(v?.value);if(!Number.isSafeInteger(n)||n<1)nativeUnavailable();return n}
+  if(reserve(p.contextTokens)>model.limit.context)nativeUnavailable()
+  const maxTokens=Math.min(reserve(p.outputReserveTokens),reserve(p.compactionReserveTokens),model.limit.output,
+    settings.maxTokens===undefined?model.limit.output:settings.maxTokens)
+  if(!Number.isSafeInteger(maxTokens)||maxTokens<1)nativeUnavailable()
+  const entries=await native.config.get({location:{directory:config.workRoot}})
+  let keepTokens:number|undefined,bufferTokens:number|undefined
+  for(const entry of entries)if(entry.type==="document"){
+    if(entry.info.compaction?.keep?.tokens!==undefined)keepTokens=entry.info.compaction.keep.tokens
+    if(typeof entry.info.compaction?.buffer==="number")bufferTokens=entry.info.compaction.buffer
+  }
+  const profileKeyJSON=contextJSON(exactJSON(config.profileRecordJSON,nativeUnavailable).key)
+  const contextPolicyJSON=contextJSON({formatVersion:1,profileKeyJSON,policyId:p.compactionPolicyId,nativeProfileId:p.nativeProfileId,
+    auto:true,background:false,keepTokens:keepTokens??null,bufferTokens:bufferTokens??null})
+  assertNativeContextPolicy(entries,config.profileRecordJSON,contextPolicyJSON)
+  const after=await native.session.get({sessionID:config.sessionID})
+  if(after.revert||after.location.directory!==config.workRoot||contextJSON(before.model??null)!==contextJSON(after.model??null))nativeUnavailable()
+  return provisionExecutionDeployment({...config,contextPolicyJSON,executionJSON:contextJSON({
+    formatVersion:1,profileKeyJSON,model:{providerID:selected.providerID,id:selected.id,...(p.model.variant===null?{}:{variant:p.model.variant})},
+    baseURL:settings.baseURL??null,routeID:p.route,effortOptionKey,
+    nativeOptions:{...(effortOptionKey===null?{}:{[effortOptionKey]:settings[effortOptionKey]}),maxTokens}
+  })})
+}
+
+export type ExecutionDeployment=Readonly<{profileRecordJSON:string;executionJSON:string;contextPolicyJSON:string}>
+
+/** Trusted installation input only, not a model tool or a grant derived from canonical profile
+ * metadata. Installs existing runtime formats; no native-config mutation, credential copy or inference.
+ * The original bundle precedes its projections so concurrent/conflicting installs cannot mix them. */
+export function executionDeploymentSelection(config:ExecutionDeployment&Readonly<{
+  root:string;projectId:string;forbiddenAreas:readonly string[]
+}>){
+  if(process.platform!=="linux"||!uuidPattern.test(config.projectId)||!path.isAbsolute(config.root))nativeUnavailable()
+  for(const raw of [config.profileRecordJSON,config.executionJSON,config.contextPolicyJSON])
+    if(typeof raw!=="string"||Buffer.byteLength(raw)>262144)nativeUnavailable()
+  const record=closedObject(exactJSON(config.profileRecordJSON,nativeUnavailable),["formatVersion","family","key","payload"])
+  const key=closedObject(record.key,["projectId","profileId","revision"])
+  if(record.formatVersion?.value!=="1"||record.family!=="profiles"||key.projectId!==config.projectId||
+    typeof key.profileId!=="string"||!uuidPattern.test(key.profileId)||typeof key.revision?.value!=="string"||
+    !/^(0|[1-9][0-9]*)$/.test(key.revision.value)||BigInt(key.revision.value)>9223372036854775807n)nativeUnavailable()
+  const payload=closedObject(record.payload,["nativeProfileId","qualificationEvidence","model","route","effort","contextTokens",
+    "outputReserveTokens","toolReserveTokens","compactionReserveTokens","compactionPolicyId","requestAccountingProfileId",
+    "executionAssurance","permissions","platform","qualification"])
+  closedObject(payload.model,["providerId","modelId","variant"])
+  if([payload.model.providerId,payload.model.modelId].some(value=>typeof value!=="string"||!value.length||value.length>256)||
+    payload.model.variant!==null&&(typeof payload.model.variant!=="string"||!payload.model.variant.length||payload.model.variant.length>128))nativeUnavailable()
+  if(!Array.isArray(payload.qualificationEvidence)||payload.qualificationEvidence.length>256||
+    !["unqualified","qualified"].includes(payload.qualification)||payload.executionAssurance!=="E-COOP-1"||
+    [payload.nativeProfileId,payload.route,payload.effort,payload.compactionPolicyId,payload.requestAccountingProfileId]
+      .some(value=>typeof value!=="string"||!value.length||value.length>256))nativeUnavailable()
+  const execution=decodeNativeExecutionDeployment(config.profileRecordJSON,config.executionJSON)
+  const policy=decodeNativeContextPolicy(config.profileRecordJSON,config.contextPolicyJSON)
+  const p=execution.p
+  const count=(v:any)=>{
+    if(typeof v?.value!=="string"||!/^[1-9][0-9]*$/.test(v.value)||BigInt(v.value)>2147483647n)nativeUnavailable()
+    return BigInt(v.value)
+  }
+  if(count(p.outputReserveTokens)+count(p.toolReserveTokens)+count(p.compactionReserveTokens)>=count(p.contextTokens)||
+    BigInt(execution.options.maxTokens as number)>count(p.compactionReserveTokens))nativeUnavailable()
+  const profileKeyJSON=contextJSON(key),executionJSON=contextJSON(exactJSON(config.executionJSON,nativeUnavailable))
+  const contextPolicyJSON=contextJSON(exactJSON(config.contextPolicyJSON,nativeUnavailable))
+  const original=contextJSON({formatVersion:1,profileRecordJSON:contextJSON(record),executionJSON,contextPolicyJSON})
+  return {profileKeyJSON,executionJSON,contextPolicyJSON,original,policy}
+}
+export async function provisionExecutionDeployment(config:ExecutionDeployment&Readonly<{
+  root:string;projectId:string;forbiddenAreas:readonly string[]
+}>){
+  const {profileKeyJSON,executionJSON,contextPolicyJSON,original,policy}=executionDeploymentSelection(config)
+  const custody=new LinuxNativeCustody(path.join(config.root,"bootstrap"),config.forbiddenAreas);await custody.initialize()
+  const projections=[["execution-profile",executionJSON],["native-context-policy",contextPolicyJSON]] as const
+  for(const [kind,expected]of projections){
+    const previous=await custody.read(kind,profileKeyJSON)
+    if(previous!==undefined&&previous!==expected)nativeUnavailable()
+  }
+  await custody.retain("execution-deployment",profileKeyJSON,original)
+  for(const [kind,expected]of projections)await custody.retain(kind,profileKeyJSON,expected)
+  for(const [kind,expected]of projections)if(await custody.read(kind,profileKeyJSON)!==expected)nativeUnavailable()
+  return Object.freeze({kind:"deployment-provisioned" as const,profileKeyJSON,
+    deploymentDigest:createHash("sha256").update(original).digest("hex"),keepTokens:policy.keep,bufferTokens:policy.buffer})
+}
 
 /** Trusted test-client installer, never a model tool or public broker operation. Reopening reuses
  * the original private proof. Existing profiles/descriptor conflicts hold instead of being reset. */
 export async function provisionAutomaticPrimary(config:Readonly<{root:string;forbiddenAreas:readonly string[];
   storeId:string;serviceOrigin:string;nativeOrigin:string;nativeRegistrationFile:string;clientPolicyFile:string;
-  plugin:string;schemas:Readonly<Record<string,string>>}>):Promise<void>{
+  plugin:string;schemas:Readonly<Record<string,string>>;executionDeployments?:readonly ExecutionDeployment[]}>):Promise<void>{
   if(process.platform!=="linux"||!uuidPattern.test(config.storeId)||
     ![config.root,config.nativeRegistrationFile,config.clientPolicyFile,config.plugin].every(value=>path.isAbsolute(value))||
     !Object.keys(config.schemas).length||Object.values(config.schemas).some(raw=>typeof raw!=="string"||Buffer.byteLength(raw)>512*1024))nativeUnavailable()
   exactLoopback(config.serviceOrigin,nativeUnavailable);exactLoopback(config.nativeOrigin,nativeUnavailable)
   const bootstrap=new LinuxNativeCustody(path.join(config.root,"bootstrap"),config.forbiddenAreas)
   await bootstrap.initialize()
+  if(config.executionDeployments!==undefined){
+    if(!Array.isArray(config.executionDeployments)||config.executionDeployments.length>32)nativeUnavailable()
+    const keys=new Set<string>()
+    for(const deployment of config.executionDeployments){
+      closedObject(deployment,["profileRecordJSON","executionJSON","contextPolicyJSON"])
+      const projectId=exactJSON(deployment.profileRecordJSON,nativeUnavailable).key?.projectId
+      const selected=executionDeploymentSelection({...deployment,root:config.root,projectId,forbiddenAreas:config.forbiddenAreas})
+      if(keys.has(selected.profileKeyJSON))nativeUnavailable()
+      keys.add(selected.profileKeyJSON)
+    }
+    await bootstrap.retain("automatic-execution-deployments","current",contextJSON({formatVersion:1,deployments:config.executionDeployments}))
+  }
   const profile=new LinuxNativeCustody(path.dirname(config.clientPolicyFile),config.forbiddenAreas);await profile.initialize()
   try{
     await fs.writeFile(config.clientPolicyFile,JSON.stringify({plugins:[config.plugin],permissions:primaryPermissionRules,policies:primaryPolicyStatements})+"\n",{flag:"wx",mode:0o600})
@@ -56,6 +179,7 @@ export type PrimaryBootstrap = Readonly<{
   schemas:Readonly<Record<string,string>>
   controller:Readonly<{principalId:string;credentialId:string;token:string}>
   serviceProof:Uint8Array;transportProof:Uint8Array
+  executionDeployments?:readonly ExecutionDeployment[]
 }>
 /** Trusted local provisioning of an ALREADY enrolled controller, not a model tool or authority
  * issuance API. The private service reauthenticates its real scope before binding/connect. Never
@@ -70,6 +194,11 @@ export async function preparePrimaryBootstrap(config:PrimaryBootstrap):Promise<v
     config.storeId,config.projectId,config.controllerId,config.hostId)
   const identity=await service.identity(config.controller.token)
   if(identity.scope!=="controller"||identity.principalId!==config.controller.principalId||identity.credentialId!==config.controller.credentialId)nativeUnavailable()
+  if(config.executionDeployments!==undefined){
+    if(!Array.isArray(config.executionDeployments)||config.executionDeployments.length>32)nativeUnavailable()
+    for(const deployment of config.executionDeployments)await provisionExecutionDeployment({
+      ...deployment,root:config.root,projectId:config.projectId,forbiddenAreas:[config.workRoot]})
+  }
   const custody=new LinuxNativeCustody(path.join(config.root,"native"),[config.workRoot]);await custody.initialize()
   await installFreshPrimaryPolicy(config.workRoot)
   await custody.retain("credential",config.controller.credentialId,JSON.stringify({formatVersion:1,kind:"native-scoped-key-v1",
@@ -158,3 +287,26 @@ export class AutomaticEnrollmentClient {
       principalId:result.principalId,credentialId:result.credentialId,token:result.token})
   }
 }
+
+/** Operator/installer entrypoint. Configuration arrives on stdin, never model tool arguments.
+ * Existing imports have no CLI side effects; no service/native discovery or model API is used. */
+async function executionProvisioningCLI(){
+  if(process.argv.length!==3||process.argv[2]!=="provision-execution")nativeUnavailable()
+  const parts:Buffer[]=[];let size=0
+  for await(const chunk of process.stdin){
+    const bytes=Buffer.from(chunk);size+=bytes.length
+    if(size>1024*1024)nativeUnavailable()
+    parts.push(bytes)
+  }
+  const config=closedObject(exactJSON(new TextDecoder("utf-8",{fatal:true}).decode(Buffer.concat(parts)),nativeUnavailable),
+    ["root","projectId","forbiddenAreas","profileRecordJSON","executionJSON","contextPolicyJSON"])
+  if(!Array.isArray(config.forbiddenAreas)||config.forbiddenAreas.length<1||config.forbiddenAreas.length>256||
+    config.forbiddenAreas.some(value=>typeof value!=="string"||!path.isAbsolute(value)))nativeUnavailable()
+  const result=await provisionExecutionDeployment(config as Parameters<typeof provisionExecutionDeployment>[0])
+  process.stdout.write(JSON.stringify(result)+"\n")
+}
+if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href)
+  void executionProvisioningCLI().catch(()=>{
+    process.stderr.write("Writhelm execution deployment held; no model or native host was started.\n")
+    process.exitCode=2
+  })

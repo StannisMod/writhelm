@@ -1150,6 +1150,83 @@ class LocalH1SetupTest {
         assertFailsWith<IllegalArgumentException> {adapter.prepare(broken)}
         assertEquals("invalid git metadata",Files.readString(broken.resolve(".git")))
     }
+    @Test fun concurrentRepositoryCreationRechecksFailedDiscoveryWithoutReinitializingOrStaging() {
+        val root=Files.createTempDirectory("writhelm-repository-race-")
+        val project=Files.createDirectory(root.resolve("project"))
+        Files.writeString(project.resolve("owner.txt"),"preserve owner bytes\n")
+        val entered=root.resolve("lookup-failed");val release=root.resolve("lookup-release")
+        val wrapper=root.resolve("git-probe")
+        // Real Git produces the lookup failure. Pause only its return so another actual preparer
+        // can finish creating the repository before the first preparer checks the .git boundary.
+        Files.writeString(wrapper,"""#!/bin/sh
+            case "${'$'}*" in
+              *--show-toplevel*)
+                /usr/bin/git "${'$'}@"; result=${'$'}?
+                if [ "${'$'}result" -ne 0 ] && [ ! -f '$release' ]; then
+                  : > '$entered'
+                  n=0
+                  while [ ! -f '$release' ] && [ "${'$'}n" -lt 1000 ]; do
+                    /usr/bin/sleep 0.01
+                    n=${'$'}((n+1))
+                  done
+                fi
+                exit "${'$'}result" ;;
+              *) exec /usr/bin/git "${'$'}@" ;;
+            esac
+        """.trimIndent()+"\n")
+        Files.setPosixFilePermissions(wrapper,java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"))
+        val first=LinuxTestClientRepository(wrapper,Digest.of(Files.readAllBytes(wrapper)))
+        val pending=java.util.concurrent.CompletableFuture.supplyAsync {first.prepare(project)}
+        try {
+            val deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(10)
+            while(!Files.exists(entered)&&System.nanoTime()<deadline)Thread.sleep(10)
+            assertTrue(Files.exists(entered),"First actual Git lookup must fail before concurrent initialization")
+            val git=Path.of("/usr/bin/git")
+            assertEquals(project,LinuxTestClientRepository(git,Digest.of(Files.readAllBytes(git))).prepare(project))
+            val head=Files.readAllBytes(project.resolve(".git/refs/heads/main"))
+            Files.writeString(release,"release")
+            assertEquals(project,pending.get(15,TimeUnit.SECONDS))
+            assertContentEquals(head,Files.readAllBytes(project.resolve(".git/refs/heads/main")))
+            assertEquals("preserve owner bytes\n",Files.readString(project.resolve("owner.txt")))
+            assertFalse(Files.exists(project.resolve(".git/index")),"Discovery must not stage owner files")
+        } finally {if(!Files.exists(release))Files.writeString(release,"release")}
+    }
+    @Test fun concurrentInitialHeadPublicationReobservesWinnerWithoutOverwritingOrStaging() {
+        val root=Files.createTempDirectory("writhelm-head-race-")
+        val project=Files.createDirectory(root.resolve("project"))
+        Files.writeString(project.resolve("owner.txt"),"preserve owner bytes\n")
+        val entered=root.resolve("before-init");val release=root.resolve("release")
+        val wrapper=root.resolve("git-probe")
+        Files.writeString(wrapper,"""#!/bin/sh
+            case "${'$'}*" in
+              *"init --template="*)
+                : > '$entered'
+                n=0
+                while [ ! -f '$release' ] && [ "${'$'}n" -lt 1000 ]; do
+                  /usr/bin/sleep 0.01
+                  n=${'$'}((n+1))
+                done ;;
+            esac
+            exec /usr/bin/git "${'$'}@"
+        """.trimIndent()+"\n")
+        Files.setPosixFilePermissions(wrapper,java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"))
+        val pending=java.util.concurrent.CompletableFuture.supplyAsync {
+            LinuxTestClientRepository(wrapper,Digest.of(Files.readAllBytes(wrapper))).prepare(project)
+        }
+        try {
+            val deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(10)
+            while(!Files.exists(entered)&&System.nanoTime()<deadline)Thread.sleep(10)
+            assertTrue(Files.exists(entered))
+            val git=Path.of("/usr/bin/git")
+            assertEquals(project,LinuxTestClientRepository(git,Digest.of(Files.readAllBytes(git))).prepare(project))
+            val head=Files.readAllBytes(project.resolve(".git/refs/heads/main"))
+            Files.writeString(release,"release")
+            assertEquals(project,pending.get(15,TimeUnit.SECONDS))
+            assertContentEquals(head,Files.readAllBytes(project.resolve(".git/refs/heads/main")))
+            assertEquals("preserve owner bytes\n",Files.readString(project.resolve("owner.txt")))
+            assertFalse(Files.exists(project.resolve(".git/index")))
+        } finally {if(!Files.exists(release))Files.writeString(release,"release")}
+    }
     @Test fun brokerAutomaticallyReusesProjectAndIssuesDistinctRecoverableSessionControllers() {
         val f=JointFixture();val store=directory();val root=Files.createTempDirectory("writhelm-enrollment-")
         val workspace=Files.createDirectory(root.resolve("workspace"))

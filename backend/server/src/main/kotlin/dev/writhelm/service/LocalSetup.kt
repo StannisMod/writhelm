@@ -274,8 +274,7 @@ internal class LinuxTestClientRepository(private val executable:Path,private val
             return Reply(child.exitValue(),bytes.toString(Charsets.UTF_8).trimEnd('\n','\r'))
         } finally { if(child.isAlive){child.destroy();if(!child.waitFor(2,java.util.concurrent.TimeUnit.SECONDS))child.destroyForcibly()} }
     }
-    @Synchronized fun prepare(directory:Path):Path {
-        val canonical=directory.toRealPath();require(Files.isDirectory(canonical))
+    private fun existing(canonical:Path):Path? {
         val found=git(canonical,"rev-parse","--show-toplevel")
         if(found.code==0) {
             val repository=Path.of(found.text).toRealPath()
@@ -283,11 +282,20 @@ internal class LinuxTestClientRepository(private val executable:Path,private val
             require(git(repository,"rev-parse","--verify","HEAD^{commit}").code==0) { "Existing unborn repository requires explicit recovery; never commit its index" }
             return repository
         }
+        return null
+    }
+    @Synchronized fun prepare(directory:Path):Path {
+        val canonical=directory.toRealPath();require(Files.isDirectory(canonical))
+        existing(canonical)?.let {return it}
         require(git(canonical,"rev-parse","--is-bare-repository").let { it.code!=0 || it.text!="true" }) { "Bare repository is not a working project directory" }
         // A failed lookup inside an existing/corrupt/unsafe repository is not permission to re-init.
         var ancestor:Path?=canonical
         while(ancestor!=null) {
-            require(!Files.exists(ancestor.resolve(".git"),LinkOption.NOFOLLOW_LINKS)) { "Existing repository could not be verified at ${ancestor.resolve(".git")}" }
+            if(Files.exists(ancestor.resolve(".git"),LinkOption.NOFOLLOW_LINKS)) {
+                // Another client may have completed initialization after our failed discovery.
+                // Reobserve read-only; a still-invalid/unborn repository is never repaired here.
+                return requireNotNull(existing(canonical)) { "Existing repository could not be verified at ${ancestor.resolve(".git")}" }
+            }
             ancestor=ancestor.parent
         }
         require(git(canonical,"init","--template=","--initial-branch=main").code==0)
@@ -295,7 +303,12 @@ internal class LinuxTestClientRepository(private val executable:Path,private val
         require(tree.matches(Regex("[0-9a-f]{40}|[0-9a-f]{64}")))
         val commit=git(canonical,"commit-tree",tree,"-m","Initialize Writhelm project without staging user files").also {require(it.code==0)}.text
         require(commit.matches(Regex("[0-9a-f]{40}|[0-9a-f]{64}")))
-        require(git(canonical,"update-ref","HEAD",commit,"0".repeat(commit.length)).code==0) { "Initial HEAD changed concurrently; no overwrite performed" }
+        if(git(canonical,"update-ref","HEAD",commit,"0".repeat(commit.length)).code!=0){
+            // Another initializer can publish first after both clients saw no repository.
+            // Observe its committed repository using the ordinary existing-repository checks;
+            // never retry the ref write, stage its index or repair a still-unborn repository.
+            return requireNotNull(existing(canonical)) { "Initial HEAD outcome unavailable; no overwrite performed" }
+        }
         return canonical
     }
 }

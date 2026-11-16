@@ -53,14 +53,19 @@ object AutomaticTestClientInstall {
                 Files.newInputStream(file).use {input ->val bytes=ByteArray(65536);while(true){val n=input.read(bytes);if(n<0)break;md.update(bytes,0,n)}}
                 return Digest.parse(md.digest().joinToString(""){"%02x".format(it)})}
             val profile=LinuxAutomaticClientProfile(paths[0],paths[1],paths[2],hash(paths[2]),paths[3],hash(paths[3]),paths[4],hash(paths[4]),PackagedClientContracts.load())
+            var deployments:List<JsonValue>?=null
             val policies=if(args.size==7){val file=Path.of(args[6]).toRealPath()
                 require(Files.size(file)<=1024*1024)
-                val f=StrictJson.decode(Files.readAllBytes(file),JsonLimits(bytes=1024*1024,stringBytes=262144,tokens=100000)).fields("formatVersion","policies")
+                val value=StrictJson.decode(Files.readAllBytes(file),JsonLimits(bytes=1024*1024,stringBytes=262144,tokens=100000))
+                val extended=(value as? JObject)?.entries?.containsKey("executionDeployments")==true
+                val f=if(extended)value.fields("formatVersion","policies","executionDeployments")else value.fields("formatVersion","policies")
+                if(extended)deployments=f.getValue("executionDeployments").list()
                 require(f.getValue("formatVersion").long()==1L);f.getValue("policies").list()}else emptyList()
-            println(install(profile,paths[5],policies))
+            println(install(profile,paths[5],policies,deployments))
         }catch(_:Exception){System.err.println("Writhelm test-client installation held; existing installation was not reset");kotlin.system.exitProcess(2)}
     }
-    internal fun install(profile:LinuxAutomaticClientProfile,launcher:Path,approvedProjectChecks:List<JsonValue> = emptyList()):Path {
+    internal fun install(profile:LinuxAutomaticClientProfile,launcher:Path,approvedProjectChecks:List<JsonValue> = emptyList(),
+        executionDeployments:List<JsonValue>? = null):Path {
         require(Runtime.version().feature()==21){"This test-client launcher requires the tested JDK21 profile"}
         LinuxAutomaticTestClient.validateProfile(profile)
         require(launcher.isAbsolute && launcher.toRealPath()==launcher && Files.isRegularFile(launcher) && Files.isExecutable(launcher))
@@ -70,6 +75,14 @@ object AutomaticTestClientInstall {
         require(profile.schemas==PackagedClientContracts.load()){ "Installer accepts only packaged canonical contracts" }
         if(approvedProjectChecks.isNotEmpty())AutomaticProjectCheckDeployment(profile.root.resolve("installation")).approve(approvedProjectChecks)
         val directory=profile.root.resolve("installation");val custody=LinuxConnectedCustody(directory)
+        if(executionDeployments!=null){
+            require(executionDeployments.size<=32)
+            executionDeployments.forEach {it.fields("profileRecordJSON","executionJSON","contextPolicyJSON").values.forEach {value ->
+                require(value.string().toByteArray(Charsets.UTF_8).size<=262144)
+            }}
+            custody.retain(UUID.nameUUIDFromBytes("writhelm.test-client.execution-deployments.v1".toByteArray(Charsets.UTF_8)),
+                "command",StrictJson.encode(obj("formatVersion" to num(1),"deployments" to JArray(executionDeployments))))
+        }
         fun pin(path:Path,checksum:Digest)=obj("path" to str(path.toString()),"sha256" to digest(checksum))
         val id=UUID.nameUUIDFromBytes("writhelm.test-client.install-profile.v1".toByteArray())
         val bytes=StrictJson.encode(obj("formatVersion" to num(1),"root" to str(profile.root.toString()),"plugin" to str(profile.plugin.toString()),
@@ -273,7 +286,15 @@ internal class LinuxAutomaticTestClient private constructor(private val profile:
                 HttpProfile(serviceOrigin);HttpProfile(nativeOrigin)
                 val registration=profile.root.resolve("state/opencode/service.json")
                 check(!Files.exists(registration,LinkOption.NOFOLLOW_LINKS)){"Previous native registration requires reconciliation"}
-                val provision=obj("root" to str(privateRoot.toString()),"forbiddenAreas" to JArray(listOf(str(home.toString()))),
+                val executionPolicy=profile.root.resolve("installation").resolve(
+                    "${UUID.nameUUIDFromBytes("writhelm.test-client.execution-deployments.v1".toByteArray(Charsets.UTF_8))}.command")
+                val extra=if(Files.exists(executionPolicy,LinkOption.NOFOLLOW_LINKS)){
+                    require(Files.isRegularFile(executionPolicy,LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(executionPolicy) && Files.size(executionPolicy)<=1024*1024)
+                    val policy=StrictJson.decode(protectedRuntimeBytes(executionPolicy.parent,executionPolicy,1024*1024)).fields("formatVersion","deployments")
+                    require(policy.getValue("formatVersion").long()==1L)
+                    arrayOf("executionDeployments" to policy.getValue("deployments"))
+                }else emptyArray()
+                val provision=obj(*extra,"root" to str(privateRoot.toString()),"forbiddenAreas" to JArray(listOf(str(home.toString()))),
                     "storeId" to uuid(instance.storeId),"serviceOrigin" to str(serviceOrigin),"nativeOrigin" to str(nativeOrigin),
                     "nativeRegistrationFile" to str(registration.toString()),"clientPolicyFile" to str(config.resolve("opencode.json").toString()),
                     "plugin" to str(profile.plugin.toString()),"schemas" to JObject(profile.schemas.mapValues {str(it.value)}))

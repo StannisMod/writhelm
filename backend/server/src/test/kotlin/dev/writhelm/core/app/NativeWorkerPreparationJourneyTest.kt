@@ -94,7 +94,16 @@ class NativeWorkerPreparationJourneyTest {
         Files.writeString(pluginSources.resolve("probe-server.js"),"""
             import primary from './primary-server.js';
             import fs from 'node:fs/promises';
+            import {Model,Provider} from '@opencode/plugin';
             export default {...primary,async setup(ctx){
+              // Actual native registry fixture; no server/protocol doubles and no provider calls.
+              const providerID=Provider.ID.make('no-provider');
+              await ctx.provider.transform(editor=>editor.add({
+                info:{...Provider.Info.empty(providerID),activation:'enabled',package:'@opencode/ai/providers/openai-compatible',
+                  settings:{baseURL:'http://127.0.0.1:1/v1'}},
+                models:[{...Model.Info.default(providerID,Model.ID.make('no-call')),
+                  limit:{context:8192,output:512}}]
+              }));
               const close=await primary.setup(ctx);let busy=false,done=false;
               const request=${StrictJson.encode(str(root.resolve("check-discovery-request.json").toString())).toString(Charsets.UTF_8)};
               const result=${StrictJson.encode(str(root.resolve("check-discovery-result.json").toString())).toString(Charsets.UTF_8)};
@@ -166,6 +175,7 @@ class NativeWorkerPreparationJourneyTest {
                 else java.net.http.HttpRequest.BodyPublishers.ofByteArray(StrictJson.encode(body))).build(),java.net.http.HttpResponse.BodyHandlers.ofString())
         }
         var session="";var controller:java.util.UUID?=null;var origin="";var passiveBytes=ByteArray(0);var checkBytes=ByteArray(0)
+        var executionDeployment:JsonValue?=null;var executionKey=""
         LinuxAutomaticTestClient.start(profile).use {client ->
             origin=client.nativeOrigin
             assertTrue(LinuxAutomaticTestClient.discover(profile),"Existing owned service/native process must be discoverable without opening another store")
@@ -200,6 +210,26 @@ class NativeWorkerPreparationJourneyTest {
             val passive=assertNotNull(PassiveRuntimeLayout.read(observerController),"Automatic deployment must precede native controller activation")
             passiveBytes=passive.bytes
             val bootstrap=observerController.resolve("bootstrap")
+            val pin=StrictJson.decode(protectedRuntimeBytes(bootstrap,
+                bootstrap.resolve("primary-controller-${Digest.of(controller.toString().toByteArray()).hex}.json"),65536)) as JObject
+            val key=obj("projectId" to pin.entries.getValue("projectId"),"profileId" to uuid(java.util.UUID.randomUUID()),"revision" to num(0))
+            executionKey=StrictJson.encode(key).toString(Charsets.UTF_8)
+            val record=obj("formatVersion" to num(1),"family" to str("profiles"),"key" to key,"payload" to obj(
+                "nativeProfileId" to str("isolated-model-free"),"qualificationEvidence" to JArray(emptyList()),
+                "model" to obj("providerId" to str("no-provider"),"modelId" to str("no-call"),"variant" to JNull),
+                "route" to str("no-call"),"effort" to str("bounded"),"contextTokens" to num(8192),
+                "outputReserveTokens" to num(512),"toolReserveTokens" to num(512),"compactionReserveTokens" to num(512),
+                "compactionPolicyId" to str("isolated-foreground"),"requestAccountingProfileId" to str("no-call"),
+                "executionAssurance" to str("E-COOP-1"),"permissions" to JArray(listOf(obj("tool" to str("shell"),"scope" to str("workspace"),"action" to str("allow")))),
+                "platform" to str("linux"),"qualification" to str("unqualified")))
+            executionDeployment=obj("profileRecordJSON" to str(StrictJson.encode(record).toString(Charsets.UTF_8)),
+                "executionJSON" to str(StrictJson.encode(obj("formatVersion" to num(1),"profileKeyJSON" to str(executionKey),
+                    "model" to obj("providerID" to str("no-provider"),"id" to str("no-call")),"baseURL" to JNull,
+                    "routeID" to str("no-call"),"effortOptionKey" to str("effort"),
+                    "nativeOptions" to obj("effort" to str("bounded"),"maxTokens" to num(64)))).toString(Charsets.UTF_8)),
+                "contextPolicyJSON" to str(StrictJson.encode(obj("formatVersion" to num(1),"profileKeyJSON" to str(executionKey),
+                    "policyId" to str("isolated-foreground"),"nativeProfileId" to str("isolated-model-free"),
+                    "auto" to JBoolean(true),"background" to JBoolean(false),"keepTokens" to num(2048),"bufferTokens" to num(1024))).toString(Charsets.UTF_8)))
             checkBytes=protectedRuntimeBytes(bootstrap,bootstrap.resolve("project-check-template-${Digest.of("current".toByteArray()).hex}.json"),1024*1024)
             val checkTemplate=StrictJson.decode(checkBytes).fields("formatVersion","platform","sourceRoot","envExecutable","checks","worktreeParent")
             assertEquals(projectRoot.toString(),checkTemplate.getValue("sourceRoot").string())
@@ -222,6 +252,10 @@ class NativeWorkerPreparationJourneyTest {
         }
         assertFalse(Files.exists(profile.root.resolve("state/opencode/service.json")),"Launcher must stop its own isolated native process")
         assertFalse(LinuxAutomaticTestClient.discover(profile))
+        AutomaticTestClientInstall.install(profile,Path.of(requireNotNull(System.getenv("WRITHELM_CLIENT_LAUNCHER"))).toRealPath(),
+            executionDeployments=listOf(assertNotNull(executionDeployment)))
+        // Explicit isolated native settings, not inferred defaults or provisioning side effects.
+        Files.writeString(projectRoot.resolve("opencode.json"),"""{"compaction":{"auto":true,"keep":{"tokens":2048},"buffer":1024},"experimental":{"background_compaction":false}}""")
         LinuxAutomaticTestClient.start(profile).use {client ->
             assertEquals(origin,client.nativeOrigin)
             assertEquals(200,request(client,"GET","/api/agent").statusCode())
@@ -231,10 +265,52 @@ class NativeWorkerPreparationJourneyTest {
             assertContentEquals(passiveBytes,PassiveRuntimeLayout.read(profile.root.resolve("private/controllers/controller-$controller"))!!.bytes,
                 "Restart must reuse original passive deployment bytes")
             val bootstrap=profile.root.resolve("private/controllers/controller-$controller/bootstrap")
+            val deployment=assertNotNull(executionDeployment).fields("profileRecordJSON","executionJSON","contextPolicyJSON")
+            for((kind,field)in listOf("execution-profile" to "executionJSON","native-context-policy" to "contextPolicyJSON")){
+                assertEquals(deployment.getValue(field).string(),protectedRuntimeBytes(bootstrap,
+                    bootstrap.resolve("$kind-${Digest.of(executionKey.toByteArray()).hex}.json"),262144).toString(Charsets.UTF_8))
+            }
+            val probe="""
+                import fs from 'node:fs';
+                import {OpenCode} from '@opencode/client';
+                import {LinuxNativeCustody} from './build/src/native-runtime-custody.js';
+                import {NativeContextPolicy} from './build/src/native-context-policy.js';
+                import {provisionHarnessExecutionDeployment} from './build/src/primary-bootstrap.js';
+                const c=JSON.parse(fs.readFileSync(0,'utf8')),r=JSON.parse(fs.readFileSync(c.registration,'utf8'));
+                const native=OpenCode.make({baseUrl:c.origin,headers:{Authorization:'Basic '+Buffer.from('opencode:'+r.password).toString('base64')}});
+                const custody=new LinuxNativeCustody(c.bootstrap,[c.workRoot]);await custody.initialize();
+                await new NativeContextPolicy(native,custody).check(c.sessionID,c.workRoot,c.profileRecordJSON);
+                await native.session.switchModel({sessionID:c.sessionID,model:{providerID:'no-provider',id:'no-call'}});
+                const inherited=JSON.parse(c.profileRecordJSON);inherited.payload.effort='native-default';
+                await provisionHarnessExecutionDeployment({root:c.harnessRoot,projectId:c.projectId,forbiddenAreas:[c.workRoot],
+                  sessionID:c.sessionID,workRoot:c.workRoot,profileRecordJSON:JSON.stringify(inherited)},native);
+                const inheritedCustody=new LinuxNativeCustody(c.harnessRoot+'/bootstrap',[c.workRoot]);await inheritedCustody.initialize();
+                const rows=await inheritedCustody.scan('execution-profile');
+                if(rows.length!==1)throw Error('Missing inherited deployment');
+                const inheritedDeployment=JSON.parse(rows[0].raw);
+                if(inheritedDeployment.effortOptionKey!==null||Object.keys(inheritedDeployment.nativeOptions).join()!=='maxTokens')
+                  throw Error('Native default must not inject an effort override');
+                console.log('REAL_NATIVE_CONTEXT_PREFLIGHT_PASS');
+                console.log('REAL_NATIVE_HARNESS_PROFILE_PASS');
+            """.trimIndent()
+            val process=ProcessBuilder(node.toString(),"--input-type=module","-e",probe).directory(plugin.toFile()).redirectErrorStream(true).start()
+            process.outputStream.use {it.write(StrictJson.encode(obj("registration" to str(client.nativeRegistration.toString()),
+                "origin" to str(client.nativeOrigin),"bootstrap" to str(bootstrap.toString()),"workRoot" to str(projectRoot.toString()),
+                "sessionID" to str(session),"profileRecordJSON" to deployment.getValue("profileRecordJSON"),
+                "projectId" to (StrictJson.decode(deployment.getValue("profileRecordJSON").string().toByteArray()) as JObject)
+                    .entries.getValue("key").let {(it as JObject).entries.getValue("projectId")},
+                "harnessRoot" to str(root.resolve("harness-profile-probe").toString()))))}
+            assertTrue(process.waitFor(30,TimeUnit.SECONDS))
+            val output=process.inputStream.bufferedReader().readText()
+            assertEquals(0,process.exitValue(),output);assertTrue(output.contains("REAL_NATIVE_CONTEXT_PREFLIGHT_PASS"),output)
+            assertTrue(output.contains("REAL_NATIVE_HARNESS_PROFILE_PASS"),output)
             assertContentEquals(checkBytes,protectedRuntimeBytes(bootstrap,bootstrap.resolve("project-check-template-${Digest.of("current".toByteArray()).hex}.json"),1024*1024),
                 "Restart must reuse the enrolled approved project-check policy")
             val context=request(client,"GET","/api/session/$session/context")
-            assertEquals(200,context.statusCode());assertEquals(emptyList(),StrictJson.decode(context.body().toByteArray()).fields("data").getValue("data").list())
+            assertEquals(200,context.statusCode())
+            val messages=StrictJson.decode(context.body().toByteArray()).fields("data").getValue("data").list()
+            assertEquals(listOf("model-switched"),messages.map {(it as JObject).entries.getValue("type").string()},
+                "Model selection control only: no user/assistant/compaction inference messages")
         }
         val instanceDescriptor=Files.list(profile.root.resolve("private/instance")).use {paths ->
             paths.filter {it.fileName.toString().endsWith(".command")}.findFirst().orElseThrow()

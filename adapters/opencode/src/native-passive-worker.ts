@@ -29,7 +29,8 @@ export class NativePassiveWorkers {
   private readonly config:PassiveWorkerConfiguration
   constructor(private readonly native:Client,private readonly registry:NativeCredentialRegistry,
     private readonly custody:LinuxNativeCustody,private readonly controllerSessionID:string,
-    config:PassiveWorkerConfiguration,private readonly git:LinuxGitWitness){
+    config:PassiveWorkerConfiguration,private readonly git:LinuxGitWitness,
+    private readonly provisionExecution?: (profileRecordJSON:string)=>Promise<unknown>){
     this.config=Object.freeze({...config,agents:Object.freeze({...config.agents})})
   }
   private async current(assignmentId:string,generation:string,signal:AbortSignal){
@@ -66,6 +67,7 @@ export class NativePassiveWorkers {
     if(!parent.isDirectory()||parent.uid!==process.getuid!()||parent.mode&0o022)nativeUnavailable()
     await this.custody.initialize();await this.custody.requireOutside(this.config.sourceRoot);await this.custody.requireOutside(this.config.worktreeParent)
     const basis=await this.current(assignmentId,generation,signal),a=basis.a.payload,intended=a.intendedExecution
+    if(this.provisionExecution)await this.provisionExecution(contextJSON(basis.profile))
     const base=basis.task.payload.base?.code
     // The first adapter supports an explicitly selected clean Git snapshot only; never discard or
     // silently omit required dirty contents, another repository, submodules or a second code base.

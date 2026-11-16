@@ -11,7 +11,8 @@ internal data class WorkExecutionInput(val principalId: UUID,val credentialId: U
     val controllerId: UUID?,val assignment: WAssignmentSubject?,val execution: WExecution?)
 internal data class WorkNativeObservation(val assignment: WAssignmentSubject,val intentId: UUID,
     val correlationId: UUID,val operation: String,val outcome: String,val sources: List<WSource>,
-    val execution: WExecution?,val writersFenced: Boolean,val priorSafeState: String)
+    val execution: WExecution?,val writersFenced: Boolean,val priorSafeState: String,
+    val cooperativePause: Boolean = false)
 internal data class WorkIntegrationObservation(val intent: WorkKey.Id,val correlationId: UUID,val outcome: String,
     val resultingSnapshot: WSnapshot?,val applicability: WorkReference?,val evidence: List<WorkReference>,
     val observations: List<WSource>,val pending: List<WPending>)
@@ -310,7 +311,8 @@ internal class WorkTransaction(val h: WorkState,val actor: WorkExecutionInput,va
         val p=proof(v.intentId,i,v.outcome,v.observations)
         if(v.outcome=="confirmed" && i.operation in setOf("start","resume"))
             Model2Inspector(h).requireActivation(subject(v.assignmentId,a),true)
-        if(v.outcome=="confirmed" && i.operation in setOf("pause","stop"))workRequire(p.writersFenced,WorkProblem.NATIVE_UNKNOWN)
+        if(v.outcome=="confirmed" && i.operation=="pause")workRequire(p.writersFenced || p.cooperativePause,WorkProblem.NATIVE_UNKNOWN)
+        if(v.outcome=="confirmed" && i.operation=="stop")workRequire(p.writersFenced,WorkProblem.NATIVE_UNKNOWN)
         val state=when(v.outcome) {
             "unknown" -> "unknown"
             "confirmed" -> when(i.operation) { "start","resume"->"active";"pause"->"paused";"stop"->"stopped";else->throw WorkFault(WorkProblem.INVALID_TRANSITION) }

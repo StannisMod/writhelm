@@ -15,6 +15,7 @@ import { NativeInitialStart } from "../src/native-initial-start.js"
 import { contextJSON } from "../src/native-context-codec.js"
 import { listenNativeTransport } from "../src/native-transport.js"
 import { createServer } from "node:net"
+import { provisionExecutionDeployment } from "../src/primary-bootstrap.js"
 
 const id=(n:number)=>`00000000-0000-0000-0000-${n.toString(16).padStart(12,"0")}`
 async function fixture(template="executor-v1"){
@@ -27,8 +28,11 @@ async function fixture(template="executor-v1"){
     metadata:{nativeIntentId:id(3),assignmentId:id(2),executionGeneration:"0"},delivery:"queue",resume:true}
   const raw=contextJSON(envelope),packet=contextJSON([{key:"writhelm-task",value:"EXACT pinned contract, no summary substitution"},
     {key:"writhelm-record-binding",value:contextJSON({family:"assignment-bindings",key:binding.key,payload:{intendedExecution:{template}}})}].sort((a,b)=>a.key.localeCompare(b.key)))
-  const profile={family:"profiles",key:{projectId:id(1),profileId:id(6),revision:0},payload:{platform:"linux",qualification:"unqualified",model:{providerId:"MOCK",modelId:"no-call",variant:null},
-    outputReserveTokens:512,effort:"bounded",route:"no-call",permissions:[{tool:"read",action:"allow",scope:"workspace"}]}}
+  const profile={formatVersion:1,family:"profiles",key:{projectId:id(1),profileId:id(6),revision:0},payload:{
+    nativeProfileId:"explicit-test-native",qualificationEvidence:[],model:{providerId:"MOCK",modelId:"no-call",variant:null},
+    platform:"linux",qualification:"unqualified",contextTokens:8192,outputReserveTokens:512,toolReserveTokens:512,compactionReserveTokens:512,
+    compactionPolicyId:"explicit-test-foreground",requestAccountingProfileId:"test-no-call",executionAssurance:"E-COOP-1",
+    effort:"bounded",route:"no-call",permissions:[{tool:"read",action:"allow",scope:"workspace"}]}}
   let active=false,dispatch=true,wakes=0,lost=false,suppressBoundary=false,epoch="b".repeat(64),permissions:any[]=[{action:"*",resource:"*",effect:"deny"}],boundary:Promise<void>|undefined
   let permissionUpdates=0,losePermissionReply=false,failPermissionBefore=false,policyReady=true,blockedFrame:Promise<void>|undefined,frameEntered:()=>void=()=>{}
   const event=()=>({sessionID:envelope.nativeSessionId,model:{providerID:"MOCK",id:"no-call"},system:[],options:{inherited:"must disappear"},tools:{read:{},shell:{}}})
@@ -56,11 +60,18 @@ async function fixture(template="executor-v1"){
         assignmentJSON:contextJSON({payload:{intendedExecution:{template}}}),active,dispatch}
     }} as unknown as NativeCredentialRegistry
   const custody=new LinuxNativeCustody(path.join(root,"private"),[work]);await custody.initialize()
-  const deployment=new LinuxNativeCustody(path.join(root,"deployment"),[work]);await deployment.initialize()
-  await deployment.retain("execution-profile",contextJSON(profile.key),contextJSON({formatVersion:1,profileKeyJSON:contextJSON(profile.key),model:{providerID:"MOCK",id:"no-call"},
-    baseURL:null,routeID:"no-call",effortOptionKey:"effort",nativeOptions:{effort:"bounded",maxTokens:64}}))
+  const deployment=new LinuxNativeCustody(path.join(root,"bootstrap"),[work])
+  await provisionExecutionDeployment({root,projectId:id(1),forbiddenAreas:[work],profileRecordJSON:contextJSON(profile),
+    executionJSON:contextJSON({formatVersion:1,profileKeyJSON:contextJSON(profile.key),model:{providerID:"MOCK",id:"no-call"},
+      baseURL:null,routeID:"no-call",effortOptionKey:"effort",nativeOptions:{effort:"bounded",maxTokens:64}}),
+    contextPolicyJSON:contextJSON({formatVersion:1,profileKeyJSON:contextJSON(profile.key),policyId:profile.payload.compactionPolicyId,
+      nativeProfileId:profile.payload.nativeProfileId,auto:true,background:false,keepTokens:2048,bufferTokens:1024})})
+  await deployment.initialize()
   const checkPolicy=async()=>{if(!policyReady)throw Error("MOCK effective context policy changed")}
-  const create=()=>new NativeInitialAdapter(ctx,native,registry,custody,deployment,"ses_controller",()=>false,undefined,checkPolicy)
+  let cooperative=false,cooperativeReads=0,expireCooperative=false
+  const create=()=>new NativeInitialAdapter(ctx,native,registry,custody,deployment,"ses_controller",()=>false,undefined,checkPolicy,
+    async(sessionID,bindingJSON)=>sessionID===envelope.nativeSessionId&&bindingJSON===contextJSON(binding)&&
+      cooperative&&(!expireCooperative||++cooperativeReads===1))
   const adapter=create();await adapter.register()
   return {adapter,hooks,envelope,root,event,admission:(purpose:string)=>contextJSON({subject:{assignmentId:id(2),executionGeneration:"0",bindingJSON:contextJSON(binding)},
       sessionID:envelope.nativeSessionId,profileJSON:contextJSON(profile),purpose,epoch:"b".repeat(64)}),
@@ -74,6 +85,7 @@ async function fixture(template="executor-v1"){
       const entered=new Promise<void>(resolve=>{frameEntered=resolve})
       return {entered,release}
     },
+    cooperative:(expire=false)=>{cooperative=true;expireCooperative=expire;cooperativeReads=0},
     active:()=>{active=true;dispatch=false},revoke:()=>{active=false;dispatch=false},lose:()=>{lost=true},noBoundary:()=>{suppressBoundary=true},wakes:()=>wakes,boundary:()=>boundary,permissions:()=>permissions}
 }
 
@@ -100,6 +112,20 @@ test("phase admission observes deployment identity and applied restrictions with
   }finally{await f.adapter.close()}
 })
 
+test("MOCK same-binding resume admission needs the original start and a cooperative witness that remains current",async()=>{
+  const f=await fixture()
+  try{
+    f.cooperative()
+    await assert.rejects(f.adapter.admission(f.admission("resume")),"Pause alone cannot replace the original start witness")
+    await f.adapter.deliver(f.subject,id(3))
+    await f.adapter.awaitBoundary(f.envelope.nativeSessionId,new AbortController().signal)
+    f.active();await f.adapter.release(f.envelope.nativeSessionId);await f.boundary()
+    assert.ok(await f.adapter.admission(f.admission("resume")))
+    f.cooperative(true)
+    await assert.rejects(f.adapter.admission(f.admission("resume")),"Witness loss during reads must hold")
+    assert.equal(f.wakes(),1,"Read-only resume admission must never wake")
+  }finally{await f.adapter.close()}
+})
 test("private phase-admission transport binds exact request and refuses missing peer proof without a wake",async()=>{
   const f=await fixture()
   const socket=createServer()

@@ -107,14 +107,17 @@ export async function listenNativeTransport(origin: string, proof: Uint8Array, b
         closedObject(input, ["formatVersion", "operation", "kind", "subject", "target"])
         await bridge.retainOriginal(input.kind, input.subject, input.target)
       } else {
-        closedObject(input, input.operation === "pause" ? ["formatVersion", "operation", "key", "digest", "intent"]
+        closedObject(input, ["pause","cooperative-pause"].includes(input.operation) ? ["formatVersion", "operation", "key", "digest", "intent"]
           : ["formatVersion", "operation", "key", "digest"])
         if (typeof input.key !== "string" || typeof input.digest !== "string") nativeUnavailable()
         // Every operation names an already protected original, never an arbitrary supplied receiver.
-        if (["rehold", "pause"].includes(input.operation)) {
+        if (["rehold", "pause","cooperative-pause"].includes(input.operation)) {
           const target = await bridge.bindingTarget(input.key, input.digest)
-          await adapter.reholdBinding(target)
-          if (input.operation === "pause") await adapter.pauseBinding(target, input.intent)
+          if(input.operation==="cooperative-pause")result=await adapter.cooperativePauseHeld(target,input.intent)
+          else {
+            await adapter.reholdBinding(target)
+            if (input.operation === "pause") await adapter.pauseBinding(target, input.intent)
+          }
         } else {
           const envelope = await bridge.retained(input.key)
           if (envelope.digest !== input.digest) nativeUnavailable()

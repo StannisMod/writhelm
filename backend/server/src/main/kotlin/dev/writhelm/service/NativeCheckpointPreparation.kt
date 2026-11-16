@@ -56,7 +56,8 @@ internal class NativeRecordedWorkArea(private val controllerRoot:Path,private va
 /** Real first-generation unchanged-base continuation. The exact checkpoint is selected by the
  * canonical assignment, never latest-file guessing. Changed-base/rebind preparation needs its
  * explicit authorized edit plan and stays held; no merge or checkpoint fabrication is attempted. */
-internal class NativeCheckpointPreparation(private val workArea:NativeRecordedWorkArea):ConnectedPreparation {
+internal class NativeCheckpointPreparation(private val workArea:(CoordinationCapture,WAssignmentSubject)->Path?):ConnectedPreparation {
+    constructor(workArea:NativeRecordedWorkArea):this(workArea::observe)
     private data class Selection(val capture:CoordinationCapture,val registration:OwnedPreparationRegistration,val rootIdentity:Any)
     private val selected=linkedMapOf<WAssignmentSubject,Selection>()
     @Synchronized override fun plan(capture:CoordinationCapture,subject:WAssignmentSubject):ConnectedPreparationPlan {
@@ -67,7 +68,7 @@ internal class NativeCheckpointPreparation(private val workArea:NativeRecordedWo
         Model2Inspector(capture.work).requireCheckpointContext(checkpoint,subject)
         val data=(capture.work.resolve(checkpoint).payload as WCheckpointsPayload).value
         val snapshot=data.artifacts.singleOrNull() ?: throw WorkFault(WorkProblem.NOT_READY)
-        val root=workArea.observe(capture,subject) ?: throw WorkFault(WorkProblem.NOT_READY)
+        val root=workArea(capture,subject) ?: throw WorkFault(WorkProblem.NOT_READY)
         val plan=ConnectedPreparationPlan(subject,subject,checkpoint,snapshot,snapshot,"unchanged-base",null,
             listOf(WSourceVariant2Value(WSourceVariant2("work",checkpoint))),emptyList())
         if(selected.size>=256 && subject !in selected)throw WorkFault(WorkProblem.NOT_READY)
@@ -80,7 +81,7 @@ internal class NativeCheckpointPreparation(private val workArea:NativeRecordedWo
     }
     private fun adapter(plan:ConnectedPreparationPlan):LinuxOwnedDirectoryPreparation? {
         val selection=selected[plan.assignment] ?: return null
-        if(selection.registration.plan!=plan || workArea.observe(selection.capture,plan.assignment)!=selection.registration.root)return null
+        if(selection.registration.plan!=plan || workArea(selection.capture,plan.assignment)!=selection.registration.root)return null
         val identity=try {Files.readAttributes(selection.registration.root,java.nio.file.attribute.BasicFileAttributes::class.java,
             LinkOption.NOFOLLOW_LINKS).fileKey()}catch(_:Exception){return null}
         if(identity!=selection.rootIdentity)return null

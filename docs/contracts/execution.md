@@ -1,6 +1,6 @@
 # Cooperative worktree execution and immutable review
 
-Contract K-EXECUTION, revision 4. Status: owner approved the disclosed worktree/cooperative-profile,
+Contract K-EXECUTION, revision 6. Status: owner approved the disclosed worktree/cooperative-profile,
 read-only review, separate integration and deterministic non-LLM correction scope. No operational
 runtime/isolation qualification claimed. Governing [K-HARNESS](agent-workflow.md),
 [K-TASK](task-contract.md), [K-DISPATCH](dispatch.md), [K-CONTEXT](context-continuity.md).
@@ -116,11 +116,40 @@ Implementation status: the local source now separates passive preparation/bindin
 current-operation execution admission, active native access and retention. Execution observations
 are tied to the current head, command fingerprint, binding and profile; native read-only preflight
 checks deployment/model/session/permissions without waking a model or changing permissions.
-The initial Linux adapter explicitly refuses resume; this does not block supported preparation or
-initial start. Unknown prior effects, new-process adoption and unconfirmed writers remain held.
+The initial-only Linux path refuses resume without the separate original cooperative-pause witness
+and same-binding continuation checks described in EX-11. Unknown prior effects, new-process adoption
+and unconfirmed writers remain held; cooperative pause never supplies stop/claim-release fencing.
 Project tests, not historical campaign registration, verify these mechanisms. This implementation
 record does not claim installed H1 acceptance, semantic independent review, OS confinement or
 Windows/macOS runtime verification.
+
+## EX-10 — Native lifecycle and the minimum H1 journey
+
+Owner clarified on 2026-11-16: coding workers retain bash/shell. Do not replace lifecycle work with
+a shell ban, or make full containerization/arbitrary-descendant containment a prerequisite for H1.
+Use OpenCode's actual native command/session outcomes and cancellation facilities within E-COOP-1.
+UI visibility alone is not an outcome observation; unknown or ambiguous native effects stay held.
+Do not advertise control of unobserved escaped processes or claim that interrupt proves OS fencing.
+
+The first parallel task/result/candidate/check/review/remediation journey need not pause and resume
+the same unfinished worker. Keep a running worker's base/worktree unchanged; dependent/remediation
+work may use separate tasks and exclusive worktrees. Do not reuse an uncertain old work area or
+release conflicting claims merely because another task can proceed. Full pause/resume continuation
+remains a separately verified supported operation, not a blanket admission gate for that first journey.
+This clarification withdraws the proposed shell-restricted pilot profile; it was not implemented.
+It changes neither current service authority nor exact-input/review/integration requirements and
+does not authorize inference, paid runs, integration or publication.
+
+## EX-11 — Cooperative pause is not writer fencing
+
+Owner explicitly approved separating cooperative pause from fencing. A cooperative pause retains
+claims, the exact worktree/base and binding. It permits only same-binding continuation from the
+exact checkpoint after current authority, mandatory restoration and native admission are checked.
+It does not authorize conflicting writers, work-area reuse, claim release, stop/isolation facts or
+base replacement. Unknown outcomes retain their original operation IDs and remain held.
+Native cancellation acknowledgement/idle alone is not a writer-fencing observation. Stop and any
+operation requiring fenced writers retain that requirement. Approval of this design is separate
+from implementation/verification, live inference authorization and integration acceptance.
 
 ## Approval provenance/readiness
 
@@ -139,3 +168,6 @@ or supply missing protocol, authorship, permission or recovery formats.
 Revision 4 records the owner's 2026-11-16 approval of phase-specific machine admission and explicit
 clarification that platform implementation verification means tests of this project. This is an
 accepted design change. The implementation status above is separate from operational acceptance.
+
+Revision 5 records the owner's native-lifecycle/cooperative-scope clarification and instruction to
+record it and continue the minimum H1 journey, without a bash ban or containerization requirement.

@@ -14,7 +14,13 @@ import { LinuxNativeCustody } from "../src/native-runtime-custody.js"
 import { boundedPlanningKnowledgeChannel } from "../src/connected-tools.js"
 import primaryServer from "../src/primary-server.js"
 import { installFreshPrimaryPolicy, primaryPermissionRules, primaryPolicyStatements, requirePrimaryPolicy } from "../src/primary-policy.js"
-import { AutomaticEnrollmentClient, provisionAutomaticPrimary } from "../src/primary-bootstrap.js"
+import { AutomaticEnrollmentClient, provisionAutomaticPrimary, provisionExecutionDeployment, provisionHarnessExecutionDeployment } from "../src/primary-bootstrap.js"
+import { contextJSON } from "../src/native-context-codec.js"
+import { decodeNativeExecutionDeployment } from "../src/native-initial.js"
+import { NativeContextExtraction } from "../src/native-context-extraction.js"
+import { assertNativeContextPolicy } from "../src/native-context-policy.js"
+import { spawn } from "node:child_process"
+import { fileURLToPath } from "node:url"
 import { NativeSessionToolRouter } from "../src/native-runtime.js"
 import { registerAutomaticClientUI } from "../src/primary-tui.js"
 
@@ -190,6 +196,153 @@ test("a new view cannot adopt or erase an ambiguous legacy per-folder creation",
   assert.equal(rpcCalls,0);assert.equal(memoryCalls,0);assert.equal(legacy.pending.sessionID,"ses_legacy")
   lifecycle.close()
 })
+async function executionInstallation(){
+  const base=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(base)
+  const area=await fs.mkdtemp(path.join(base,"execution-provision-")),work=path.join(area,"work")
+  await fs.mkdir(work);await fs.writeFile(path.join(work,"owner.txt"),"untouched\n")
+  const key={projectId:id,profileId:id,revision:0},profileKeyJSON=contextJSON(key)
+  const profile={formatVersion:1,family:"profiles",key,payload:{nativeProfileId:"test-native",qualificationEvidence:[],
+    model:{providerId:"test-provider",modelId:"test-model",variant:null},route:"explicit-route",effort:"bounded",
+    contextTokens:8192,outputReserveTokens:512,toolReserveTokens:512,compactionReserveTokens:512,
+    compactionPolicyId:"test-foreground",requestAccountingProfileId:"test-accounting",executionAssurance:"E-COOP-1",
+    permissions:[{tool:"shell",scope:"workspace",action:"allow"}],platform:"linux",qualification:"unqualified"}}
+  const execution={formatVersion:1,profileKeyJSON,model:{providerID:"test-provider",id:"test-model"},baseURL:null,
+    routeID:"explicit-route",effortOptionKey:"effort",nativeOptions:{effort:"bounded",maxTokens:64}}
+  const policy={formatVersion:1,profileKeyJSON,policyId:"test-foreground",nativeProfileId:"test-native",
+    auto:true,background:false,keepTokens:2048,bufferTokens:1024}
+  const config={root:path.join(area,"private"),projectId:id,forbiddenAreas:[work],
+    profileRecordJSON:contextJSON(profile),executionJSON:contextJSON(execution),contextPolicyJSON:contextJSON(policy)}
+  return {area,work,key,profile,execution,policy,config}
+}
+test("trusted execution provisioning installs runtime-consumed records idempotently and retains bash without model calls",async()=>{
+  const f=await executionInstallation()
+  const receipt=await provisionExecutionDeployment(f.config)
+  assert.equal(receipt.kind,"deployment-provisioned")
+  const custody=new LinuxNativeCustody(path.join(f.config.root,"bootstrap"),[f.work]);await custody.initialize()
+  assert.equal(await custody.read("execution-profile",contextJSON(f.key)),f.config.executionJSON)
+  assert.equal(await custody.read("native-context-policy",contextJSON(f.key)),f.config.contextPolicyJSON)
+  assert.deepEqual(await provisionExecutionDeployment(f.config),receipt)
+  const translated=decodeNativeExecutionDeployment(f.config.profileRecordJSON,f.config.executionJSON)
+  assert.ok(translated.permissions.some(p=>p.action==="shell"&&p.effect==="allow"))
+  assertNativeContextPolicy([{type:"document",info:{experimental:{background_compaction:false},
+    compaction:{auto:true,keep:{tokens:2048},buffer:1024}}}] as never,f.config.profileRecordJSON,f.config.contextPolicyJSON)
+  for(const entry of await fs.readdir(custody.root))assert.equal((await fs.stat(path.join(custody.root,entry))).mode&0o077,0)
+  assert.equal(await fs.readFile(path.join(f.work,"owner.txt"),"utf8"),"untouched\n")
+})
+test("harness provisioning reads current session and materialized native model settings without credential access",async()=>{
+  const f=await executionInstallation(),calls:string[]=[]
+  const info={id:"ses_harness",model:{providerID:"test-provider",id:"test-model"},location:{directory:f.work}}
+  let effort="bounded",changed=false
+  const native={
+    session:{get:async()=>{calls.push("session.get");return changed?{...info,model:{providerID:"other",id:"test-model"}}:info}},
+    model:{list:async()=>{calls.push("model.list");return {data:[{providerID:"test-provider",id:"test-model",enabled:true,
+      variants:[],limit:{context:8192,output:512},settings:{effort,apiKey:"DO-NOT-RETAIN",headers:{authorization:"DO-NOT-RETAIN"}}}]}},
+      default:async()=>{throw Error("Selected session must not fall back to default")}},
+    config:{get:async()=>{calls.push("config.get");return [{type:"document",info:{experimental:{background_compaction:false},
+      compaction:{auto:true,keep:{tokens:2048},buffer:1024}}}]}},
+    integration:{connection:{resolve:()=>{throw Error("Never read native credentials")}}}
+  }
+  const config={...f.config,sessionID:info.id,workRoot:f.work}
+  await provisionHarnessExecutionDeployment(config,native as never)
+  assert.deepEqual(calls,["session.get","model.list","config.get","session.get"])
+  const custody=new LinuxNativeCustody(path.join(f.config.root,"bootstrap"),[f.work]);await custody.initialize()
+  const raw=await custody.read("execution-profile",contextJSON(f.key));assert.ok(raw)
+  assert.equal(JSON.parse(raw).nativeOptions.effort,"bounded")
+  assert.equal(raw.includes("DO-NOT-RETAIN"),false)
+  effort="other"
+  await assert.rejects(provisionHarnessExecutionDeployment(config,native as never))
+  effort="bounded";changed=true
+  await assert.rejects(provisionHarnessExecutionDeployment(config,native as never))
+  assert.equal(await custody.read("execution-profile",contextJSON(f.key)),raw)
+})
+test("native-default effort inherits OpenCode without an effort override and survives context extraction validation",async()=>{
+  const f=await executionInstallation()
+  const profile={...f.profile,payload:{...f.profile.payload,effort:"native-default"}}
+  const profileRecordJSON=contextJSON(profile)
+  const info={id:"ses_default",model:{providerID:"test-provider",id:"test-model"},location:{directory:f.work}}
+  const native={session:{get:async()=>info},model:{list:async()=>({data:[{
+    providerID:"test-provider",id:"test-model",enabled:true,variants:[],limit:{context:8192,output:512},settings:{}
+  }]})},config:{get:async()=>[{type:"document",info:{experimental:{background_compaction:false},
+    compaction:{auto:true,keep:{tokens:2048},buffer:1024}}}]}}
+  await provisionHarnessExecutionDeployment({...f.config,profileRecordJSON,sessionID:info.id,workRoot:f.work},native as never)
+  const custody=new LinuxNativeCustody(path.join(f.config.root,"bootstrap"),[f.work]);await custody.initialize()
+  const raw=await custody.read("execution-profile",contextJSON(f.key));assert.ok(raw)
+  const translated=decodeNativeExecutionDeployment(profileRecordJSON,raw)
+  assert.equal(translated.d.effortOptionKey,null)
+  assert.deepEqual(translated.options,{maxTokens:512})
+  const extraction=new NativeContextExtraction({app:{version:"2.2.5"}} as never,{} as never,{
+    profileJSON:contextJSON(f.key),model:translated.selected,baseURL:null,routeID:f.profile.payload.route,
+    effortOptionKey:null,nativeOptions:translated.options})
+  extraction.assertProfile(profileRecordJSON)
+  assert.throws(()=>extraction.assertProfile(f.config.profileRecordJSON))
+  assert.throws(()=>decodeNativeExecutionDeployment(f.config.profileRecordJSON,raw))
+  for(const options of [{maxTokens:64,effort:"bounded"},{maxTokens:64,reasoningEffort:"high"},{maxTokens:64,temperature:0.5}])
+    assert.throws(()=>decodeNativeExecutionDeployment(profileRecordJSON,contextJSON({...JSON.parse(raw),nativeOptions:options})))
+})
+test("execution provisioning refuses mismatched model route effort policy secrets and conflicting originals",async()=>{
+  const f=await executionInstallation()
+  for(const execution of [
+    {...f.execution,model:{providerID:"other",id:"test-model"}},
+    {...f.execution,routeID:"other"},{...f.execution,nativeOptions:{effort:"other",maxTokens:64}},
+    {...f.execution,nativeOptions:{effort:"bounded",maxTokens:513}},
+    {...f.execution,nativeOptions:{effort:"bounded",maxTokens:64,apiKey:"not-a-real-key"}},
+    {...f.execution,baseURL:"https://user:password@example.invalid/v1"},
+    {...f.execution,unexpected:true}
+  ])await assert.rejects(provisionExecutionDeployment({...f.config,executionJSON:contextJSON(execution)}))
+  for(const policy of [{...f.policy,background:true},{...f.policy,keepTokens:8192},{...f.policy,policyId:"other"}])
+    await assert.rejects(provisionExecutionDeployment({...f.config,contextPolicyJSON:contextJSON(policy)}))
+  for(const payload of [{...f.profile.payload,compactionReserveTokens:32},{...f.profile.payload,extra:"not-a-profile-field"}])
+    await assert.rejects(provisionExecutionDeployment({...f.config,profileRecordJSON:contextJSON({...f.profile,payload})}))
+  assert.equal(await fs.stat(f.config.root).then(()=>true,()=>false),false,"Invalid configuration must precede custody creation")
+  const receipt=await provisionExecutionDeployment(f.config)
+  await assert.rejects(provisionExecutionDeployment({...f.config,executionJSON:contextJSON({...f.execution,
+    nativeOptions:{effort:"bounded",maxTokens:32}})}))
+  assert.deepEqual(await provisionExecutionDeployment(f.config),receipt)
+  await assert.rejects(provisionExecutionDeployment({...f.config,projectId:"00000000-0000-0000-0000-000000000002"}))
+})
+test("execution provisioning reconciles the original partial publication but refuses another bundle",async()=>{
+  const f=await executionInstallation()
+  const custody=new LinuxNativeCustody(path.join(f.config.root,"bootstrap"),[f.work]);await custody.initialize()
+  const original=contextJSON({formatVersion:1,profileRecordJSON:f.config.profileRecordJSON,
+    executionJSON:f.config.executionJSON,contextPolicyJSON:f.config.contextPolicyJSON})
+  await custody.retain("execution-deployment",contextJSON(f.key),original)
+  await assert.rejects(provisionExecutionDeployment({...f.config,executionJSON:contextJSON({...f.execution,
+    nativeOptions:{effort:"bounded",maxTokens:32}})}))
+  assert.equal(await custody.read("execution-profile",contextJSON(f.key)),undefined)
+  await provisionExecutionDeployment(f.config)
+  assert.equal(await custody.read("execution-deployment",contextJSON(f.key)),original)
+  assert.equal(await custody.read("native-context-policy",contextJSON(f.key)),f.config.contextPolicyJSON)
+})
+test("competing trusted deployment installs cannot mix execution and context projections",async()=>{
+  const f=await executionInstallation()
+  const other={...f.config,executionJSON:contextJSON({...f.execution,nativeOptions:{effort:"bounded",maxTokens:32}}),
+    contextPolicyJSON:contextJSON({...f.policy,keepTokens:1024})}
+  const attempts=await Promise.allSettled([provisionExecutionDeployment(f.config),provisionExecutionDeployment(other)])
+  assert.equal(attempts.filter(r=>r.status==="fulfilled").length,1)
+  const winner=attempts[0]!.status==="fulfilled"?f.config:other
+  const custody=new LinuxNativeCustody(path.join(f.config.root,"bootstrap"),[f.work]);await custody.initialize()
+  assert.equal(await custody.read("execution-profile",contextJSON(f.key)),winner.executionJSON)
+  assert.equal(await custody.read("native-context-policy",contextJSON(f.key)),winner.contextPolicyJSON)
+})
+test("trusted execution CLI provisions from stdin in a separate process without native or service configuration",async()=>{
+  const f=await executionInstallation()
+  const run=(input:unknown)=>new Promise<{code:number|null;out:string;error:string}>((resolve,reject)=>{
+    const child=spawn(process.execPath,[fileURLToPath(new URL("../src/primary-bootstrap.js",import.meta.url)),"provision-execution"],
+      {env:{},stdio:["pipe","pipe","pipe"]})
+    let out="",error=""
+    child.stdout.on("data",chunk=>{out+=chunk});child.stderr.on("data",chunk=>{error+=chunk})
+    child.on("error",reject);child.on("close",code=>resolve({code,out,error}))
+    child.stdin.end(JSON.stringify(input))
+  })
+  const first=await run(f.config)
+  assert.equal(first.code,0,first.error)
+  assert.equal(JSON.parse(first.out).kind,"deployment-provisioned")
+  assert.deepEqual(await run(f.config),first)
+  const refused=await run({...f.config,executionJSON:contextJSON({...f.execution,routeID:"wrong-route"})})
+  assert.equal(refused.code,2);assert.equal(refused.out,"")
+  assert.match(refused.error,/deployment held; no model or native host was started/)
+  assert.equal((await run(f.config)).out,first.out)
+})
 test("trusted automatic provisioning creates a protected reusable bootstrap and refuses conflicting profiles",async()=>{
   const base=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(base)
   const area=await fs.mkdtemp(path.join(base,"automatic-provision-")),work=path.join(area,"work")
@@ -212,6 +365,26 @@ test("trusted automatic provisioning creates a protected reusable bootstrap and 
   await assert.rejects(provisionAutomaticPrimary(config))
   assert.equal(await fs.readFile(config.clientPolicyFile,"utf8"),bytes)
   assert.equal(await custody.read("automatic-bootstrap","current"),first)
+})
+test("automatic provisioning retains explicit execution policy separately and rejects conflicting or invalid deployments",async()=>{
+  const f=await executionInstallation()
+  const config={root:path.join(f.area,"automatic"),forbiddenAreas:[f.work],storeId:id,
+    serviceOrigin:"http://127.0.0.1:18671",nativeOrigin:"http://127.0.0.1:18672",
+    nativeRegistrationFile:path.join(f.area,"registration.json"),clientPolicyFile:path.join(f.area,"profile/opencode.json"),
+    plugin:path.join(f.area,"plugin"),schemas:{"work-command3":"explicit synthetic schema"}}
+  await provisionAutomaticPrimary(config)
+  const custody=new LinuxNativeCustody(path.join(config.root,"bootstrap"),[f.work]);await custody.initialize()
+  const original=await custody.read("automatic-bootstrap","current")
+  const deployment={profileRecordJSON:f.config.profileRecordJSON,executionJSON:f.config.executionJSON,contextPolicyJSON:f.config.contextPolicyJSON}
+  await provisionAutomaticPrimary({...config,executionDeployments:[deployment]})
+  const policy=await custody.read("automatic-execution-deployments","current");assert.ok(policy)
+  assert.equal(await custody.read("automatic-bootstrap","current"),original)
+  await provisionAutomaticPrimary(config)
+  assert.equal(await custody.read("automatic-execution-deployments","current"),policy)
+  await assert.rejects(provisionAutomaticPrimary({...config,executionDeployments:[{...deployment,
+    executionJSON:contextJSON({...f.execution,routeID:"wrong"})}]}))
+  await assert.rejects(provisionAutomaticPrimary({...config,executionDeployments:[]}))
+  assert.equal(await custody.read("automatic-execution-deployments","current"),policy)
 })
 test("Linux native identity uses OS hostname while retaining PID, origin and executable pins",async()=>{
   const origin="http://127.0.0.1:18671"

@@ -28,6 +28,7 @@ import { NativeInitialStart } from "../src/native-initial-start.js"
 import { sendContext } from "../src/native-context-protocol.js"
 import { NativeResultRetention, NativeCandidateAssembly, NativeCandidateTests, runCandidateChecks, advanceCandidateDelivery } from "../src/native-result-retention.js"
 import { resultSubmissionPreflight, loadCandidateDeliveryBootstrap, startCandidateDeliveryLoop } from "../src/native-runtime.js"
+import { provisionExecutionDeployment } from "../src/primary-bootstrap.js"
 
 let input="";for await(const chunk of process.stdin){input+=chunk;assert.ok(Buffer.byteLength(input)<65536)}
 const cfg=JSON.parse(input),sessionID="ses_worker_preparation_controller",sessions=new Map<string,any>(),inventory:Array<{directory:string;strategy:string}>=[]
@@ -84,7 +85,7 @@ const workers=new NativePassiveWorkers(native,registry,custody,sessionID,{source
   agents:{"executor-v1":"build","reviewer-v1":"plan"}},gitWitness)
 const bridge=new ProtectedNativeBridge(registry,custody,sessionID,cfg.hostId)
 const adapter=new ConnectedNativeAdapter(ctx,native.session,bridge,cfg.hostId)
-const deployment=new LinuxNativeCustody(path.join(cfg.root,"deployment"),[cfg.sourceRoot,cfg.worktreeParent]);await deployment.initialize()
+const deployment=new LinuxNativeCustody(path.join(cfg.root,"bootstrap"),[cfg.sourceRoot,cfg.worktreeParent]);await deployment.initialize()
 const initial=new NativeInitialAdapter(ctx,native,registry,custody,deployment,sessionID);await initial.register()
 let workerSession:string|undefined
 let retentionWrites=0
@@ -99,17 +100,28 @@ const transport=await listenNativeTransport(cfg.transportOrigin,Buffer.from(cfg.
 const workTools=await registerConnectedWorkTools(ctx,registry,resultSubmissionPreflight(registry,custody,cfg.sourceRoot,()=>workers,()=>gitWitness))
 let recoveredInitial:NativeInitialAdapter|undefined
 const signal=new AbortController().signal,parse=(s:string)=>exactJSON(s,()=>{throw Error("invalid service JSON")})
+const provisionFixtureExecution=async(profileKey:unknown)=>{
+  // Read the actual canonical profile through the scoped service, then use the production installer.
+  // Model/native SDK remain explicit fixtures; this does not manufacture execution admission facts.
+  const frame=await registry.controllerContext(sessionID,contextJSON(profileKey),signal)
+  const p=parse(frame.profileRecordJSON).payload
+  await provisionExecutionDeployment({root:cfg.root,projectId:cfg.projectId,forbiddenAreas:[cfg.sourceRoot,cfg.worktreeParent],
+    profileRecordJSON:frame.profileRecordJSON,
+    executionJSON:contextJSON({formatVersion:1,profileKeyJSON:contextJSON(profileKey),model:{providerID:"synthetic",id:"no-call"},
+      baseURL:null,routeID:"no-call",effortOptionKey:"effort",nativeOptions:{maxTokens:64,effort:"bounded"}}),
+    contextPolicyJSON:contextJSON({formatVersion:1,profileKeyJSON:contextJSON(profileKey),policyId:p.compactionPolicyId,
+      nativeProfileId:p.nativeProfileId,auto:true,background:false,keepTokens:2048,bufferTokens:1024})})
+}
 try{
   const driver=new NativeWorkerPreparation(registry,workers,custody,sessionID,{projectId:cfg.projectId,controllerId:cfg.controllerId,
     hostId:cfg.hostId,worktreeParent:cfg.worktreeParent})
   if(cfg.frontierStart){
     const payload=parse(cfg.reserveJSON).payload
-    await deployment.retain("execution-profile",contextJSON(payload.profile),contextJSON({formatVersion:1,profileKeyJSON:contextJSON(payload.profile),
-      model:{providerID:"synthetic",id:"no-call"},baseURL:null,routeID:"no-call",effortOptionKey:"effort",nativeOptions:{maxTokens:64,effort:"bounded"}}))
     const starter=new NativeInitialStart(registry,initial,custody,deployment,sessionID,cfg.projectId)
     let complete!:(value:any)=>void
     const active=new Promise<any>(resolve=>{complete=resolve})
     const checked={runController:async(...args:Parameters<NativeInitialStart["runController"]>)=>{
+      await provisionFixtureExecution(payload.profile)
       const result=await starter.runController(...args);assert.equal(result.phase,"active-admission-confirmed");complete(result);return result
     },restoreController:starter.restoreController.bind(starter)}
     const frontier=new NativeDispatchFrontier(registry,driver,checked as never,custody,sessionID,cfg.planId,1,250)
@@ -215,8 +227,7 @@ try{
   assert.equal(wakes,0)
   let resultId:string|undefined
   if(cfg.start){
-    await deployment.retain("execution-profile",contextJSON(payload.profile),contextJSON({formatVersion:1,profileKeyJSON:contextJSON(payload.profile),
-      model:{providerID:"synthetic",id:"no-call"},baseURL:null,routeID:"no-call",effortOptionKey:"effort",nativeOptions:{maxTokens:64,effort:"bounded"}}))
+    await provisionFixtureExecution(payload.profile)
     const starter=new NativeInitialStart(registry,initial,custody,deployment,sessionID,cfg.projectId)
     const selected=contextJSON({assignment:prepared.assignmentSelector,binding:prepared.binding})
     const call={...actual,id:Schema.decodeUnknownSync(Tool.CallID)("call_initial_start")}

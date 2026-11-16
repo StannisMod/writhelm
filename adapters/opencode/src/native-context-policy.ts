@@ -6,6 +6,12 @@ import { exactJSON } from "./strict-json.js"
 import { closedObject,nativeUnavailable } from "./native-runtime-client.js"
 
 const parse=(raw:string)=>exactJSON(raw,nativeUnavailable)
+/** Null selects native effort inheritance, not an invented protocol option/value. */
+export function nativeEffortMatches(effort:unknown,key:unknown,options:Readonly<Record<string,unknown>>):boolean {
+  if(!options||typeof options!=="object"||Array.isArray(options))return false
+  return key===null?effort==="native-default"&&Object.keys(options).every(k=>k==="maxTokens"):
+    typeof key==="string"&&key.length>0&&typeof options[key]==="string"&&options[key]===effort
+}
 /** Execution allowlist, not merely a model-context filter. Unknown/plugin/code-mode tools refuse. */
 export const reviewerToolAllowed=(name:string)=>["read","writhelm_work_read","writhelm_work_command"].includes(name)
 const tokens=(value:any)=>{
@@ -18,7 +24,7 @@ const tokens=(value:any)=>{
  * All explicit layers must agree; defaults, percentages, conflicts and background extraction refuse.
  * No raw config/provider/credential fields leave this function. This produces NO qualification,
  * source-safety, writer-completion, exact-threshold or request-accounting fact. */
-export function assertNativeContextPolicy(entries:readonly ConfigEntry[],profileRecordJSON:string,policyJSON:string):void {
+export function decodeNativeContextPolicy(profileRecordJSON:string,policyJSON:string){
   const profile=parse(profileRecordJSON),p=profile.payload
   if(profile.family!=="profiles"||!p||p.platform!=="linux"||typeof p.compactionPolicyId!=="string"||!p.compactionPolicyId||typeof p.nativeProfileId!=="string"||!p.nativeProfileId)nativeUnavailable()
   const policy=closedObject(parse(policyJSON),["formatVersion","profileKeyJSON","policyId","nativeProfileId","auto","background","keepTokens","bufferTokens"])
@@ -26,7 +32,11 @@ export function assertNativeContextPolicy(entries:readonly ConfigEntry[],profile
     policy.nativeProfileId!==p.nativeProfileId||policy.auto!==true||policy.background!==false)nativeUnavailable()
   const keep=tokens(policy.keepTokens),buffer=tokens(policy.bufferTokens)
   const context=tokens(p.contextTokens)
-  if(BigInt(keep)+BigInt(buffer)>=BigInt(context))nativeUnavailable()
+   if(BigInt(keep)+BigInt(buffer)>=BigInt(context))nativeUnavailable()
+   return {keep,buffer}
+}
+export function assertNativeContextPolicy(entries:readonly ConfigEntry[],profileRecordJSON:string,policyJSON:string):void {
+   const {keep,buffer}=decodeNativeContextPolicy(profileRecordJSON,policyJSON)
   if(!Array.isArray(entries)||!entries.length||entries.length>256)nativeUnavailable()
   let auto=false,foreground=false,kept=false,buffered=false
   for(const entry of entries){

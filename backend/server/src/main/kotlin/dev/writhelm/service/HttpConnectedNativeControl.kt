@@ -120,6 +120,10 @@ internal class HttpConnectedNativeControl(origin: String,proof: ByteArray): Conn
         call("pause","key" to str(key),"digest" to value.entries.getValue("digest"),"intent" to uuid(intent.id))
     }
     override fun reconcilePause(target: ConnectedBindingTarget,intent: WorkKey.Id): WorkNativeObservation?=null
+    override fun cooperativePauseHeld(target:ConnectedBindingTarget,intent:WorkKey.Id):Boolean=try {
+        val (key,value)=binding(target)
+        (call("cooperative-pause","key" to str(key),"digest" to value.entries.getValue("digest"),"intent" to uuid(intent.id)) as? JBoolean)?.value==true
+    }catch(_:Exception){false}
     // The selected physical-effect observer is not qualified. An interrupt reply/transport receipt
     // MUST NOT manufacture a WorkNativeObservation(writersFenced=true) or release claims.
     private fun outcome(value: JsonValue): NativeConnectedOutcome=when(value.string()) {

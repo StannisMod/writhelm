@@ -31,7 +31,7 @@ internal class ConnectedFixture(private val reviewerGap: Boolean=false,private v
         private set
     val observed=linkedSetOf<WorkReference>()
     lateinit var app: H1Application;lateinit var checkpoint: WorkReference;lateinit var condition: WorkReference
-    lateinit var before: WSnapshot;lateinit var preparation: LinuxOwnedDirectoryPreparation
+    lateinit var before: WSnapshot;lateinit var preparation: ConnectedPreparation
     lateinit var options: H1Options;var connected: ConnectedRuntimeFacts?=null
     var engine: ConnectedWorkEngine?=null
     var driver: AuthorizedRebindDriver?=null
@@ -265,6 +265,8 @@ internal class ConnectedFixture(private val reviewerGap: Boolean=false,private v
     }
     override fun close() { engine?.close();app.close() }
     class MockNative: ConnectedNativeControl {
+        var cooperative=false
+        override fun cooperativePauseHeld(target:ConnectedBindingTarget,intent:WorkKey.Id)=cooperative
         var sends=0;var wakes=0;var releases=0;var dropAfterWake=false;var unknown=false
         var qualifiedNotPerformedOnce=false
         var reconciliationAvailable=true
@@ -724,6 +726,24 @@ class ConnectedWorkTest {
             assertEquals(latest,f.state().assignment(f.consumerId).checkpoint)
             assertFails { f.app.continuationPermit(plannerToken,project,f.consumerSubject,f.state().assignment(f.consumerId).binding!!) }
             assertTrue(f.native.closed);assertEquals("pausing",f.state().assignment(f.consumerId).state)
+            assertEquals(1,f.native.sends);assertEquals(1,f.native.wakes)
+        }
+    }
+    @Test fun cooperativePauseUsesServiceOwnedIntentAndRetainsExactBindingAndClaims() {
+        ConnectedFixture().use { f ->
+            f.startEngine();val (r,e)=f.repairAndEvidence();f.confirm(r,e)
+            val before=f.state().assignment(f.consumerId)
+            f.native.cooperative=true
+            f.declareCondition("cooperative-native-pause")
+            val after=f.state().assignment(f.consumerId)
+            assertEquals("paused",after.state)
+            assertEquals(before.binding,after.binding);assertEquals(before.execution,after.execution)
+            assertEquals(before.workspaceId,after.workspaceId);assertEquals(before.task,after.task)
+            assertEquals(before.requiredResources,after.requiredResources)
+            after.requiredResources.forEach {key ->
+                assertEquals("held",(f.state().record(WorkFamily.CLAIMS,key).payload as WClaimsPayload).value.state)
+            }
+            assertEquals(1,f.native.pauseIntents.size)
             assertEquals(1,f.native.sends);assertEquals(1,f.native.wakes)
         }
     }

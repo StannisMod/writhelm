@@ -18,7 +18,8 @@ export type NativeContextDispatchConfiguration=Readonly<{root:string;hostId:stri
 
 function extraction(raw:string,profileJSON:string):ContextExtractionProfile {
   const d=closedObject(parse(raw),["formatVersion","profileKeyJSON","model","baseURL","routeID","effortOptionKey","nativeOptions"])
-  if(d.formatVersion?.value!=="1"||d.profileKeyJSON!==profileJSON||typeof d.routeID!=="string"||typeof d.effortOptionKey!=="string")nativeUnavailable()
+  if(d.formatVersion?.value!=="1"||d.profileKeyJSON!==profileJSON||typeof d.routeID!=="string"||
+    d.effortOptionKey!==null&&typeof d.effortOptionKey!=="string")nativeUnavailable()
   const m=closedObject(d.model,Object.hasOwn(d.model,"variant")?["providerID","id","variant"]:["providerID","id"])
   if(typeof m.providerID!=="string"||typeof m.id!=="string"||m.variant!==undefined&&typeof m.variant!=="string"||
     !d.nativeOptions||typeof d.nativeOptions!=="object"||Array.isArray(d.nativeOptions))nativeUnavailable()

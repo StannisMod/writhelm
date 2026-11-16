@@ -56,14 +56,16 @@ export class NativeWorkerRestoration {
     }
     const report = await this.body(channel, ref, checkpoint.payload.report, signal)
     const latest = await this.registry.workerContext(sessionID, signal)
-    if (latest.checkpointReferenceJSON !== frame.checkpointReferenceJSON || latest.bindingJSON !== frame.bindingJSON
-      || latest.planJSON !== frame.planJSON || latest.packet !== frame.packet || latest.memoryJSON !== frame.memoryJSON) nativeUnavailable()
+     if (latest.checkpointReferenceJSON !== frame.checkpointReferenceJSON || latest.bindingJSON !== frame.bindingJSON
+      || latest.planJSON !== frame.planJSON || latest.packet !== frame.packet || latest.memoryJSON !== frame.memoryJSON
+      || latest.taskJSON !== frame.taskJSON || latest.manifestJSON !== frame.manifestJSON
+      || latest.profileJSON !== frame.profileJSON || latest.loadedViewJSON !== frame.loadedViewJSON) nativeUnavailable()
     const residual = contextJSON({ formatVersion: 1, kind: "restored-residual-not-norms", checkpoint: ref,
       originalAssignment: checkpoint.payload.assignment, handoff: checkpoint.payload.handoff,
       tracker: parse(frame.planJSON), entries, pending: checkpoint.payload.pending,
       retainedHistoricalArtifacts: checkpoint.payload.artifacts, report,
       provenance: { locatorId: source.locatorId, packetDigest: cut.payload.packetDigest, nativeMessages: cut.payload.nativeMessages } },256*1024)
-    return Object.freeze({ checkpoint: ref, packet: frame.packet, residual, safeContextAccess: frame.safeContextAccess === true })
+    return Object.freeze({ checkpoint: ref, packet: frame.packet, residual, safeContextAccess: latest.safeContextAccess === true })
   }
   install(ctx: Plugin.Context, sessionID: string): Effect.Effect<void, unknown> {
     const self = this
@@ -71,8 +73,10 @@ export class NativeWorkerRestoration {
       const restored = yield* io(signal => self.recover(sessionID, signal))
       if (!restored.safeContextAccess) return yield* Effect.fail(new Error("restoration requires qualified native safe access"))
       const actualID = sessionID as Parameters<Plugin.Context["session"]["get"]>[0]["sessionID"]
-      const entries = parse(restored.packet)
-      if (!Array.isArray(entries) || !entries.length || entries.length > 256) return yield* Effect.fail(new Error("mandatory restoration packet unavailable"))
+       const entries = parse(restored.packet)
+       if (!Array.isArray(entries) || !entries.length || entries.length > 256) return yield* Effect.fail(new Error("mandatory restoration packet unavailable"))
+       if(entries.some(i=>typeof i.key!=="string"||!i.key.startsWith("writhelm-")||typeof i.value!=="string")||
+         new Set(entries.map(i=>i.key)).size!==entries.length)return yield* Effect.fail(new Error("invalid mandatory restoration entries"))
       const old = yield* ctx.session.instructions.entry.list({ sessionID: actualID })
       for (const current of old.filter(i => i.key.startsWith("writhelm-"))) {
         if (!entries.some(i => i.key === current.key && i.value === current.value)) return yield* Effect.fail(new Error("unknown native mandatory instruction cannot be replaced"))
@@ -84,8 +88,16 @@ export class NativeWorkerRestoration {
         const current = yield* io(signal => self.registry.workerContext(sessionID, signal))
         if (current.safeContextAccess !== true || current.checkpointReferenceJSON !== contextJSON(restored.checkpoint)
           || current.packet !== restored.packet) return yield* Effect.fail(new Error("restoration authority/basis changed"))
-        yield* ctx.session.instructions.entry.put({ sessionID: actualID, key: entry.key, value: entry.value })
-      }
+         yield* ctx.session.instructions.entry.put({ sessionID: actualID, key: entry.key, value: entry.value })
+       }
+       // A returned native write is not proof that the complete packet is installed. Observe the
+       // exact mandatory set and recheck current access/selector after the final native operation.
+       const installed=yield* ctx.session.instructions.entry.list({sessionID:actualID})
+       const ordered=(items:readonly {key:string;value:unknown}[])=>contextJSON([...items].map(i=>({key:i.key,value:i.value})).sort((a,b)=>a.key<b.key?-1:a.key>b.key?1:0))
+       const current=yield* io(signal=>self.registry.workerContext(sessionID,signal))
+       if(current.safeContextAccess!==true||current.checkpointReferenceJSON!==contextJSON(restored.checkpoint)||
+         current.packet!==restored.packet||ordered(installed.filter(i=>i.key.startsWith("writhelm-")))!==ordered(entries))
+         return yield* Effect.fail(new Error("mandatory restoration not confirmed at current checkpoint"))
     })
   }
 }

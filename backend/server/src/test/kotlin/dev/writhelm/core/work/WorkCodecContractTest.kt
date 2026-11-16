@@ -13,6 +13,8 @@ import org.junit.jupiter.api.Test
 internal fun readyFile(name: String): ByteArray=Files.readAllBytes(Path.of(requireNotNull(System.getenv("WRITHELM_H1_READY_ROOT")),name))
 internal fun workReadyFile(name: String): ByteArray=Files.readAllBytes(Path.of(requireNotNull(System.getenv("WRITHELM_H1_WORK_READY_ROOT")),name))
 internal fun uid(n: Int): UUID=UUID.fromString("00000000-0000-0000-0000-"+n.toString(16).padStart(12,'0'))
+internal val model4DispatchFamilies=setOf(WorkFamily.DISPATCH_PLANS,WorkFamily.DISPATCH_ATTEMPTS,
+    WorkFamily.DISPATCH_MATERIALIZATIONS,WorkFamily.DISPATCH_CLOSURES)
 
 class WorkCodecContractTest {
     private val codec=WorkCodec()
@@ -89,6 +91,13 @@ class WorkCodecContractTest {
             val selector=linkedMapOf("key" to StrictJson.decode(identityCodec.encodeKey(key)))
             selector[if(family.mutable)"generation" else "digest"]=if(family.mutable)JNumber(0)else str("0".repeat(64))
             val root=obj("formatVersion" to JNumber(2),"projectId" to uuid(uid(1)),"operation" to str("read_"+family.tag.replace('-','_')),"subject" to JObject(selector))
+            if(family in model4DispatchFamilies) {
+                // These are model4 internal records, not newly exposed read2 service operations.
+                assertFailsWith<CodecFault>(family.tag) { codec.decodeRead(StrictJson.encode(root)) }
+                assertFailsWith<CodecFault>(family.tag) { codec.encodeRead(WorkRead.Exact(uid(1),
+                    WorkRecordIdentity(family,key),Digest.parse("0".repeat(64)),null)) }
+                return@forEach
+            }
             val read=codec.decodeRead(StrictJson.encode(root))
             assertEquals(WorkRecordIdentity(family,key),(read as WorkRead.Exact).identity)
             assertEquals(read,codec.decodeRead(codec.encodeRead(read)))
@@ -112,7 +121,9 @@ class WorkCodecContractTest {
         val additions=StrictJson.decode(readyFile("concrete-new-records-v2.json")).list().associateBy { ((it as JObject).entries.getValue("family")).string() }
         val composed=(StrictJson.decode(Files.readAllBytes(Path.of(requireNotNull(System.getenv("WRITHELM_COORDINATION_READY_ROOT")),"examples/record-shapes.json")),
             JsonLimits(bytes=4*1024*1024,depth=128,collection=8192,tokens=500000)) as JObject).entries.getValue("records") as JObject
-        WorkFamily.entries.forEach { family ->
+        val legacyFamilies=WorkFamily.entries.filter {it !in model4DispatchFamilies}
+        assertEquals(31,legacyFamilies.size)
+        legacyFamilies.forEach { family ->
             val envelope=(if(family in setOf(WorkFamily.ASSIGNMENT_REPLACEMENTS,WorkFamily.CONDITIONS,WorkFamily.CONDITION_CONFIRMATIONS,WorkFamily.CONTINUATIONS))
                 composed.entries.getValue(family.tag) else additions[family.tag] ?: StrictJson.decode(workReadyFile("examples/records/${family.tag}.json"))) as JObject
             val raw=(envelope.entries.getValue("payload") as JObject).entries.toMutableMap()

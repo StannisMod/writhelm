@@ -8,11 +8,12 @@ import { NativeContextSources, type NativeContextScope, type NativeSourceFormat1
 import { contextJSON } from "./native-context-codec.js"
 import { exactJSON } from "./strict-json.js"
 import { closedObject, nativeUnavailable, uuidPattern } from "./native-runtime-client.js"
+import { nativeEffortMatches } from "./native-context-policy.js"
 
 export type ContextExtractionProfile = Readonly<{
   profileJSON: string; model: Readonly<{ providerID: string; id: string; variant?: string }>
   baseURL: string | null; nativeOptions: Readonly<Record<string, string | number | boolean>>
-  routeID: string; effortOptionKey: string
+  routeID: string; effortOptionKey: string | null
   scopeKind?: "assignment" | "controller"
 }>
 export type ResidualEntry = Readonly<{
@@ -47,8 +48,10 @@ export class NativeContextExtraction {
     private readonly includes: (sessionID: string) => boolean = () => true) {
     if (ctx.app.version !== "2.2.5" || process.platform !== "linux") nativeUnavailable()
     exactJSON(profile.profileJSON, nativeUnavailable)
-    if (!profile.model.providerID || !profile.model.id || !profile.routeID || !profile.effortOptionKey
-      || typeof profile.nativeOptions[profile.effortOptionKey] !== "string" || typeof profile.baseURL !== "string" && profile.baseURL !== null) nativeUnavailable()
+    if (!profile.model.providerID || !profile.model.id || !profile.routeID
+      || !nativeEffortMatches(profile.effortOptionKey===null?"native-default":profile.nativeOptions[profile.effortOptionKey],
+        profile.effortOptionKey,profile.nativeOptions)
+      || typeof profile.baseURL !== "string" && profile.baseURL !== null) nativeUnavailable()
     if (profile.baseURL !== null) {
       const url = new URL(profile.baseURL)
       if (url.username || url.password || url.search || url.hash || !["http:", "https:"].includes(url.protocol)
@@ -68,7 +71,7 @@ export class NativeContextExtraction {
     const record = exactJSON(profileRecordJSON, nativeUnavailable), p = record.payload
     if (record.family !== "profiles" || !equal(record.key, exactJSON(this.#profile.profileJSON, nativeUnavailable)) || !p
       || p.route !== this.#profile.routeID
-      || p.effort !== this.#profile.nativeOptions[this.#profile.effortOptionKey]
+      || !nativeEffortMatches(p.effort,this.#profile.effortOptionKey,this.#profile.nativeOptions)
       || p.model?.providerId !== this.#profile.model.providerID || p.model?.modelId !== this.#profile.model.id
       || (p.model?.variant ?? undefined) !== this.#profile.model.variant) nativeUnavailable()
     for (const key of ["outputReserveTokens", "compactionReserveTokens"]) {

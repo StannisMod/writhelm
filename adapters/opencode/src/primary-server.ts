@@ -11,7 +11,7 @@ import { NativeRuntimeClient, closedObject, nativeUnavailable, uuidPattern } fro
 import { createNativeCredentialRegistry } from "./native-host-identity.js"
 import { registerPrimaryGovernor, registerAutomaticPrimaryGovernor, type AutomaticSessionRuntime } from "./native-primary.js"
 import { startProtectedNativeRuntime, nativeRuntimeReference, nativeRuntimeForSession, NativeSessionToolRouter, loadCandidateDeliveryBootstrap } from "./native-runtime.js"
-import { AutomaticEnrollmentClient } from "./primary-bootstrap.js"
+import { AutomaticEnrollmentClient, provisionExecutionDeployment } from "./primary-bootstrap.js"
 import { exactJSON } from "./strict-json.js"
 import { nativeContextAdmission } from "./native-context-reference.js"
 import { ClientAdmission } from "./primary-rpc.js"
@@ -65,6 +65,17 @@ export async function startAutomaticPrimaryServer(ctx:Plugin.Context,root:string
     const scoped=tools.context(binding.sessionID,async sessionID=>sessionID===binding.sessionID||registry.bound(sessionID)||runtime?.registry.bound(sessionID)===true)
     await stage("scoped-context-created")
     const deployment=new LinuxNativeCustody(path.join(selected.root,"bootstrap"),[binding.workRoot]);await deployment.initialize()
+    const executionPolicies=await bootstrap.read("automatic-execution-deployments","current")
+    if(executionPolicies!==undefined){
+      const policies=closedObject(exactJSON(executionPolicies,nativeUnavailable),["formatVersion","deployments"])
+      if(policies.formatVersion?.value!=="1"||!Array.isArray(policies.deployments)||policies.deployments.length>32)nativeUnavailable()
+      for(const value of policies.deployments){
+        const policy=closedObject(value,["profileRecordJSON","executionJSON","contextPolicyJSON"])
+        if(exactJSON(policy.profileRecordJSON,nativeUnavailable).key?.projectId===binding.projectId)
+          await provisionExecutionDeployment({profileRecordJSON:policy.profileRecordJSON,executionJSON:policy.executionJSON,
+            contextPolicyJSON:policy.contextPolicyJSON,root:selected.root,projectId:binding.projectId,forbiddenAreas:[binding.workRoot]})
+      }
+    }
     await stage("deployment-initialized")
     const serviceProof=Buffer.from(selected.serviceProof,"base64url"),transportProof=Buffer.from(selected.transportProof,"base64url")
     let primary:Awaited<ReturnType<typeof registerPrimaryGovernor>>|undefined

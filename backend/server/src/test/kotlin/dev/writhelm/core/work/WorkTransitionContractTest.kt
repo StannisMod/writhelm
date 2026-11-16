@@ -140,6 +140,27 @@ class WorkTransitionContractTest {
         assertEquals("quarantined",f.state.assignment(f.assignmentId).state)
         assertEquals("isolated",(f.state.record(WorkFamily.CLAIMS,f.resource).payload as WClaimsPayload).value.state)
     }
+    @Test fun `cooperative pause retains binding and claims but cannot confirm stop without fencing`() {
+        val f=WorkFixture();f.active()
+        val original=f.state.assignment(f.assignmentId);val pause=uid(930);val correlation=uid(931)
+        f.apply(CRequestNativeTransitionOperation(CRequestNativeTransition(f.assignmentId,original.generation,pause,correlation,"pause",null,emptyList())))
+        val proof=WorkNativeObservation(WAssignmentSubject(f.assignmentId,0),pause,correlation,"pause","confirmed",
+            listOf(f.source),f.execution,false,"active",cooperativePause=true)
+        f.facts=f.facts.copy(native=f.facts.native+(pause to proof))
+        f.apply(CObserveNativeTransitionOperation(CObserveNativeTransition(f.assignmentId,f.state.assignment(f.assignmentId).generation,pause,0,"confirmed",listOf(f.source),emptyList())))
+        val paused=f.state.assignment(f.assignmentId)
+        assertEquals("paused",paused.state);assertEquals(original.binding,paused.binding)
+        assertEquals(original.execution,paused.execution);assertEquals(original.workspaceId,paused.workspaceId)
+        assertEquals("held",(f.state.record(WorkFamily.CLAIMS,f.resource).payload as WClaimsPayload).value.state)
+        val stop=uid(932);val stopCorrelation=uid(933)
+        f.apply(CRequestNativeTransitionOperation(CRequestNativeTransition(f.assignmentId,paused.generation,stop,stopCorrelation,"stop",null,emptyList())))
+        f.facts=f.facts.copy(native=f.facts.native+(stop to proof.copy(intentId=stop,correlationId=stopCorrelation,operation="stop",priorSafeState="paused")))
+        assertEquals(WorkProblem.INVALID_BINDING,assertFailsWith<WorkFault>{
+            f.apply(CObserveNativeTransitionOperation(CObserveNativeTransition(f.assignmentId,f.state.assignment(f.assignmentId).generation,stop,0,"confirmed",listOf(f.source),emptyList())))
+        }.problem)
+        assertEquals("stopping",f.state.assignment(f.assignmentId).state)
+        assertEquals("held",(f.state.record(WorkFamily.CLAIMS,f.resource).payload as WClaimsPayload).value.state)
+    }
     @Test fun `WORK S05 S13 controller and worker plans own exact assignment not interchangeable`() {
         val f=WorkFixture();f.active();val key=WorkKey.Revision(f.project,uid(40),0)
         val v=CUpdatePlan(key,f.taskKey,null,emptyList(),"refine within contract",null,emptyList(),f.worker.assignment)

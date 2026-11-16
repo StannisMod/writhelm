@@ -34,6 +34,7 @@ import { NativeInitialStart } from "./native-initial-start.js"
 import type { SessionContext,SessionModelRequest,SessionPrompt } from "@opencode/plugin/promise/session"
 import { nativeContextAdmission } from "./native-context-reference.js"
 import { NativeContextPolicy } from "./native-context-policy.js"
+import { provisionHarnessExecutionDeployment } from "./primary-bootstrap.js"
 import type { ToolContext } from "@opencode/plugin/promise/tool"
 
 /** Shared by installed runtime and isolated native-tool fixture. No model fields select a session,
@@ -262,7 +263,8 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
   const initial=new NativeInitialAdapter(ctx,native,registry,custody,deployment,config.controllerSessionID,sid=>adapter.owns(sid),async event=>{
     const binding=await registry.inspect(event.sessionID);if(!binding)nativeUnavailable()
     await nativeContextAdmission(config.root,config.hostId,binding.workRoot).request(event)
-  },checkContextPolicy)
+  },checkContextPolicy,(sessionID,bindingJSON)=>adapter.sameBindingCooperativelyPaused(sessionID,bindingJSON),
+    (sessionID,bindingJSON)=>adapter.continuedPacketMatches(sessionID,bindingJSON))
   const initialStart=new NativeInitialStart(registry,initial,custody,deployment,config.controllerSessionID,config.projectId)
   let automaticReview:NativeAutomaticCandidateReview|undefined
   const candidateReview=new NativeCandidateReviewLifecycle(registry,initialStart,custody,config.controllerSessionID,config.projectId,
@@ -298,7 +300,13 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
     workers=new NativePassiveWorkers(native,registry,custody,config.controllerSessionID,{sourceRoot:controller.workRoot,
       worktreeParent:p.worktreeParent,nativeProjectId:ctx.location.project.id,repositoryId:p.repositoryId,
       controllerId:config.controllerId,hostId:config.hostId,agents:agents as Record<"executor-v1"|"reviewer-v1",string>},
-      witness)
+      witness,async profileRecordJSON=>{
+        const profileKeyJSON=contextJSON(exactJSON(profileRecordJSON,nativeUnavailable).key)
+        if(await deployment.read("execution-profile",profileKeyJSON)!==undefined)return
+        await provisionHarnessExecutionDeployment({root:config.root,projectId:config.projectId,
+          forbiddenAreas:[controller.workRoot,p.worktreeParent],sessionID:config.controllerSessionID,
+          workRoot:controller.workRoot,profileRecordJSON},native)
+      })
     // This instance supplies only immutable proof. Effect dispatch is bound to the actual worker
     // below and still requires a separately qualified service permit, denied by default.
     retentionProof=new NativeResultRetention(controller.workRoot,custody,witness,async()=>false,async()=>false)

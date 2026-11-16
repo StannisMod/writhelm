@@ -131,6 +131,73 @@ never rewrite permissions or retry an uncertain effect. This initial adapter ref
 than treating a paused/unknown operation as a new initial start. Existing native prompt, context,
 model and execute-before hooks still enforce current service authority at the actual effect boundary.
 
+### Trusted execution deployment provisioning
+
+The package's `./bootstrap` export provides `provisionExecutionDeployment`. The built module also
+has an operator/installer-only entrypoint:
+
+```sh
+node build/src/primary-bootstrap.js provision-execution < trusted-deployment.json
+```
+
+Its closed stdin object contains `root` (the selected controller runtime root), `projectId`,
+`forbiddenAreas` (source/worker areas), `profileRecordJSON` (the exact canonical profile envelope),
+`executionJSON` and `contextPolicyJSON`. The last two use the existing runtime formats:
+
+- Execution: `formatVersion:1`, exact canonical `profileKeyJSON`, explicit native `model`,
+  `baseURL` (or explicit `null`), `routeID`, `effortOptionKey`, and `nativeOptions`.
+- Context policy: `formatVersion:1`, the same `profileKeyJSON`, matching `policyId`/`nativeProfileId`,
+  `auto:true`, `background:false`, positive `keepTokens`/`bufferTokens` within the profile context.
+
+In this operator-input API no model, route, effort, option or context threshold is guessed. Request options must
+fit both output and compaction reserves; credentials/headers are not accepted as native options.
+The immutable original deployment bundle precedes publication of protected `execution-profile`
+and `native-context-policy` records. Matching retries complete that same bundle; conflicts never
+overwrite it or mix two installs. An authenticated `preparePrimaryBootstrap` caller may alternatively
+supply `executionDeployments` with these three JSON strings per profile.
+
+The automatic-client installer's optional seventh policy file may include `executionDeployments`
+alongside `formatVersion:1` and `policies`. This list uses the same three JSON strings per entry.
+Installation retains it separately from the existing installation descriptor; automatic provisioning
+validates and retains a separate protected policy record. Enrollment materializes only entries for
+the actual enrolled project in that controller's runtime root before native runtime connection.
+Omitting the list preserves existing descriptor bytes and any explicitly installed policy. Conflicting
+lists hold instead of silently replacing approved deployment parameters.
+
+This is initial trusted setup, not a work tool or a per-assignment qualification. It retains bash
+when the canonical executor profile permits it. The command starts no service, native session or
+model and changes no native config; it returns only profile identity/deployment digest and context
+bounds. It grants no authority or readiness. Actual effective native foreground-compaction settings,
+session/model/route, role restrictions, current service rights and original outcomes are still
+checked at their runtime boundaries. Use only approved isolated installation parameters; do not
+put credentials, installation files or runtime receipts into the source repository.
+
+Normal worker preparation can now provision a missing deployment from the controller's current
+OpenCode session and materialized native model registry (`provisionHarnessExecutionDeployment`).
+Model/variant, endpoint and observable effort come from OpenCode, not a second operator-entered
+provider configuration. Credentials stay native-owned; no credential-resolution API is called.
+Only the endpoint/effort and bounded output options are projected, never native headers/body or
+the full settings object. Existing explicit deployments remain immutable.
+
+Canonical profile identity must match this selection; inheritance cannot rewrite a task's frozen
+inputs. Canonical `effort:"native-default"` selects native-owned effort: deployment has
+`effortOptionKey:null` and only the bounded `maxTokens` override. No fabricated effort value or
+effort option is sent; the selected native model/variant and its native defaults/settings apply.
+This representation is validated by both initial execution and context extraction; it cannot
+satisfy an explicit canonical effort or smuggle extra request overrides.
+Explicit effort still matches native `effort` or `reasoningEffort` string settings (including
+variant overrides). Conflicting profiles, unavailable models and unsupported context policies hold.
+Context policy currently requires explicit numeric foreground compaction thresholds.
+This path neither grants live-call authorization nor establishes successful start/compaction.
+
+Same-binding cooperative continuation may follow an already completed continuation: the engine
+links a successor at the current canonical checkpoint only while paused. Native packet replacement
+requires the original cooperative witness, a closed managed gate and current service authorization.
+Only exact known predecessor/new service entries may change; unrelated mandatory entries hold.
+Unknown pause/wait outcomes retain the original intent and cannot be replayed or adopted from a
+receipt after adapter restart. Model-free service/transport journeys exercise these mechanisms;
+native SDK doubles in those journeys are not installed/live lifecycle acceptance.
+
 Native permission release retains its exact original target before the first update. Reconciliation
 of the same target does not post another update. An observed changed permission set, including a
 new deny-all or stricter owner restriction, holds instead of being overwritten; a lost reply with an

@@ -174,7 +174,9 @@ class NativeBridgeJourneyTest {
     @Test @Timeout(240) fun realLocalConnectedCycleLostReplyAndAdapterRestartNeedNoPlannerRelayOrRepeatedWake()=cycle(false)
     @Test @Timeout(240) fun lostOriginalAndGuardAfterPossibleWakeRemainUnknownAcrossAdapterRestart()=cycle(true)
     @Test @Timeout(240) fun completeHandoffRetiresWithoutAcceptanceOrAnotherModelAndKeepsClaims()=cycle(false,true)
-    private fun cycle(loseCustody: Boolean,finishHandoff: Boolean=false) {
+    @Test @Timeout(240) fun checkpointCooperativePauseAndSameBindingResumeThroughActualServiceAndTransport()=cycle(false,false,true)
+    @Test @Timeout(240) fun checkpointPauseUnknownWaitRetainsOriginalAcrossServiceTransportRestart()=cycle(false,false,true,true)
+    private fun cycle(loseCustody: Boolean,finishHandoff: Boolean=false,cooperativeRoundTrip:Boolean=false,unknownWait:Boolean=false) {
         val base=Path.of(requireNotNull(System.getenv("WRITHELM_NATIVE_TEST_ROOT")))
         val root=Files.createTempDirectory(base,"jvm-node-bridge-")
         val serviceProof=ByteArray(32).also { SecureRandom().nextBytes(it) }
@@ -186,7 +188,9 @@ class NativeBridgeJourneyTest {
             val nativeEndpoint=WrithelmService(f.app).nativeEndpoint(project,f.f.controller,f.f.intended.nativeHostId,serviceProof)
             val http=HttpAdapter(WrithelmService(f.app),HttpProfile(serviceOrigin),nativeEndpoint=nativeEndpoint)
             val server=embeddedServer(CIO,host="127.0.0.1",port=java.net.URI(serviceOrigin).port) { http.install(this) }.start(wait=false)
-            val config=config(f,root,serviceOrigin,transportOrigin,serviceProof,transportProof)
+            val originalConfig=config(f,root,serviceOrigin,transportOrigin,serviceProof,transportProof)
+            val config=if(cooperativeRoundTrip)JObject(originalConfig.entries+mapOf("cooperativePauseModelFree" to JBoolean(true),
+                "cooperativeWaitUnknown" to JBoolean(unknownWait)))else originalConfig
             try {
                 DropFirstDelivery(transportOrigin) { key ->
                     if(loseCustody) {
@@ -235,7 +239,57 @@ class NativeBridgeJourneyTest {
                             val compacted=peer.compact(false)
                             assertEquals(JBoolean(false),compacted.getValue("failed"))
                             assertEquals(JBoolean(true),compacted.getValue("nativeResultSet"))
-                            assertEquals(identityCodec.decodeReference(StrictJson.encode(compacted.getValue("checkpoint"))),f.state().assignment(f.consumerId).checkpoint)
+                             assertEquals(identityCodec.decodeReference(StrictJson.encode(compacted.getValue("checkpoint"))),f.state().assignment(f.consumerId).checkpoint)
+                             if(cooperativeRoundTrip){
+                                 val before=f.state().assignment(f.consumerId)
+                                 val checkpoint=before.checkpoint
+                                 val base=f.state().task(f.consumerTask).base
+                                 val files=LinuxOwnedDirectoryPreparation.snapshot(f.consumerRoot,f.f.snapshot)
+                                 val claims=before.requiredResources.map {WorkCodec().encodeRecord(f.state().record(WorkFamily.CLAIMS,it),true).decodeToString()}
+                                 // Production current-checkpoint selector + actual filesystem preparation.
+                                 // Only the original native work-area lookup is an explicit fixture port.
+                                 f.engine!!.close();f.engine=null
+                                 f.preparation=dev.writhelm.service.NativeCheckpointPreparation { _,subject ->
+                                     if(subject==f.consumerSubject)f.consumerRoot else null
+                                 }
+                                 f.installNative(control,"a".repeat(64))
+                                 f.startEngine()
+                                 val blocker=f.declareCondition("same-binding-cooperative-round-trip")
+                                 f.engine!!.awaitIdle()
+                                 val paused=f.state().assignment(f.consumerId)
+                                 assertEquals(if(unknownWait)"pausing" else "paused",paused.state,"${f.engine!!.holds}")
+                                 assertEquals(checkpoint,paused.checkpoint);assertEquals(before.binding,paused.binding)
+                                 assertEquals(before.execution,paused.execution);assertEquals(before.workspaceId,paused.workspaceId)
+                                 assertEquals(1L,peer.probe().getValue("interrupts").long())
+                                 if(unknownWait){
+                                     val original=paused.currentIntent
+                                     assertNotNull(original)
+                                     f.engine!!.tick()
+                                     assertEquals(original,f.state().assignment(f.consumerId).currentIntent)
+                                     assertEquals(1L,peer.probe().getValue("interrupts").long())
+                                     assertEquals(claims,paused.requiredResources.map {WorkCodec().encodeRecord(f.state().record(WorkFamily.CLAIMS,it),true).decodeToString()})
+                                     assertEquals(base,f.state().task(f.consumerTask).base)
+                                     assertEquals(files,LinuxOwnedDirectoryPreparation.snapshot(f.consumerRoot,f.f.snapshot))
+                                     f.engine!!.close();f.engine=null
+                                     return@peerInitial
+                                 }
+                                 f.confirm(r,e,blocker)
+                                 f.engine!!.awaitIdle()
+                                 val resumed=f.state().assignment(f.consumerId)
+                                 assertEquals("active",resumed.state,"${f.engine!!.holds}; continuations="+
+                                     f.state().records.values.mapNotNull {(it.payload as? WContinuationsPayload)?.value?.let {v->"${v.phase}/${v.stage}/${v.effect.state}"}})
+                                 assertEquals(checkpoint,resumed.checkpoint);assertEquals(before.binding,resumed.binding)
+                                 assertEquals(before.execution,resumed.execution);assertEquals(before.workspaceId,resumed.workspaceId)
+                                 assertEquals(base,f.state().task(f.consumerTask).base)
+                                 assertEquals(files,LinuxOwnedDirectoryPreparation.snapshot(f.consumerRoot,f.f.snapshot))
+                                 assertEquals(claims,resumed.requiredResources.map {WorkCodec().encodeRecord(f.state().record(WorkFamily.CLAIMS,it),true).decodeToString()})
+                                 val effects=peer.probe()
+                                 assertEquals(1L,effects.getValue("interrupts").long())
+                                 assertEquals(2L,effects.getValue("wakes").long())
+                                 assertEquals(JBoolean(true),effects.getValue("admitted"))
+                                 f.engine!!.close();f.engine=null
+                                 return@peerInitial
+                             }
                             if(finishHandoff) {
                                 f.finishConsumerHandoff()
                                 val retired=peer.compact(false)
@@ -273,7 +327,25 @@ class NativeBridgeJourneyTest {
                         f.engine!!.close();f.engine=null
                     }
                     hintSubscription.close()
-                    if(finishHandoff)return@controlUse
+                    if(cooperativeRoundTrip&&unknownWait){
+                        val before=f.state().assignment(f.consumerId)
+                        val files=LinuxOwnedDirectoryPreparation.snapshot(f.consumerRoot,f.f.snapshot)
+                        val claims=before.requiredResources.map {WorkCodec().encodeRecord(f.state().record(WorkFamily.CLAIMS,it),true).decodeToString()}
+                        Peer(config,root).use {peer->
+                            f.startEngine()
+                            val after=f.state().assignment(f.consumerId)
+                            assertEquals("pausing",after.state);assertEquals(before.currentIntent,after.currentIntent)
+                            assertEquals(before.binding,after.binding);assertEquals(before.checkpoint,after.checkpoint)
+                            assertEquals(before.execution,after.execution);assertEquals(before.workspaceId,after.workspaceId)
+                            assertEquals(files,LinuxOwnedDirectoryPreparation.snapshot(f.consumerRoot,f.f.snapshot))
+                            assertEquals(claims,after.requiredResources.map {WorkCodec().encodeRecord(f.state().record(WorkFamily.CLAIMS,it),true).decodeToString()})
+                            val observed=peer.probe()
+                            assertEquals(1L,observed.getValue("interrupts").long());assertEquals(1L,observed.getValue("wakes").long())
+                            assertEquals(JBoolean(false),observed.getValue("admitted"))
+                            f.engine!!.close();f.engine=null
+                        }
+                    }
+                    if(finishHandoff||cooperativeRoundTrip)return@controlUse
                     // Controller adapter restart, with the MOCK native effects retained separately.
                     Peer(config,root).use peerRestart@ { peer ->
                         assertEquals(JBoolean(false),peer.probe().getValue("admitted"))

@@ -8,13 +8,47 @@ import { LinuxNativeCustody } from "./native-runtime-custody.js"
 import { contextJSON } from "./native-context-codec.js"
 import { exactJSON } from "./strict-json.js"
 import { closedObject, nativeUnavailable, uuidPattern, type NativeSubject } from "./native-runtime-client.js"
-import { reviewerToolAllowed } from "./native-context-policy.js"
+import { reviewerToolAllowed, nativeEffortMatches } from "./native-context-policy.js"
 
 const parse=(raw:string)=>exactJSON(raw,nativeUnavailable)
 const same=(a:unknown,b:unknown)=>contextJSON(a)===contextJSON(b)
 // Pinned native 2.2.5 persists an omitted model variant as explicit default.
 const sameModel=(a:any,b:any)=>a&&b&&same({...a,variant:a.variant??"default"},{...b,variant:b.variant??"default"})
 const hash=(raw:string)=>createHash("sha256").update(raw).digest("hex")
+/** Shared installation/runtime translation. Validation alone grants no execution admission. */
+export function decodeNativeExecutionDeployment(profileJSON:string,deploymentJSON:string){
+  const d=closedObject(parse(deploymentJSON),["formatVersion","profileKeyJSON","model","baseURL","routeID","effortOptionKey","nativeOptions"])
+  const record=parse(profileJSON),p=record.payload
+  if(record.family!=="profiles"||!p?.model)nativeUnavailable()
+  const selected={providerID:p.model.providerId,id:p.model.modelId,...(p.model.variant===null?{}:{variant:p.model.variant})}
+  if(typeof selected.providerID!=="string"||!selected.providerID||typeof selected.id!=="string"||!selected.id)nativeUnavailable()
+  if(d.formatVersion?.value!=="1"||d.profileKeyJSON!==contextJSON(record.key)||!same(d.model,selected)||
+    d.routeID!==p.route||!nativeEffortMatches(p.effort,d.effortOptionKey,d.nativeOptions)||
+    !d.nativeOptions.maxTokens||BigInt(d.nativeOptions.maxTokens.value??d.nativeOptions.maxTokens)>BigInt(p.outputReserveTokens.value))nativeUnavailable()
+  if(d.baseURL!==null){
+    if(typeof d.baseURL!=="string")nativeUnavailable()
+    const url=new URL(d.baseURL)
+    if(url.username||url.password||url.search||url.hash||!['http:','https:'].includes(url.protocol)||
+      url.protocol==='http:'&&!['127.0.0.1','[::1]'].includes(url.hostname))nativeUnavailable()
+  }
+  const options:Record<string,string|boolean|number>={}
+  for(const [key,value]of Object.entries(d.nativeOptions)){
+    if(/headers|credentials?|secrets?|api.?key|authorization/i.test(key))nativeUnavailable()
+    if(typeof value==='string'||typeof value==='boolean')options[key]=value
+    else {const raw=(value as any)?.value;if(typeof raw!=="string"||!/^(0|[1-9][0-9]*)$/.test(raw)||BigInt(raw)>2147483647n)nativeUnavailable();options[key]=Number(raw)}
+  }
+  if(typeof options.maxTokens!=="number"||options.maxTokens<1)nativeUnavailable()
+  if(p.platform!=="linux"||!Array.isArray(p.permissions))nativeUnavailable()
+  const actions:Record<string,string>={read:"read",glob:"glob",grep:"grep",shell:"shell",edit:"edit",write:"edit",patch:"edit",execute:"execute",
+    question:"question",subagent:"subagent",external_directory:"external_directory"}
+  const permissions:Array<{action:string;resource:string;effect:"allow"|"ask"|"deny"}>=[{action:"*",resource:"*",effect:"deny"}]
+  for(const rule of p.permissions){
+    if(typeof rule.tool!=="string"||!actions[rule.tool]||!["workspace","*"].includes(rule.scope)||!["allow","ask","deny"].includes(rule.action))
+      throw new Error("qualified native permission translation is unavailable; no initial wake")
+    permissions.push({action:actions[rule.tool]!,resource:"*",effect:rule.action})
+  }
+  return {d,p,selected,options,permissions}
+}
 /** The same final native policy is used for original release and isolated permission-engine probes.
  * This restricts native actions; it is not an OS sandbox or a qualification assertion. */
 export function initialReleasePermissions(permissions:readonly Readonly<{action:string;resource:string;effect:"allow"|"ask"|"deny"}>[],template:string){
@@ -38,7 +72,9 @@ export class NativeInitialAdapter {
     private readonly custody:LinuxNativeCustody,private readonly deployment:LinuxNativeCustody,private readonly controllerSessionID:string,
     private readonly connected:(sessionID:string)=>boolean=()=>false,
     private readonly auxiliary?:(event:SessionModelRequest)=>Promise<void>,
-    private readonly contextPolicy?:(sessionID:string,profileRecordJSON:string)=>Promise<void>){}
+    private readonly contextPolicy?:(sessionID:string,profileRecordJSON:string)=>Promise<void>,
+    private readonly cooperativeResume?:(sessionID:string,bindingJSON:string)=>Promise<boolean>,
+    private readonly continuedPacket?:(sessionID:string,bindingJSON:string)=>Promise<boolean>){}
   managed(sessionID:string){return this.gates.has(sessionID)}
   /** Same-incarnation plugin reload only. Rebuild closed local gates from protected ORIGINAL
    * records, then re-enter the existing canonical ACTIVE release protocol. Never dispatch a prompt
@@ -92,33 +128,7 @@ export class NativeInitialAdapter {
     return this.deploymentModel(gate.original.profileJSON,gate.original.deploymentJSON)
   }
   private deploymentModel(profileJSON:string,deploymentJSON:string){
-    const d=parse(deploymentJSON),p=parse(profileJSON).payload
-    const selected={providerID:p.model.providerId,id:p.model.modelId,...(p.model.variant===null?{}:{variant:p.model.variant})}
-    if(d.formatVersion?.value!=="1"||d.profileKeyJSON!==contextJSON(parse(profileJSON).key)||!same(d.model,selected)||
-      d.routeID!==p.route||typeof d.effortOptionKey!=="string"||typeof d.nativeOptions?.[d.effortOptionKey]!=="string"||
-      d.nativeOptions[d.effortOptionKey]!==p.effort||!d.nativeOptions.maxTokens||BigInt(d.nativeOptions.maxTokens.value??d.nativeOptions.maxTokens)>BigInt(p.outputReserveTokens.value))nativeUnavailable()
-    if(d.baseURL!==null){
-      const url=new URL(d.baseURL)
-      if(url.username||url.password||url.search||url.hash||!['http:','https:'].includes(url.protocol)||
-        url.protocol==='http:'&&!['127.0.0.1','[::1]'].includes(url.hostname))nativeUnavailable()
-    }
-    const options:Record<string,string|boolean|number>={}
-    for(const [key,value]of Object.entries(d.nativeOptions)){
-      if(/headers|credentials?|secrets?|api.?key|authorization/i.test(key))nativeUnavailable()
-      if(typeof value==='string'||typeof value==='boolean')options[key]=value
-      else {const raw=(value as any)?.value;if(typeof raw!=="string"||!/^(0|[1-9][0-9]*)$/.test(raw)||BigInt(raw)>2147483647n)nativeUnavailable();options[key]=Number(raw)}
-    }
-    if(typeof options.maxTokens!=="number"||options.maxTokens<1)nativeUnavailable()
-    if(p.platform!=="linux"||!Array.isArray(p.permissions))nativeUnavailable()
-    const actions:Record<string,string>={read:"read",glob:"glob",grep:"grep",shell:"shell",edit:"edit",write:"edit",patch:"edit",execute:"execute",
-      question:"question",subagent:"subagent",external_directory:"external_directory"}
-    const permissions:Array<{action:string;resource:string;effect:"allow"|"ask"|"deny"}>=[{action:"*",resource:"*",effect:"deny"}]
-    for(const rule of p.permissions){
-      if(typeof rule.tool!=="string"||!actions[rule.tool]||!["workspace","*"].includes(rule.scope)||!["allow","ask","deny"].includes(rule.action))
-        throw new Error("qualified native permission translation is unavailable; no initial wake")
-      permissions.push({action:actions[rule.tool]!,resource:"*",effect:rule.action})
-    }
-    return {d,p,selected,options,permissions}
+    return decodeNativeExecutionDeployment(profileJSON,deploymentJSON)
   }
   private matches(message:any,gate:Gate,inbox=false){
     const e=gate.envelope
@@ -147,12 +157,14 @@ export class NativeInitialAdapter {
     this.registered=true
   }
   /** Read-only service capture: no current-policy RPC, permission mutation, prompt or model call.
-   * Resume is not supported by this initial lifecycle; it cannot masquerade as a fresh start. */
+    * Same-binding cooperative resume additionally needs the connected adapter's original pause
+    * witness. The service independently checks the exact checkpoint/continuation at this boundary. */
   async admission(requestJSON:string){
     if(this.closed||!this.registered)nativeUnavailable()
     const r=closedObject(parse(requestJSON),["subject","sessionID","profileJSON","purpose","epoch"])
-    if(!["start","bound-access","access","retention"].includes(r.purpose)||typeof r.profileJSON!=="string"||typeof r.sessionID!=="string")nativeUnavailable()
+    if(!["start","resume","bound-access","access","retention"].includes(r.purpose)||typeof r.profileJSON!=="string"||typeof r.sessionID!=="string")nativeUnavailable()
     const subject=closedObject(r.subject,["assignmentId","executionGeneration","bindingJSON"])
+    if(r.purpose==="resume"&&await this.cooperativeResume?.(r.sessionID,subject.bindingJSON)!==true)nativeUnavailable()
     if(subject.executionGeneration!=="0")nativeUnavailable()
     const receiver=await this.registry.inspect(r.sessionID)
     if(receiver?.scope!=="assignment"||receiver.epoch!==r.epoch||receiver.assignmentId!==subject.assignmentId||
@@ -198,9 +210,11 @@ export class NativeInitialAdapter {
       const firstRelease=await this.custody.read("initial-release",parse(original.raw).intentId)===undefined
       if(!same(info.permissions,permissions)&&!(r.purpose==="access"&&firstRelease&&same(info.permissions,denyAll)))nativeUnavailable()
       const installed=await this.ctx.session.instructions.entry.list({sessionID:r.sessionID})
-      if(!entries.every((v:any)=>installed.some(p=>p.key===v.key&&p.value===v.value)))nativeUnavailable()
+      if(!entries.every((v:any)=>installed.some(p=>p.key===v.key&&p.value===v.value))&&
+        await this.continuedPacket?.(r.sessionID,subject.bindingJSON)!==true)nativeUnavailable()
     }
     const after=await this.native.session.get({sessionID:r.sessionID})
+    if(r.purpose==="resume"&&await this.cooperativeResume?.(r.sessionID,subject.bindingJSON)!==true)nativeUnavailable()
     if(this.closed||!same(after,info)||await this.deployment.read("execution-profile",contextJSON(parse(r.profileJSON).key))!==deployment)nativeUnavailable()
     return {requestDigest:hash(requestJSON),epoch:receiver.epoch}
   }

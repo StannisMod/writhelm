@@ -9,13 +9,14 @@ import { ConnectedNativeAdapter, type ConnectedNativeBridge, type RetainedConnec
 // Explicit SDK-shaped MOCK. No host/client constructor, inference, installed profile or network call.
 function fixture(reviewer=false) {
   const rawJSON = '{"assignment":{"generation":9007199254740993},"opaque":"exact service bytes"}'
-  const envelope: RetainedConnectedEnvelope = { key: "k", rawJSON, digest: createHash("sha256").update(rawJSON).digest("hex"), bindingJSON: "exact-binding-json",
+  let envelope: RetainedConnectedEnvelope = { key: "k", rawJSON, digest: createHash("sha256").update(rawJSON).digest("hex"), bindingJSON: "exact-binding-json",
     hostID: "host", sessionID: "ses_mock", messageID: "msg_mock", text: "Blocker B resolved; continue.",
     metadata: { continuationId: "condition", assignmentId: "assignment", executionGeneration: "9007199254740993" },
     instructions: [{ key: "writhelm-task", value: "exact assigned task" },...(reviewer?[{key:"writhelm-candidate-review-ticket-fixture",value:"explicit MOCK service-issued reviewer packet"}]:[])] }
   const hooks = new Map<string, (event: { sessionID: string;tool?:string }) => Promise<void>>()
   let payload: unknown, wakes = 0, claims = 0, state: "qualified-quiescent" | "active" | "held" = "qualified-quiescent"
   let loseReply = false, admitWithoutWake = false, badBody = false, interrupts = 0
+  let pauseMode:"unknown"|"confirmed"|"wait-unknown"="unknown",waits=0
   let failBeforeAdmit = false, qualifiedAbsent = false
   let retainedReads = 0
   let instructions = [...envelope.instructions], puts = 0
@@ -47,7 +48,13 @@ function fixture(reviewer=false) {
     app: { version: "2.2.5" },
     session: {
       get: async () => ({ id: envelope.sessionID }),
-      interrupt: async () => { interrupts++; throw new Error("MOCK lost interrupt acknowledgement") },
+      interrupt: async (input:unknown) => {
+        assert.deepEqual(input,{sessionID:envelope.sessionID,resume:false},"Pause must explicitly disable native automatic resume")
+        interrupts++
+        if(pauseMode==="unknown")throw new Error("MOCK lost interrupt acknowledgement")
+        return {interrupted:true}
+      },
+      wait:async()=>{waits++;if(pauseMode==="wait-unknown")throw new Error("MOCK unknown native wait")},
       instructions: { entry: { list: async () => instructions, put: async (entry: { key: string; value: string }) => {
         puts++; instructions = [...instructions.filter(i => i.key !== entry.key), { key: entry.key, value: entry.value }]
       } } },
@@ -71,7 +78,15 @@ function fixture(reviewer=false) {
     get pauseClaims() { return pauses.size },
     get retainedReads() { return retainedReads },
     get interrupts() { return interrupts },
+    get waits(){return waits},
+    pauseMode(mode:"confirmed"|"wait-unknown"){pauseMode=mode},
     get puts() { return puts },
+    successor(){
+      const rawJSON=envelope.rawJSON+"\n"
+      envelope={...envelope,key:"next",rawJSON,digest:createHash("sha256").update(rawJSON).digest("hex"),
+        messageID:"msg_next",instructions:[{key:"writhelm-task",value:"new exact assigned task"}]}
+      return envelope
+    },
     emptyPacket() { instructions = [] }, changedPacket() { instructions = [{ key: "writhelm-task", value: "unexpected old source" }] },
     forbidAuthorityReads() { forbidAuthorityReads = true },
     suspendCurrent() {
@@ -83,6 +98,7 @@ function fixture(reviewer=false) {
     qualifyAbsent() { assert.equal(payload, undefined); qualifiedAbsent = true },
     authorizeLinkedRetry() { assert.equal(qualifiedAbsent, true); assert.equal(payload, undefined); claims = 0; failBeforeAdmit = false },
     active() { state = "active" }, revoke() { state = "held" },
+    qualified(){state="qualified-quiescent"},
     lose() { loseReply = true }, noWake() { admitWithoutWake = true }, forge() { badBody = true } }
 }
 
@@ -138,6 +154,56 @@ test("MOCK released ACTIVE rehold precedes exact pause; lost interrupt reply can
   assert.ok(f.observations.some(v => v.includes("pause-outcome-unknown")))
   await assert.rejects(f.adapter.release("k"), /canonical active/)
   await f.adapter.close()
+})
+test("MOCK cooperative pause requires original interrupt and completed native wait; restart cannot adopt a stale witness",async()=>{
+  for(const mode of ["confirmed","wait-unknown"] as const){
+    const f=fixture();await f.adapter.register();f.active();f.pauseMode(mode)
+    const rawJSON='{"kind":"binding"}'
+    const target={key:"binding-target",rawJSON,digest:createHash("sha256").update(rawJSON).digest("hex"),
+      bindingJSON:f.envelope.bindingJSON,hostID:"host",sessionID:"ses_mock"}
+    await f.adapter.reholdBinding(target);f.revoke()
+    assert.equal(await f.adapter.cooperativePauseHeld(target,"exact-pause-intent"),false)
+    await f.adapter.pauseBinding(target,"exact-pause-intent")
+    assert.equal(await f.adapter.sameBindingCooperativelyPaused(target.sessionID,target.bindingJSON),mode==="confirmed")
+    if(mode==="confirmed"){
+      f.qualified()
+      assert.equal(await f.adapter.hold("k"),true)
+      assert.equal(await f.adapter.sameBindingCooperativelyPaused(target.sessionID,target.bindingJSON),true,
+        "Exact continuation preparation preserves the original pause witness behind its closed gate")
+      assert.equal(await f.adapter.sameBindingCooperativelyPaused(target.sessionID,"other-binding"),false)
+    }
+    f.forbidAuthorityReads()
+    assert.equal(await f.adapter.cooperativePauseHeld(target,"exact-pause-intent"),mode==="confirmed")
+    assert.equal(await f.adapter.cooperativePauseHeld(target,"other-intent"),false)
+    assert.equal(f.interrupts,1);assert.equal(f.waits,1);assert.equal(f.wakes,0)
+    await f.adapter.close()
+    const fresh=f.freshAdapter()
+    assert.equal(await fresh.cooperativePauseHeld(target,"exact-pause-intent"),false)
+    await fresh.close()
+  }
+})
+test("MOCK successor replaces only known exact instructions behind a cooperative same-binding pause",async()=>{
+  for(const unknown of [false,true]){
+    const f=fixture();await f.adapter.register()
+    assert.equal(await f.adapter.prepare("k"),true)
+    const rawJSON='{"kind":"binding"}'
+    const target={key:"binding-target",rawJSON,digest:createHash("sha256").update(rawJSON).digest("hex"),
+      bindingJSON:f.envelope.bindingJSON,hostID:"host",sessionID:"ses_mock"}
+    await f.adapter.reholdBinding(target);f.revoke();f.pauseMode("confirmed")
+    await f.adapter.pauseBinding(target,"exact-pause-intent")
+    f.qualified();const next=f.successor()
+    if(unknown){
+      f.changedPacket()
+      await assert.rejects(f.adapter.prepare(next.key),/unknown mandatory instruction/)
+      assert.equal(f.puts,0)
+    }else{
+      assert.equal(await f.adapter.prepare(next.key),true)
+      assert.equal(await f.adapter.continuedPacketMatches(next.sessionID,next.bindingJSON),true)
+      f.changedPacket()
+      assert.equal(await f.adapter.continuedPacketMatches(next.sessionID,next.bindingJSON),false)
+    }
+    assert.equal(f.wakes,0);await f.adapter.close()
+  }
 })
 test("MOCK first ACTIVE blocker reholds and pauses an actual binding with no retained continuation", async () => {
   const f = fixture(); await f.adapter.register(); f.active()

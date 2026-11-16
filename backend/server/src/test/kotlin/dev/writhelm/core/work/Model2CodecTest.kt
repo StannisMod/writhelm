@@ -52,7 +52,12 @@ class Model2CodecTest {
         val data=p.entries.getValue("data") as JObject
         val changed=JObject(data.entries+mapOf("mode" to str("authorized-rebind"),"rebind" to JNull))
         assertFailsWith<CodecFault> { WorkCodec().decodeCommand(StrictJson.encode(JObject(prepare.entries+("payload" to JObject(p.entries+("data" to changed)))))) }
-        assertEquals(31,WorkFamily.entries.size)
-        assertEquals(34,dev.writhelm.core.store.H1Catalog.workOperations.size)
+        assertEquals(31,WorkFamily.entries.count {it !in model4DispatchFamilies})
+        assertEquals(4,model4DispatchFamilies.size)
+        assertEquals(35,WorkFamily.entries.size)
+        val dispatch=setOf("record_dispatch_plan","bind_dispatch_attempt","materialize_dispatch_dependency","close_dispatch_inputs")
+        assertEquals(34,(dev.writhelm.core.store.H1Catalog.workOperations-dispatch).size)
+        assertTrue(dev.writhelm.core.store.H1Catalog.workOperations.containsAll(dispatch))
+        assertEquals(38,dev.writhelm.core.store.H1Catalog.workOperations.size)
     }
 }

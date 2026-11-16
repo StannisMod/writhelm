@@ -63,6 +63,8 @@ function matched(value: unknown, e: RetainedConnectedEnvelope, scopedMessage=fal
 export class ConnectedNativeAdapter {
   private gates = new Map<string, Gate>(); private closed = false
   private bindingHolds = new Map<string, ConnectedBindingTarget>()
+  private cooperativePauses = new Map<string,string>()
+  private cooperativeTargets = new Map<string,ConnectedBindingTarget>()
   private disposals: Array<() => Promise<void>> = []
   owns(sessionID:string){return this.gates.has(sessionID)||this.bindingHolds.has(sessionID)}
   constructor(private readonly ctx: Plugin.Context, private readonly client: Pick<SessionApi, "inbox" | "message" | "context">,
@@ -155,7 +157,7 @@ export class ConnectedNativeAdapter {
       check(target.bindingJSON === e.bindingJSON, "competing native binding target")
       if (await this.bridge.current(e) !== "qualified-quiescent" || !await this.packet(e)) return false
       check(this.bindingHolds.get(e.sessionID) === target && !this.closed, "binding changed during pause reconciliation")
-      this.bindingHolds.delete(e.sessionID) // only after actual qualified pause, never interrupt/idle
+      this.bindingHolds.delete(e.sessionID) // current service-authorized continuation replaces this hold
     }
     if (current) {
       check(current.envelope.digest === e.digest && current.envelope.bindingJSON === e.bindingJSON, "competing native attempt")
@@ -172,6 +174,29 @@ export class ConnectedNativeAdapter {
   /** Install only service-produced exact base entries behind a closed, safe-access barrier.
    * Unknown/changed existing Writhelm entries are not silently deleted or overwritten. */
   async prepare(key: string): Promise<boolean> {
+    const next=await this.envelope(key),previous=this.gates.get(next.sessionID)
+    if(previous&&previous.envelope.digest!==next.digest){
+      check(previous.closed&&previous.envelope.bindingJSON===next.bindingJSON&&
+        await this.sameBindingCooperativelyPaused(next.sessionID,next.bindingJSON),"unknown previous continuation cannot be replaced")
+      const ready=async()=>!this.closed&&this.gates.get(next.sessionID)===previous&&previous.closed&&
+        await this.bridge.current(next)==="qualified-quiescent"&&
+        await this.sameBindingCooperativelyPaused(next.sessionID,next.bindingJSON)
+      check(await ready(),"current same-binding continuation required")
+      const actual=await this.ctx.session.instructions.entry.list({sessionID:next.sessionID})
+      const known=[...previous.envelope.instructions,...next.instructions]
+      check(actual.filter(i=>i.key.startsWith("writhelm-")).every(i=>known.some(k=>k.key===i.key&&k.value===i.value)),
+        "unknown mandatory instruction cannot be replaced")
+      for(const entry of actual.filter(i=>i.key.startsWith("writhelm-")&&!next.instructions.some(n=>n.key===i.key))){
+        check(await ready(),"continuation changed during mandatory replacement")
+        await this.ctx.session.instructions.entry.remove({sessionID:next.sessionID,key:entry.key})
+      }
+      for(const entry of next.instructions){
+        check(await ready(),"continuation changed during mandatory replacement")
+        await this.ctx.session.instructions.entry.put({sessionID:next.sessionID,key:entry.key,value:entry.value})
+      }
+      check(await ready()&&await this.packet(next),"replacement packet not confirmed")
+      this.gates.delete(next.sessionID)
+    }
     if (await this.hold(key)) return true
     const e = await this.envelope(key), gate = this.gates.get(e.sessionID)
     if (!gate?.closed || await this.bridge.current(e) !== "qualified-quiescent") return false
@@ -226,7 +251,7 @@ export class ConnectedNativeAdapter {
     if (!await this.bridge.claimPauseDispatch(key, e.digest, intent)) return
     // Original dispatch is already protected. Lost acknowledgement stays unknown; no blind repeat.
     try {
-      await this.ctx.session.interrupt({ sessionID: e.sessionID })
+      await this.ctx.session.interrupt({ sessionID: e.sessionID, resume: false })
       await this.bridge.retainObservation(key, JSON.stringify({ kind: "pause-interrupt-returned", intent,
         digest: e.digest, sessionID: e.sessionID }))
     } catch {
@@ -263,11 +288,45 @@ export class ConnectedNativeAdapter {
     if (!await this.bridge.claimPauseDispatch(t.key, t.digest, intent)) return
     check(this.bindingHolds.get(t.sessionID) === held && !this.closed, "binding changed during pause claim")
     try {
-      await this.ctx.session.interrupt({ sessionID: t.sessionID })
+      const response=await this.ctx.session.interrupt({ sessionID: t.sessionID, resume: false })
+      check(typeof response?.interrupted==="boolean","invalid native interrupt acknowledgement")
+      await this.ctx.session.wait({sessionID:t.sessionID})
+      check(this.bindingHolds.get(t.sessionID)===held&&!this.closed,"binding changed during native pause")
       await this.bridge.retainObservation(t.key, JSON.stringify({ kind: "binding-pause-interrupt-returned", intent, digest: t.digest, sessionID: t.sessionID }))
+      await this.bridge.retainObservation(t.key,JSON.stringify({kind:"binding-cooperative-pause",intent,digest:t.digest,
+        sessionID:t.sessionID,bindingJSON:t.bindingJSON}))
+      this.cooperativePauses.set(t.sessionID,JSON.stringify([t.digest,intent]))
+      this.cooperativeTargets.set(t.sessionID,t)
     } catch {
       await this.bridge.retainObservation(t.key, JSON.stringify({ kind: "binding-pause-outcome-unknown", intent, digest: t.digest, sessionID: t.sessionID }))
     }
+  }
+  /** Immutable original observation only. No service callback while its monitor captures facts.
+   * Native interruption+wait and closed managed admissions are NOT OS writer fencing. */
+  async cooperativePauseHeld(target:ConnectedBindingTarget,intent:string){
+    const held=this.bindingHolds.get(target.sessionID)
+    const gate=this.gates.get(target.sessionID)
+    const closed=()=>held!==undefined&&this.bindingHolds.get(target.sessionID)===held&&held.digest===target.digest&&held.bindingJSON===target.bindingJSON||
+      gate!==undefined&&this.gates.get(target.sessionID)===gate&&gate.closed&&gate.envelope.bindingJSON===target.bindingJSON
+    if(this.closed||!closed()||
+      this.cooperativePauses.get(target.sessionID)!==JSON.stringify([target.digest,intent]))return false
+    const observations=await this.bridge.observations(target.key)
+    const expected={kind:"binding-cooperative-pause",intent,digest:target.digest,sessionID:target.sessionID,bindingJSON:target.bindingJSON}
+    return observations.some(raw=>{
+      try{return JSON.stringify(JSON.parse(raw))===JSON.stringify(expected)}catch{return false}
+    })&&closed()&&!this.closed
+  }
+  async sameBindingCooperativelyPaused(sessionID:string,bindingJSON:string){
+    const held=this.cooperativeTargets.get(sessionID),witness=this.cooperativePauses.get(sessionID)
+    if(!held||held.bindingJSON!==bindingJSON||!witness)return false
+    const [digest,intent]=JSON.parse(witness)
+    return digest===held.digest&&await this.cooperativePauseHeld(held,intent)
+  }
+  async continuedPacketMatches(sessionID:string,bindingJSON:string){
+    const gate=this.gates.get(sessionID)
+    if(this.closed||!gate||gate.envelope.bindingJSON!==bindingJSON)return false
+    if(gate.closed&&!await this.sameBindingCooperativelyPaused(sessionID,bindingJSON))return false
+    return await this.packet(gate.envelope)&&this.gates.get(sessionID)===gate&&!this.closed
   }
   async reconcile(key: string): Promise<ConnectedOutcome> {
     // The service may capture these immutable original-effect facts while holding its application

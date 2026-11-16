@@ -18,6 +18,48 @@ import { NativeCredentialRegistry } from "../src/native-credentials.js"
 import { NativeRuntimeClient } from "../src/native-runtime-client.js"
 import { LinuxNativeCustody } from "../src/native-runtime-custody.js"
 import { LinuxWorkRequestCustody } from "../src/connected-tools.js"
+import { NativeWorkerRestoration } from "../src/native-worker-restoration.js"
+
+test("MOCK worker recovery returns current safe access, not the pre-read authority snapshot",async()=>{
+  const hash=(s:string)=>createHash("sha256").update(s).digest("hex")
+  const memoryKey={id:"memory"},report="retained report"
+  const checkpoint={key:{id:"checkpoint"},payload:{memory:memoryKey,sourceCutId:"cut",report:{digest:hash(report),byteLength:Buffer.byteLength(report)},
+    assignment:{id:"assignment"},handoff:"unfinished",pending:[],artifacts:[]}}
+  const checkpointJSON=contextJSON(checkpoint),reference={family:"checkpoints",key:checkpoint.key,digest:hash(checkpointJSON)}
+  const memory=contextJSON({key:memoryKey,payload:{sourceCutId:"cut",gaps:[],entries:[]}})
+  const frame={checkpointJSON,checkpointMemoryJSON:memory,checkpointSourceJSON:contextJSON({key:{id:"cut"},payload:{packetDigest:"packet",nativeMessages:[]}}),
+    checkpointReferenceJSON:contextJSON(reference),memoryJSON:memory,planJSON:"{}",packet:"[]",bindingJSON:"binding",safeContextAccess:true}
+  let reads=0
+  const registry={workerContext:async()=>({...frame,safeContextAccess:++reads===1}),
+    contextChannel:async()=>({projectID:"mock-project",send:async()=>contextJSON({kind:"read",data:{body:report}})})}
+  const restored=await new NativeWorkerRestoration(registry as never,{readCut:async()=>({locatorId:"cut"})} as never)
+    .recover("ses_recovery",new AbortController().signal)
+  assert.equal(reads,2);assert.equal(restored.safeContextAccess,false)
+})
+
+test("MOCK restoration confirms exact native instructions and current selector after the last write",async()=>{
+  const checkpoint={family:"checkpoints",key:{id:"checkpoint"},digest:"digest"}
+  const entries=[{key:"writhelm-task",value:"exact task"},{key:"writhelm-profile",value:"exact profile"}]
+  const packet=contextJSON(entries)
+  for(const fault of ["none","lost-write","extra-entry","revoked","selector-changed"]){
+    let installed:Array<{key:string;value:string}>=[],writes=0
+    const registry={workerContext:async()=>({packet,safeContextAccess:fault!=="revoked"||writes<2,
+      checkpointReferenceJSON:fault==="selector-changed"&&writes===2?"changed":contextJSON(checkpoint)})}
+    const restoration=new NativeWorkerRestoration(registry as never,{} as never)
+    restoration.recover=async()=>({checkpoint,packet,residual:"{}",safeContextAccess:true})
+    const ctx={session:{instructions:{entry:{
+      list:()=>Effect.sync(()=>[...installed,...(fault==="extra-entry"&&writes===2?[{key:"writhelm-unknown",value:"unexpected"}]:[])]),
+      put:(entry:{key:string;value:string})=>Effect.sync(()=>{
+        writes++
+        if(fault!=="lost-write")installed.push({key:entry.key,value:entry.value})
+      })
+    }}}}
+    const run=()=>Effect.runPromise(restoration.install(ctx as never,"ses_recovery"))
+    if(fault==="none")await run()
+    else await assert.rejects(run,`Must hold ${fault}`)
+    assert.equal(writes,2)
+  }
+})
 
 test("CD03 context framing keeps native JSON opaque and matches scalar/control/Int64 rules", () => {
   assert.equal(contextJSON({ z: "\n\t\b\r\f\u0000", a: "literal\\n/é😀", n: 9223372036854775807n }),

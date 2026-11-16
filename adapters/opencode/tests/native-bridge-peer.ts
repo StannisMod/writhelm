@@ -2,6 +2,7 @@
 // Component executable: REAL HTTP/credentials/custody/bridge, explicitly MOCK external native SDK.
 // Synthetic fixture keys arrive on stdin only. No host constructor, provider, profile or inference.
 import { createInterface } from "node:readline"
+import assert from "node:assert/strict"
 import * as fs from "node:fs/promises"
 import path from "node:path"
 import { createHash } from "node:crypto"
@@ -58,13 +59,20 @@ const ctx = { app: { version: "2.2.5" }, session: {
       else effects.instructions = [...effects.instructions.filter(i => i.key !== key), { key, value }]
       await save()
     },
+    remove:async({key}:{key:string})=>{effects.instructions=effects.instructions.filter(i=>i.key!==key);await save()},
   } },
   synthetic: async (value: { sessionID: string; id: string; text: string; metadata: unknown }) => {
     effects.wakes++ // Duplicate original native ID does NOT deduplicate native wake.
     effects.payload = { id: value.id, sessionID: value.sessionID, type: "synthetic", payload: { text: value.text, metadata: value.metadata } }
     await save(); return effects.payload
   },
-  interrupt: async () => { effects.interrupts++; await save() }, // NEVER physical fencing evidence
+  interrupt: async (input:{sessionID:string;resume?:boolean}) => {
+    assert.equal(input.resume,false)
+    effects.interrupts++;await save()
+    // Explicit native SDK double. This flag does not assert physical writer fencing.
+    return config.cooperativePauseModelFree?{interrupted:true}:undefined
+  },
+  wait:async()=>{if(!config.cooperativePauseModelFree||config.cooperativeWaitUnknown)throw Error("MOCK native wait unavailable")},
 }, tool: { hook: async (_name: string, callback: (event: { sessionID: string }) => Promise<void>) => {
   hooks.set("tool", callback); return { dispose: async () => { hooks.delete("tool") } }
 } } } as unknown as Plugin.Context
