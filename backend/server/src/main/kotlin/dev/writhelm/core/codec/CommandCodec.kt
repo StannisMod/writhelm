@@ -24,6 +24,7 @@ internal class CommandCodec(private val limits: JsonLimits=JsonLimits(bytes=8*10
     init { require(bodyBytes>0) }
     fun decode(bytes: ByteArray): CoreCommand {
         val f=StrictJson.decode(bytes,limits).fields("formatVersion","requestKey","projectId","operation","payload"); version(f.getValue("formatVersion"))
+        KnowledgeProtocol.validateCommand(JObject(f))
         val project=uuid(f.getValue("projectId")); val p=f.getValue("payload")
         val payload=when(f.getValue("operation").string()) {
             "propose_revision" -> { val q=p.fields("revisionKey","body","structure"); val k=revisionKey(q.getValue("revisionKey")); shape(k.document.projectId==project)

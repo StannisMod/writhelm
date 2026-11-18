@@ -6,6 +6,10 @@ import { exactJSON, exactLoopback } from "./strict-json.js"
 import { connectedCommands, connectedReads } from "./connected-catalogue.js"
 import { LinuxNativeCustody } from "./native-runtime-custody.js"
 import * as fs from "node:fs/promises"
+import { ModelReadFault, modelReadInput, readInput, type ModelReads } from "./model-read.js"
+import { OwnerOrderHold } from "./native-owner-order.js"
+import {WorkModelContracts,prepareTypedWork} from "./model-work.js"
+import {ModelContractFault} from "./model-contracts.js"
 const invalid = (): never => { throw new Error("invalid exact work JSON/origin") }
 const exact = (raw: string) => exactJSON(raw, invalid)
 
@@ -44,6 +48,8 @@ export class LinuxWorkRequestCustody implements WorkRequestCustody {
 export interface BoundWorkChannel {
   readonly projectID: string
   readonly scope: "controller" | "assignment"
+  /** Nonsecret exact chat/assignment binding, produced by the verified registry, not tool input. */
+  readonly readBinding?:string
   send(route: "commands" | "reads", rawJSON: string, signal: AbortSignal, beforeDispatch?:(raw:string,fresh:boolean)=>Promise<void>): Promise<string>
 }
 export interface NativeWorkCredentialResolver {
@@ -98,7 +104,8 @@ function boundedChannel(projectID: string, scope: "controller" | "assignment", o
   return Object.freeze({ projectID, scope, async send(route: "commands" | "reads", rawJSON: string, signal: AbortSignal,beforeDispatch?:(raw:string,fresh:boolean)=>Promise<void>) {
     if (signal.aborted) throw new Error("work request cancelled before dispatch")
     const parsed = exact(rawJSON)
-    if (parsed.projectId !== projectID || !(route === "commands" ? commands : reads).has(parsed.operation)) throw new Error("work channel scope mismatch")
+    const scopedProjects=route==="reads"&&commandVersion==="1"&&parsed.operation==="list_projects"&&parsed.projectId===null
+    if (parsed.projectId !== projectID&&!scopedProjects || !(route === "commands" ? commands : reads).has(parsed.operation)) throw new Error("work channel scope mismatch")
     if (route === "commands") {
       if (!isLosslessNumber(parsed.formatVersion) || parsed.formatVersion.value !== commandVersion || typeof parsed.requestKey !== "string") throw new Error("closed command version required")
       if(beforeDispatch){
@@ -121,7 +128,7 @@ function boundedChannel(projectID: string, scope: "controller" | "assignment", o
         parts.push(chunk.value)
       }
     } finally { reader.releaseLock() }
-    const raw = new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(parts))
+    const raw = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(Buffer.concat(parts))
     exact(raw) // reject malformed/duplicate/unsafe tokens, but return ORIGINAL bytes, not parsed numbers
     return raw
   } })
@@ -130,32 +137,101 @@ function boundedChannel(projectID: string, scope: "controller" | "assignment", o
 /** Source-qualified actual native work tools. Catalog is convenience only: service current-H policy
  * still denies captured stale executables/credentials. No extra MCP or owner-key tool is registered. */
 export async function registerConnectedWorkTools(ctx: Plugin.Context, resolver: NativeWorkCredentialResolver,
-  beforeResult?:(raw:string,fresh:boolean,actual:ToolContext)=>Promise<void>) {
+  beforeResult?:(raw:string,fresh:boolean,actual:ToolContext)=>Promise<void>,modelReads?:ModelReads,
+  beforeLaunch?:(raw:string,actual:ToolContext)=>Promise<void>,
+  afterCommand?:(raw:string,reply:string,actual:ToolContext)=>Promise<void>) {
+  const contracts=new WorkModelContracts()
+  const readSchema=(sessionID?:string)=>{
+    const {$defs,...shape}=contracts.input("reads",sessionID)
+    return {type:"object",...($defs?{$defs}:{}),anyOf:[shape,
+      {type:"object",additionalProperties:false,required:["reference"],properties:{
+        reference:{type:"string",pattern:"^wr1_[A-Za-z0-9_-]{24}$"},format:{type:"string",enum:["readable","canonical"]}}}]}
+  }
   const registration = await ctx.tool.transform(editor => {
+    editor.add({name:"writhelm_work_contract",
+      description:"Compact operation/definition contract. Select kind commands/reads and operation to load that exact typed input into this chat's next work tool. No source-code or external-file reads. Int64 fields use exact decimal strings; service authority remains independent.",
+      input:{type:"object",additionalProperties:false,required:["kind"],properties:{kind:{type:"string",enum:["commands","reads"]},
+        operation:{type:"string",maxLength:128},definition:{type:"string",maxLength:256}}},
+      execute:async(input,actual)=>{
+        const channel=await resolver.resolve(actual);if(!channel)throw new Error("Unbound work contract request")
+        return {content:contracts.describe(actual.sessionID,input)}
+      },options:{codemode:false}})
     for (const [name, route, allowed, version, cap] of [
       ["writhelm_work_command", "commands", connectedCommands, "3", 2 * 1024 * 1024],
       ["writhelm_work_read", "reads", connectedReads, "2", 16384],
-    ] as const) editor.add({ name, description: "Scoped canonical work operation using exact JSON text; current authority is checked by Writhelm",
-      input: { type: "object", additionalProperties: false, required: ["json"], properties: { json: { type: "string", maxLength: cap } } },
+    ] as const) editor.add({ name, description: route==="reads"
+       ?"Scoped typed work read: operation/subject, or exact wr1_ reference. Load the operation's typed input with writhelm_work_contract(kind='reads',operation=...). Readable result by default; never refresh stale references or copy Int64 counters through JavaScript numbers. work-read2 remains the wire version."
+       :"Scoped typed work command: operation/requestKey/payload. First select the operation with writhelm_work_contract(kind='commands',operation=...) to load its exact typed fields. Int64 values are decimal strings; adapter injects project/version and preserves original request bytes. No source-code reading required.",
+       input: route==="reads"?readSchema():contracts.input("commands"),
       execute: async (input: unknown, actual: ToolContext) => {
         try {
+          if(route==="reads"&&modelReads){
+            const channel=await resolver.resolve(actual)
+            if(!channel||!["controller","assignment"].includes(channel.scope))throw new Error("unbound work read")
+             const typed=input as any
+             const prepared=typed?.operation!==undefined?{json:prepareTypedWork("reads",typed,channel.projectID),...(typed.format?{format:typed.format}:{})}:input
+             return await modelReads.read("work",channel,actual.sessionID,prepared,allowed,actual.signal)
+          }
+           if(route==="reads"&&(!input||typeof input!=="object"||(input as {format?:string}).format!=="canonical"))
+            throw new ModelReadFault("READ_REFERENCE_UNAVAILABLE")
+          // Explicit low-level canonical mode remains available to transport-only integrations
+          // without a projection store. Production composition always supplies modelReads.
+           if(route==="reads"){
+             if((input as any).operation!==undefined){
+               const channel=await resolver.resolve(actual);if(!channel)throw new Error("Unbound work read")
+               input={json:prepareTypedWork("reads",input,channel.projectID),format:"canonical"}
+             }
+            const selected=readInput(input)
+            if(!selected.json)throw new ModelReadFault("READ_REFERENCE_UNAVAILABLE")
+            input={json:selected.json}
+           }
+           if(route==="commands"&&(input as any)?.operation!==undefined){
+             const channel=await resolver.resolve(actual);if(!channel)throw new Error("Unbound work command")
+             input={json:prepareTypedWork("commands",input,channel.projectID)}
+           }
           if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).join(",") !== "json"
             || typeof (input as { json?: unknown }).json !== "string") throw new Error("closed tool input required")
           const raw = (input as { json: string }).json
           if (!raw.isWellFormed() || Buffer.byteLength(raw) > cap) throw new Error("work admission limit")
-          const parsed = exact(raw)
-          if (!isLosslessNumber(parsed.formatVersion) || parsed.formatVersion.value !== version || !allowed.has(parsed.operation))
-            throw new Error("unsupported work operation")
-          const channel = await resolver.resolve(actual)
-          if (!channel || !["controller", "assignment"].includes(channel.scope) || parsed.projectId !== channel.projectID)
+          let channel = route==="reads"?await resolver.resolve(actual):undefined
+          if (route==="reads"&&(!channel || !["controller", "assignment"].includes(channel.scope)))throw new Error("unbound native work scope")
+          let parsed:any
+          try{parsed=exact(raw)}catch{
+            if(route==="reads")return {content:'{"kind":"error","code":"INVALID_WORK_READ_INPUT","schema":"work-read2"}'}
+            throw new Error("invalid work command")
+          }
+          if (!parsed||typeof parsed!=="object"||Array.isArray(parsed)||!isLosslessNumber(parsed.formatVersion) || parsed.formatVersion.value !== version || !allowed.has(parsed.operation)||
+            route==="reads"&&(!parsed.subject||typeof parsed.subject!=="object"||Array.isArray(parsed.subject)))
+            if(route==="reads")return {content:'{"kind":"error","code":"INVALID_WORK_READ_INPUT","schema":"work-read2","hint":"Read work-read2. Supply formatVersion:2, projectId, operation and subject; list_work_records is the listing operation. This is a request-format error, not evidence that the service is unavailable."}'}
+            else throw new Error("unsupported work operation")
+          channel??=await resolver.resolve(actual)
+          if (!channel || !["controller","assignment"].includes(channel.scope)||parsed.projectId !== channel.projectID)
             throw new Error("unbound/stale native work scope")
-          const before=route==="commands"&&parsed.operation==="submit_result"&&beforeResult
-            ? (retained:string,fresh:boolean)=>beforeResult(retained,fresh,actual) : undefined
-          const reply = await channel.send(route, raw, actual.signal,before)
+           let original=raw
+           const before=route==="commands"&&(beforeResult&&parsed.operation==="submit_result"||beforeLaunch)
+             ? async(retained:string,fresh:boolean)=>{
+               original=retained
+               if(parsed.operation==="submit_result")await beforeResult?.(retained,fresh,actual)
+               await beforeLaunch?.(retained,actual)
+             } : undefined
+           const reply = await channel.send(route, raw, actual.signal,before)
+           if(route==="commands")await afterCommand?.(original,reply,actual)
           return { content: reply }
-        } catch { return { content: '{"kind":"error","code":"WORK_UNAVAILABLE_OR_FORBIDDEN"}' } } // no secret-bearing exception text
+         } catch(error) {
+           if(error instanceof OwnerOrderHold)return {content:JSON.stringify({kind:"error",code:error.code,
+             hint:"Launch is held for the exact native owner order. Do not bypass with another command, key, chat or latest version."})}
+           if(error instanceof ModelReadFault)return {content:`Writhelm read held: ${error.code}\nNo source content returned; no reference was refreshed.`}
+           if(error instanceof ModelContractFault)return {content:error.message}
+          return { content: '{"kind":"error","code":"WORK_UNAVAILABLE_OR_FORBIDDEN"}' }
+        } // no secret-bearing exception text
       }, options: { codemode: false } })
   })
+  // Model-facing specialization is per exact chat, never a shared tool mutation. Captured executors
+  // still validate the actual supplied operation and re-resolve current scope on every invocation.
+  const specialization=ctx.session?.hook?await ctx.session.hook("context",event=>{
+    if(event.tools.writhelm_work_command)event.tools.writhelm_work_command.input=contracts.input("commands",event.sessionID)
+    if(event.tools.writhelm_work_read)event.tools.writhelm_work_read.input=readSchema(event.sessionID)
+  }):undefined
   await ctx.tool.reload()
-  return registration
+   return {async dispose(){await specialization?.dispose();await registration.dispose()}}
 }

@@ -54,6 +54,47 @@ internal class NativeRuntimeAccess(private val controller: UUID,private val host
         if(!state.authority.allows(c,project,Capability.READ))throw AppAccessFault(AppAccessProblem.FORBIDDEN)
         return identity(state,key,project)
     }
+    /** Private current admission bit, not a WorkGrant/status disclosure or new business authority.
+     * Exact operations still require their own service transitions and native admission checks. */
+    fun controllerPlanningAdmission(state:H1BoundState,key:dev.writhelm.core.auth.PresentedCredential,project:UUID):JsonValue {
+        val c=actor(state,key,project)
+        if(c.scope!=CredentialScope.Controller(controller) || !state.authority.allows(c,project,Capability.READ))
+            throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        return obj("formatVersion" to num(1),"basis" to state.basis.json(),"controllerId" to uuid(controller),
+            "canContinue" to JBoolean(WorkPermission.entries.any {state.authority.workAllows(c,project,it)}))
+    }
+    /** Explicit current task-graph query for one supplied immutable task reference. Public work2
+     * listing intentionally excludes plans/intents/revisions; this does not relax that catalogue.
+     * Every relevant record still passes current scoped disclosure before any summary is returned. */
+    fun plannerTaskProgress(state:H1BoundState,key:dev.writhelm.core.auth.PresentedCredential,project:UUID,ref:WorkReference):JsonValue {
+        val c=actor(state,key,project)
+        if(c.scope!=CredentialScope.Controller(controller)||!state.authority.allows(c,project,Capability.READ)||
+            ref.identity.family!=WorkFamily.TASK_REVISIONS||ref.identity.key.projectId!=project)
+            throw AppAccessFault(AppAccessProblem.FORBIDDEN)
+        val protected=H1ProtectedReads()
+        protected.readWork(state,key,WorkRead.Exact(project,ref.identity,ref.digest,null))
+        val work=state.work.getValue(project);val task=ref.identity.key as WorkKey.TaskRevision
+        fun disclose(row:WorkRecord) {
+            val facts=workRecordFacts(row)
+            protected.readWork(state,key,WorkRead.Exact(project,row.identity,
+                if(row.identity.family.mutable)null else facts.digest,if(row.identity.family.mutable)facts.generation else null))
+        }
+        val plans=work.records.values.filter {row->(row.payload as? WPlansPayload)?.value?.let {it.task==task&&it.assignment==null}==true}
+        val accepted=work.records.values.filter {row->(row.payload as? WAcceptancesPayload)?.value?.task==task}
+        accepted.forEach(::disclose)
+        val results=accepted.map {(it.payload as WAcceptancesPayload).value.result}.toSet()
+        val intents=work.records.values.filter {row->(row.payload as? WIntegrationIntentsPayload)?.value?.let {it.result in results}==true}
+        workRequire(plans.size<=256&&intents.size<=256,WorkProblem.INCOMPLETE_HANDOFF)
+        plans.forEach(::disclose);intents.forEach(::disclose)
+        return obj("formatVersion" to num(1),"basis" to state.basis.json(),"controllerId" to uuid(controller),
+            "taskReferenceJSON" to str(identityCodec.encodeReference(ref).decodeToString()),
+            "plans" to JArray(plans.map {row->val plan=(row.payload as WPlansPayload).value
+                obj("keyJSON" to str(identityCodec.encodeKey(row.identity.key).decodeToString()),
+                    "steps" to JArray(plan.steps.map {step->obj("id" to uuid(step.id),"state" to str(step.state),
+                        "blockers" to JArray(step.blockers.map(::encodeWSource)))}))}),
+            "integrationStates" to JArray(intents.map {row->obj("id" to uuid((row.identity.key as WorkKey.Id).id),
+                "state" to str((row.payload as WIntegrationIntentsPayload).value.state))}))
+    }
     /** Current scoped admission only, not a receipt or an authorization to repeat an uncertain
      * filesystem effect. The canonical submit-result transition still performs its own checks. */
     fun retentionPermit(state:H1BoundState,key:dev.writhelm.core.auth.PresentedCredential,project:UUID,

@@ -13,6 +13,9 @@ import { ProtectedNativeBridge } from "../src/native-bridge.js"
 import { ConnectedNativeAdapter } from "../src/connected-native.js"
 import { listenNativeTransport } from "../src/native-transport.js"
 import { preparePrimaryBootstrap } from "../src/primary-bootstrap.js"
+import { NativePlannerActivity, NativePlannerProgress } from "../src/native-planner-progress.js"
+import { NativeOwnerOrder } from "../src/native-owner-order.js"
+import { NativeRoleContinuation } from "../src/native-role-continuation.js"
 
 let raw="";for await(const chunk of process.stdin){raw+=chunk;assert.ok(Buffer.byteLength(raw)<65536)}
 const cfg=JSON.parse(raw),hooks=new Map<string,(e:any)=>Promise<void>>(),tools=new Map<string,any>()
@@ -32,12 +35,17 @@ await preparePrimaryBootstrap({root:cfg.root,workRoot:cfg.workRoot,storeId:cfg.s
 const custody=new LinuxNativeCustody(path.join(cfg.root,"native"),[cfg.workRoot]);await custody.initialize()
 const registry=new NativeCredentialRegistry(ctx,custody,new NativeRuntimeClient(cfg.origin,cfg.proof,cfg.storeId,cfg.projectId,cfg.controllerId,cfg.hostId),
   cfg.origin,new LinuxWorkRequestCustody(path.join(cfg.root,"requests"),[cfg.workRoot]),"a".repeat(64))
-const registration=await registerConnectedWorkTools(ctx,registry)
+const sessionID="ses_primary_component"
+const plannerStore=new LinuxNativeCustody(path.join(cfg.root,"planner-state"),[cfg.workRoot]);await plannerStore.initialize()
+const activity=new NativePlannerActivity(plannerStore,{storeId:cfg.storeId,projectId:cfg.projectId,controllerId:cfg.controllerId,sessionID})
+const registration=await registerConnectedWorkTools(ctx,registry,undefined,undefined,
+  async(raw,actual)=>{assert.equal(actual.sessionID,sessionID);await activity.before(raw)},
+  async(raw,reply)=>activity.after(raw,reply))
 const governor=await registerPrimaryGovernor(ctx,registry,new LinuxNativeCustody(path.join(cfg.root,"primary"),[cfg.workRoot]),
   {workRoot:cfg.workRoot,controllerId:cfg.controllerId,controllerCredentialId:cfg.credentialId,projectId:cfg.projectId,schemas:{task:"MOCK schema supplied only for boundary test"}})
 let transport:Awaited<ReturnType<typeof listenNativeTransport>>|undefined
 try{
-  const sessionID="ses_primary_component",input="Build a community chess tournament tracker: pairings, score entry, standings and CSV export"
+  const input="Build a community chess tournament tracker: pairings, score entry, standings and CSV export"
   const prompt={sessionID,messageID:"msg_owner_objective",prompt:{text:input}}
   await hooks.get("session:prompt")!(prompt);assert.equal(prompt.prompt.text,input)
   const bridge=new ProtectedNativeBridge(registry,custody,sessionID,cfg.hostId)
@@ -56,6 +64,20 @@ try{
   assert.equal(draft.kind,"settled");assert.equal(draft.outcome.kind,"success")
   const executable=exactJSON((await tool.execute({json:cfg.prematureJSON},{...actual,id:"call_premature"})).content,()=>{throw Error("bad service reply")})
   assert.equal(executable.kind,"settled");assert.equal(executable.outcome.kind,"rejected");assert.equal(executable.outcome.code,"BLOCKED_INPUT")
+  const order=new NativeOwnerOrder(plannerStore,activity.scope),progress=new NativePlannerProgress(activity,registry,order)
+  const observed=await progress.observe(actual.signal)
+  assert.ok(observed);assert.equal(observed.outcomeComplete,false);assert.equal(observed.nativeReady,true)
+  assert.equal(observed.progressJSON.includes("Clarify tournament tracker"),false,"no task-body cache in the operational frontier")
+  let continuations=0
+  const roles=new NativeRoleContinuation(plannerStore,async()=>progress.observe(actual.signal),async input=>{
+    continuations++;assert.equal(Object.hasOwn(input.metadata,"assignmentId"),false)
+    return {type:"synthetic",id:input.id,sessionID:input.sessionID,payload:{text:input.text,metadata:input.metadata}}
+  })
+  assert.equal(await roles.idle({sessionID,background:[]}),"continued")
+  assert.equal(await roles.idle({sessionID,background:[]}),"stalled");assert.equal(continuations,1)
+  const restored=new NativePlannerProgress(new NativePlannerActivity(plannerStore,activity.scope),registry,order)
+  assert.equal((await restored.observe(actual.signal))!.progressJSON,observed.progressJSON)
   await assert.rejects(tools.get("writhelm_knowledge_command").execute({json:JSON.stringify({formatVersion:1,projectId:cfg.projectId,operation:"resolve_approval"})},actual))
-  process.stdout.write(JSON.stringify({draftCreated:true,prematureRefused:true,implementationToolsHeld:true,ownerApprovalUnavailableToModel:true,native:"MOCK",service:"REAL"}))
+  process.stdout.write(JSON.stringify({draftCreated:true,prematureRefused:true,implementationToolsHeld:true,ownerApprovalUnavailableToModel:true,
+    plannerProgressReopened:true,plannerContinuedOnce:true,native:"MOCK",service:"REAL"}))
 }finally{await transport?.close();await governor.close();await registration.dispose()}

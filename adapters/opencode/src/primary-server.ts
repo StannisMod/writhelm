@@ -16,6 +16,8 @@ import { exactJSON } from "./strict-json.js"
 import { nativeContextAdmission } from "./native-context-reference.js"
 import { ClientAdmission } from "./primary-rpc.js"
 import { NativeSessionCreation, userSessionID } from "./native-session-creation.js"
+import { ApprovalDelivery } from "./approval-delivery.js"
+import { NativePlannerActivity } from "./native-planner-progress.js"
 
 /** Automatic-mode entrypoint shared with model-free boundary tests. Activation resolves only after
  * the real native runtime, tools and service connect handshake, not after credential issuance. */
@@ -27,10 +29,21 @@ export async function startAutomaticPrimaryServer(ctx:Plugin.Context,root:string
     !cfg.schemas||typeof cfg.schemas!=="object"||!Object.keys(cfg.schemas).length||Object.values(cfg.schemas).some(value=>typeof value!=="string"||Buffer.byteLength(value)>512*1024))nativeUnavailable()
   const proof=Buffer.from(cfg.enrollmentProof,"base64url")
   const enrollment=new AutomaticEnrollmentClient(cfg.serviceOrigin,proof,cfg.storeId);proof.fill(0)
+  for(const name of ["knowledge-read1","work-read2"]){
+    const supplemental=await bootstrap.read("read-contract",name)
+    if(supplemental===undefined)continue
+    const contract=exactJSON(supplemental,nativeUnavailable)
+    if(contract.kind!=="canonical-codec-source-v1"||contract.namespace!==name||
+      Object.hasOwn(cfg.schemas,name)&&cfg.schemas[name]!==supplemental)nativeUnavailable()
+    cfg.schemas={...cfg.schemas,[name]:supplemental}
+  }
   const endpoint=await Service.discover({file:cfg.nativeRegistrationFile,version:"2.2.5"})
   if(!endpoint||endpoint.url!==cfg.nativeOrigin)nativeUnavailable()
   const native=OpenCode.make({baseUrl:endpoint.url,headers:Service.headers(endpoint)})
   const tools=new NativeSessionToolRouter(ctx)
+  const deliveryCustody=new LinuxNativeCustody(path.join(root,"approval-delivery"),[ctx.location.directory])
+  await deliveryCustody.initialize()
+  const approvalDelivery=new ApprovalDelivery(deliveryCustody)
   const governor=await registerAutomaticPrimaryGovernor(ctx,bootstrap,enrollment,async binding=>{
     // Diagnostics are not authority or immutable recovery intent. Keep one bounded cursor per
     // session OUTSIDE bootstrap inventory, and never make progress logging a condition of admission.
@@ -65,6 +78,9 @@ export async function startAutomaticPrimaryServer(ctx:Plugin.Context,root:string
     const scoped=tools.context(binding.sessionID,async sessionID=>sessionID===binding.sessionID||registry.bound(sessionID)||runtime?.registry.bound(sessionID)===true)
     await stage("scoped-context-created")
     const deployment=new LinuxNativeCustody(path.join(selected.root,"bootstrap"),[binding.workRoot]);await deployment.initialize()
+    const plannerStore=new LinuxNativeCustody(path.join(selected.root,"planner-state"),[binding.workRoot]);await plannerStore.initialize()
+    const plannerActivity=new NativePlannerActivity(plannerStore,{storeId:cfg.storeId,projectId:binding.projectId,
+      controllerId:binding.controllerId,sessionID:binding.sessionID})
     const executionPolicies=await bootstrap.read("automatic-execution-deployments","current")
     if(executionPolicies!==undefined){
       const policies=closedObject(exactJSON(executionPolicies,nativeUnavailable),["formatVersion","deployments"])
@@ -81,10 +97,11 @@ export async function startAutomaticPrimaryServer(ctx:Plugin.Context,root:string
     let primary:Awaited<ReturnType<typeof registerPrimaryGovernor>>|undefined
     try {
       primary=await registerPrimaryGovernor(scoped,registry,deployment,{workRoot:binding.workRoot,controllerId:binding.controllerId,
-        controllerCredentialId:binding.credentialId,projectId:binding.projectId,schemas:cfg.schemas,clientPolicyFile:cfg.clientPolicyFile,admissionHooks:false,activationStage:stage},async sessionID=>{
+        controllerCredentialId:binding.credentialId,projectId:binding.projectId,schemas:cfg.schemas,clientPolicyFile:cfg.clientPolicyFile,admissionHooks:false,activationStage:stage,approvalDelivery,
+        plannerActivity:()=>plannerActivity},async sessionID=>{
         await stage("native-runtime-requested")
         runtime=await startProtectedNativeRuntime(scoped,native,{root:selected.root,nativeOrigin:cfg.nativeOrigin,serviceOrigin:cfg.serviceOrigin,transportOrigin:selected.transportOrigin,
-          storeId:cfg.storeId,projectId:binding.projectId,controllerId:binding.controllerId,hostId:selected.hostId,controllerSessionID:sessionID,
+          storeId:cfg.storeId,projectId:binding.projectId,controllerId:binding.controllerId,hostId:selected.hostId,controllerSessionID:sessionID,ownerOrderRoot:root,
           assignmentSessionIDs:[],serviceProof,transportProof,candidateDelivery:await loadCandidateDeliveryBootstrap(deployment,binding.workRoot),activationStage:stage})
         await stage("native-runtime-started")
         const connected=await registry.connectRuntime(sessionID)
@@ -231,8 +248,11 @@ export default Plugin.define({id:"writhelm-opencode",async setup(ctx){
   const registry=await createNativeCredentialRegistry(ctx,native,cfg.nativeOrigin,custody,service,cfg.serviceOrigin,requests)
   await registry.restoreAll()
   let runtime:Awaited<ReturnType<typeof startProtectedNativeRuntime>>|undefined
+  const plannerStore=new LinuxNativeCustody(path.join(root,"planner-state"),[workRoot]);await plannerStore.initialize()
   const governor=await registerPrimaryGovernor(ctx,registry,bootstrap,{workRoot,controllerId:cfg.controllerId,
-    controllerCredentialId:cfg.controllerCredentialId,projectId:cfg.projectId,schemas:cfg.schemas},async sessionID=>{
+    controllerCredentialId:cfg.controllerCredentialId,projectId:cfg.projectId,schemas:cfg.schemas,
+    plannerActivity:sessionID=>new NativePlannerActivity(plannerStore,{storeId:cfg.storeId,projectId:cfg.projectId,
+      controllerId:cfg.controllerId,sessionID})},async sessionID=>{
     const candidateDelivery=await loadCandidateDeliveryBootstrap(bootstrap,workRoot)
     runtime=await startProtectedNativeRuntime(ctx,native,{root,nativeOrigin:cfg.nativeOrigin,serviceOrigin:cfg.serviceOrigin,transportOrigin:cfg.transportOrigin,
       storeId:cfg.storeId,projectId:cfg.projectId,controllerId:cfg.controllerId,hostId:cfg.hostId,

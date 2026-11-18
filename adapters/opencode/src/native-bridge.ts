@@ -20,7 +20,8 @@ export class ProtectedNativeBridge implements ConnectedNativeBridge {
   readonly #hintAbort = new AbortController()
   #hintWorker: Promise<void> | undefined
   constructor(private readonly registry: NativeCredentialRegistry, private readonly custody: LinuxNativeCustody,
-    private readonly controllerSessionID: string, private readonly hostID: string) {
+    private readonly controllerSessionID: string, private readonly hostID: string,
+    private readonly launchAdmission?:(sessionID:string)=>Promise<void>) {
     if (!uuidPattern.test(hostID)) nativeUnavailable()
   }
   managed(sessionID: string): boolean { return this.#sessions.has(sessionID) || this.registry.managed(sessionID) }
@@ -174,7 +175,8 @@ export class ProtectedNativeBridge implements ConnectedNativeBridge {
   async current(envelope: RetainedConnectedEnvelope): Promise<"qualified-quiescent" | "active" | "held" | "unavailable"> {
     try {
       const value = await this.record(envelope.key)
-      if (value.kind !== "envelope" || value.target.digest !== envelope.digest) return "unavailable"
+       if (value.kind !== "envelope" || value.target.digest !== envelope.digest) return "unavailable"
+       await this.launchAdmission?.(envelope.sessionID)
       const status = await this.registry.probe(this.controllerSessionID, value.subject, envelope.metadata.continuationId)
       if (status.bindingJSON !== envelope.bindingJSON || status.nativeSessionId !== envelope.sessionID
         || status.envelopeDigest !== envelope.digest) return "held"
@@ -187,6 +189,7 @@ export class ProtectedNativeBridge implements ConnectedNativeBridge {
     const value = await this.record(key)
     if (value.kind !== "envelope" || value.target.digest !== envelopeDigest) nativeUnavailable()
     const e = value.target as RetainedConnectedEnvelope
+    await this.launchAdmission?.(e.sessionID)
     const status = await this.registry.probe(this.controllerSessionID, value.subject, e.metadata.continuationId)
     if (!status.delivery || !status.attemptId || status.envelopeDigest !== envelopeDigest
       || status.bindingJSON !== e.bindingJSON || status.nativeSessionId !== e.sessionID) nativeUnavailable()

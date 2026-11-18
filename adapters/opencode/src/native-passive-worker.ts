@@ -30,7 +30,8 @@ export class NativePassiveWorkers {
   constructor(private readonly native:Client,private readonly registry:NativeCredentialRegistry,
     private readonly custody:LinuxNativeCustody,private readonly controllerSessionID:string,
     config:PassiveWorkerConfiguration,private readonly git:LinuxGitWitness,
-    private readonly provisionExecution?: (profileRecordJSON:string)=>Promise<unknown>){
+    private readonly provisionExecution?: (profileRecordJSON:string)=>Promise<unknown>,
+    private readonly launchAdmission?:(selection:unknown,signal:AbortSignal)=>Promise<void>){
     this.config=Object.freeze({...config,agents:Object.freeze({...config.agents})})
   }
   private async current(assignmentId:string,generation:string,signal:AbortSignal){
@@ -43,7 +44,9 @@ export class NativePassiveWorkers {
       i.family!=="native-intents"||i.key?.id!==data.currentIntent?.id||i.payload?.operation!=="prepare"||i.payload.outcome!=="pending"||
       !same(i.payload.assignment,{assignmentId,generation:BigInt(generation)})||i.payload.expectedSession!==intended.nativeSessionId||i.payload.expectedWorkspace!==data.workspaceId||
       task.family!=="task-revisions"||!same(task.key,data.task)||task.payload?.state!=="executable"||
-      profile.family!=="profiles"||!same(profile.key,data.profile)||!same(manifest.key,data.manifest?.key))nativeUnavailable()
+       profile.family!=="profiles"||!same(profile.key,data.profile)||!same(manifest.key,data.manifest?.key))nativeUnavailable()
+    await this.launchAdmission?.({task:task.key,manifest:data.manifest,profile:data.profile,
+      resources:data.requiredResources,reviewSubjects:data.reviewSubjects},signal)
     return {raw,a,i,task,profile,manifest}
   }
   private async project(signal:AbortSignal){

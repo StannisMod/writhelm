@@ -167,7 +167,10 @@ export class Controller {
           requireThat(i.choice === "changes-required" ? i.comments.length > 0 : i.comments.length === 0)
           requireThat(new Set(i.comments.map(x => x.itemId)).size === i.comments.length)
           for (const c of i.comments) requireThat(c.text.isWellFormed() && c.text.trim() && Buffer.byteLength(c.text) <= 4096 && v.bundle.request.payload.packet.items.some((x: Json) => x.id === c.itemId))
-          const answer = i.choice === "changes-required" ? { kind: i.choice, comments: i.comments } : { kind: i.choice }
+           if(i.choice==="reject")requireThat(typeof i.reason==="string"&&i.reason.isWellFormed()&&!!i.reason.trim()&&Buffer.byteLength(i.reason)<=4096)
+           else requireThat(i.reason===undefined||i.reason==="")
+           const answer = i.choice === "changes-required" ? { kind: i.choice, comments: i.comments } :
+             i.choice==="reject"?{kind:"reject-with-reason",reason:i.reason}:{ kind: i.choice }
           const command = { formatVersion: 1, projectId: p.projectId, requestKey: randomUUID(), operation: "resolve_approval", payload: { requestId: v.id, requestDigest: v.requestDigest, packetDigest: v.packetDigest, answer } }
           await this.persist({ ...p, pending: { kind: "answer", session: i.session, commandJSON: JSON.stringify(command), replacement: null, registrationJSON: "", storeDirectory: "" } }) // durable BEFORE network
           return await this.reconcile(i.session)
@@ -181,6 +184,18 @@ export class Controller {
       }
     } catch (e) { return reply(e instanceof Fault ? e.code : "UNAVAILABLE", { pending: !!this.profile?.pending }) }
     finally { if (reservation) this.release(reservation) }
+  }
+  /** Native-main draft gate: current exact source authorization without invalidating open handles. */
+  async authorizeDraft(input:Input<"open">,caller:Caller,writing=false){
+    Schema.decodeUnknownSync(Inputs.open)(input)
+    this.live();const epoch=this.epoch
+    await this.context(input.session,caller)
+    requireThat(this.profile&&this.files,"UNCONFIGURED")
+    const r=await this.read("read_review_bundle",{id:input.requestId,requestDigest:input.requestDigest,packetDigest:input.packetDigest})
+    this.live(epoch)
+    const b=completeBundle(r.raw,input.requestId,input.requestDigest,input.packetDigest,this.profile.projectId)
+    if(writing)requireThat(!this.profile.pending&&b.actionable,"STALE_VIEW")
+    return new Set<string>(b.request.payload.packet.items.map((item:Json)=>item.id))
   }
   private async read(operation: string, subject: Json) {
     const epoch = this.epoch

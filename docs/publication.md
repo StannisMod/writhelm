@@ -1,5 +1,70 @@
 # Publication policy
 
+## P39 — Owner-requested source checkpoint and push
+
+The owner's 2026-11-18 push instruction authorizes this scoped public checkpoint of the accumulated
+native review, exact drafts/re-review, typed model protocol and controller-delivery source changes.
+It does not publish private tasks/reports, actual application contracts, installation state, chat
+history, screenshots, credentials, build outputs or toolchain/dependency copies. It is not release,
+full H1, cross-platform or completed localization acceptance.
+
+In addition to changes under previously allowed source/test/contract/build paths, the exact new
+paths below are Writhelm-owned AGPL-3.0-only implementation, generated structural descriptions and
+synthetic tests. The portable work protocol resource is a reference-closed structural projection of
+Writhelm's own retained schema definitions with source digests and two explicit closed-field omission
+corrections, not an export of a private application, dataset, model conversation or environment.
+Generators are source-owned build tooling; ordinary builds require no private readiness workspace.
+No third-party implementation or license notice is removed.
+
+```text
+adapters/opencode/generate-model-contracts.mjs
+adapters/opencode/import-work-contracts.mjs
+adapters/opencode/src/approval-delivery.ts
+adapters/opencode/src/automatic-approval.ts
+adapters/opencode/src/generated/model-knowledge.ts
+adapters/opencode/src/generated/model-work.ts
+adapters/opencode/src/knowledge-preparation.ts
+adapters/opencode/src/model-contracts.ts
+adapters/opencode/src/model-knowledge.ts
+adapters/opencode/src/model-read-knowledge.ts
+adapters/opencode/src/model-read.ts
+adapters/opencode/src/model-work.ts
+adapters/opencode/src/native-launch-admission.ts
+adapters/opencode/src/native-owner-order.ts
+adapters/opencode/src/native-planner-progress.ts
+adapters/opencode/src/native-planner-wait.ts
+adapters/opencode/src/native-role-continuation.ts
+adapters/opencode/src/owner-order-panel.ts
+adapters/opencode/src/read-families.ts
+adapters/opencode/src/review-drafts.ts
+adapters/opencode/tests/approval-service-client.ts
+adapters/opencode/tests/automatic-approval.test.ts
+adapters/opencode/tests/gui-approval-delivery.test.ts
+adapters/opencode/tests/gui-owner-order.test.ts
+adapters/opencode/tests/model-contracts.test.ts
+adapters/opencode/tests/model-read.test.ts
+adapters/opencode/tests/model-work.test.ts
+adapters/opencode/tests/native-launch-admission.test.ts
+adapters/opencode/tests/native-owner-order.test.ts
+adapters/opencode/tests/native-planner-progress.test.ts
+adapters/opencode/tests/native-role-continuation.test.ts
+adapters/opencode/tests/review-drafts.test.ts
+backend/server/src/main/kotlin/dev/writhelm/core/codec/KnowledgeProtocol.kt
+backend/server/src/main/kotlin/dev/writhelm/core/codec/WorkProtocol.kt
+backend/server/src/main/resources/writhelm/model-work-v1.json
+backend/server/src/test/kotlin/dev/writhelm/core/codec/KnowledgeProtocolTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/codec/ReasonedRejectionTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/codec/WorkProtocolParityTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/codec/WorkProtocolTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/workflow/ReviewFollowupTest.kt
+```
+
+English-source/user-language presentation is an owner-approved requirement, not implemented in
+this checkpoint. Source records distinguish that open work from tested typed preparation and the
+current panel. Use explicit staging and inspect the full staged diff, including generated content,
+before commit/push. All private delegation tasks/reports and installed verification evidence remain
+excluded. This scope does not authorize publication of future worker output or arbitrary new paths.
+
 ## P38 — H1 composition and EX-09 local source checkpoint
 
 The owner's 2026-11-16 commit instruction after the EX-09 implementation authorizes this local

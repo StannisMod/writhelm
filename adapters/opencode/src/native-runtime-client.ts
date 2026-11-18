@@ -176,6 +176,20 @@ export class NativeRuntimeClient {
       principalId: value.principalId, credentialId: value.credentialId, scope: value.scope,
       delegationId: value.delegationId, assignmentId: value.assignmentId, executionGeneration: value.executionGeneration })
   }
+  async controllerPlanningAdmission(token:string,signal:AbortSignal){
+    const value=closedObject(await this.request(token,{operation:"controller-planning-admission"},signal),
+      ["formatVersion","basis","controllerId","canContinue"])
+    if(value.controllerId!==this.controllerId||typeof value.canContinue!=="boolean")nativeUnavailable()
+    return value.canContinue as boolean
+  }
+  async plannerTaskProgress(token:string,taskReferenceJSON:string,signal:AbortSignal){
+    const value=closedObject(await this.request(token,{operation:"planner-task-progress",taskReferenceJSON},signal,4*1024*1024),
+      ["formatVersion","basis","controllerId","taskReferenceJSON","plans","integrationStates"])
+    if(value.controllerId!==this.controllerId||contextJSON(exactJSON(value.taskReferenceJSON,nativeUnavailable))!==
+      contextJSON(exactJSON(taskReferenceJSON,nativeUnavailable))||!Array.isArray(value.plans)||value.plans.length>256||
+      !Array.isArray(value.integrationStates)||value.integrationStates.length>256)nativeUnavailable()
+    return value
+  }
   async reservationRetryEligibility(token:string,reservationJSON:string,signal?:AbortSignal):Promise<"definitive-refusal"|"hold"> {
     if(typeof reservationJSON!=="string"||Buffer.byteLength(reservationJSON)>8192)nativeUnavailable()
     const value=closedObject(await this.request(token,{operation:"reservation-retry",reservationJSON},signal),["formatVersion","kind"])

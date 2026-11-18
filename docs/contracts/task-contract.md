@@ -1,8 +1,8 @@
 # Canonical tasks, exact results and authorized acceptance
 
-Contract K-TASK, revision 5. Status: original decisions, practical-control, connected-work coordination, deterministic correction and grouped delivery amendments approved, including explicit
+Contract K-TASK, revision 6. Status: original decisions, practical-control, connected-work coordination, deterministic correction, grouped delivery and role-completion/launch-order amendments approved, including explicit
 state-changing planner acceptance of an exact result. No task API implementation/pilot is claimed.
-Governing scope: [K-HARNESS revision 5](agent-workflow.md), accepted D9/D10/D11/D12/D15 and
+Governing scope: [K-HARNESS revision 8](agent-workflow.md), accepted D9/D10/D11/D12/D15 and
 WH-09/10/17/19. Existing snapshot/withdrawal/authority laws remain binding.
 
 ## TASK-01 — Stable identity, immutable revisions
@@ -21,6 +21,12 @@ may examine proposals without promoting them to obligations. Worker cannot widen
 retarget inputs, self-verify/accept or grant review exceptions. Exact task-operation/assignment grants
 must be specified before API exposure; existing knowledge PLAN is not silently expanded into
 unrestricted dispatch/accept/integrate authority.
+
+For the owner-directed H1 journey, H1-09/11 adds an explicit pre-launch planning checkpoint:
+prepare all necessary tasks/contracts, obtain required exact contract approval (a coherent set may
+be approved together), present the concise graph and ask the owner for execution order. Routine
+delegation authority does not bypass that checkpoint or require repeated approval of unchanged
+technical steps. Retain the selected scope/order; do not convert it into fictitious task dependencies.
 
 The immutable contract is not the mutable work plan/progress tracker. Worker may refine sequence,
 inspect additional files in the pinned base, form/reject hypotheses and add appropriate checks
@@ -78,6 +84,10 @@ obligations and blockers. Report is not proof. Result binds same task/assignment
 changes and assessed repository/tree or explicit dirty-content digest as applicable. HEAD alone is
 insufficient for dirty work. Missing exact result/evidence identity cannot advance verification.
 Checkpoints support restart, not transcript/summary substitution for task authority.
+
+Under H1-11, workers continue through known authorized steps until this durable result/report or an
+explicit blocker. Reviewers deliver a complete task-linked assessment of the exact diff, recording
+coverage, evidence, findings and disposition; announcing intended inspection is not a review result.
 
 ## TASK-07 — State-changing acceptance, separate integration
 
@@ -163,6 +173,9 @@ separate design/readiness inputs; approval does not silently extend existing for
 native/model execution, blanket implementation or source publication.
 
 ## Approval provenance
+
+Revision 6 records the owner's 2026-11-17 approval of H1-11/12 and the explicit launch-order
+checkpoint. Accepted obligations remain separate from implementation and live qualification.
 
 On 2026-11-05 owner accepted seven-point K-TASK v1 after asking how planner acceptance changes
 state. Planner clarified R1 submit/review/accept, attributed service validation and separate integration;

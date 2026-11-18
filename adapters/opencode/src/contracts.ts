@@ -35,7 +35,7 @@ export const Inputs = {
   connect: closed(Schema.Struct({ session: Session })),
   pending: closed(Schema.Struct({ session: Session, cursor: text(36) })),
   open: closed(Schema.Struct({ session: Session, requestId: uuid, requestDigest: digest, packetDigest: digest })),
-  answer: closed(Schema.Struct({ session: Session, handle: uuid, choice: Schema.Literals(["approve", "reject", "changes-required"]), comments: Schema.Array(Schema.Struct({ itemId: uuid, text: text(4096) })).check(Schema.isMaxLength(16)) })),
+  answer: closed(Schema.Struct({ session: Session, handle: uuid, choice: Schema.Literals(["approve", "reject", "changes-required"]), reason:Schema.optional(text(4096)), comments: Schema.Array(Schema.Struct({ itemId: uuid, text: text(4096) })).check(Schema.isMaxLength(16)) })),
   reconcile: closed(Schema.Struct({ session: Session })), rotate: closed(Schema.Struct({ session: Session })),
   setup: closed(Schema.Struct({ session: Session, origin: text(4096) })),
   dismiss: closed(Schema.Struct({ session: Session, handle: text(36) })),
@@ -52,6 +52,29 @@ export const Review = Ipc.define({ id: "writhelm-opencode.review", methods: {
   workList: { input: Inputs.workList, output: Reply }, workOpen: { input: Inputs.workOpen, output: Reply },
   workBody: { input: Inputs.workBody, output: Reply },
 } })
+/** Native GUI/main only. A rendered acknowledgement does not submit an owner decision. */
+export const ApprovalPresentation=Ipc.define({id:"writhelm-opencode.approval-presentation",methods:{
+  requested:{input:Inputs.status,output:Reply},
+  shown:{input:Inputs.open,output:Reply},
+}})
+const draftComments=Schema.Array(Schema.Struct({itemId:uuid,text:text(4096)})).check(Schema.isMaxLength(16))
+const draftRef={session:Session,requestId:uuid,requestDigest:digest,packetDigest:digest}
+export const DraftInputs={
+  load:closed(Schema.Struct(draftRef)),
+  save:closed(Schema.Struct({...draftRef,expectedDigest:text(64).check(Schema.isPattern(/^(|[a-f0-9]{64})$/)),
+    comments:draftComments,reason:text(4096)})),
+}
+export const ReviewDrafts=Ipc.define({id:"writhelm-opencode.review-drafts",methods:{
+  load:{input:DraftInputs.load,output:Reply},save:{input:DraftInputs.save,output:Reply},
+}})
+export const OwnerOrderInputs={
+  view:Inputs.status,
+  select:closed(Schema.Struct({session:Session,proposalId:uuid,proposalDigest:digest,expectedDecision:text(64)})),
+}
+export const OwnerOrderPresentation=Ipc.define({id:"writhelm-opencode.owner-order",methods:{
+  view:{input:OwnerOrderInputs.view,output:Reply},
+  select:{input:OwnerOrderInputs.select,output:Reply},
+}})
 export type Input<K extends keyof typeof Inputs> = (typeof Inputs)[K]["Type"]
 export const reply = (code: Code = "OK", fields: Partial<Reply> = {}): Reply => ({ ok: code === "OK", code, handle: "", bundleJSON: "", pageJSON: "", resultJSON: "", pending: false, ...fields })
 export class Fault extends Error { constructor(readonly code: Code) { super(code) } }

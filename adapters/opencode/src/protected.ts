@@ -4,7 +4,7 @@ import type { FileHandle } from "node:fs/promises"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
 import { requireThat, Fault } from "./contracts.js"
-import { profileResult, type Json } from "./wire.js"
+import { exact, profileResult, type Json } from "./wire.js"
 
 export interface ProtectedFiles { read(): Promise<Json>; readAgent(): Promise<Json>; write(value: Json): Promise<void>; writeAgent(value: Json): Promise<void>; close(): Promise<void> }
 /** Explicit Linux/procfs adapter. No Unix paths or POSIX permission assumption in other OS adapters. */
@@ -39,7 +39,8 @@ export class LinuxProtectedFiles implements ProtectedFiles {
   private file(name: string) { return `/proc/self/fd/${this.fd.fd}/${name}` }
   read(): Promise<Json> { return this.readFile("profile.json") }
   readAgent(): Promise<Json> { return this.readFile("agent.json") }
-  private async readFile(name: "profile.json" | "agent.json"): Promise<Json> {
+  readBinding(): Promise<Json> { return this.readFile("binding.json") }
+  private async readFile(name: "profile.json" | "agent.json" | "binding.json"): Promise<Json> {
     await this.bound()
     // O_NOFOLLOW alone still waits for a FIFO writer. Nonblocking open makes type refusal
     // handle-bound even if a regular path is replaced with a FIFO immediately before open.
@@ -53,7 +54,9 @@ export class LinuxProtectedFiles implements ProtectedFiles {
       const data = buffer.subarray(0, total), after = await file.stat()
       requireThat(data.length === before.size && after.ino === before.ino && after.dev === before.dev && after.size === before.size && after.mtimeMs === before.mtimeMs && after.nlink === 1 && after.uid === before.uid && after.mode === before.mode, "PROTECTION_FAILED")
       await this.bound()
-      return profileResult(new TextDecoder("utf-8", { fatal: true }).decode(data))
+      const raw=new TextDecoder("utf-8", { fatal: true }).decode(data)
+      if(name==="binding.json")return exact(raw)
+      return profileResult(raw)
     } finally { await file.close() }
   }
   write(value: Json): Promise<void> { return this.writeFile(value, "profile.json") }

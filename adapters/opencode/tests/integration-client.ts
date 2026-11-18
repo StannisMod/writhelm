@@ -84,12 +84,11 @@ if (config.stage === "prepare") {
   let dispose!: () => void, panel!: HTMLElement
   createRoot(d => { dispose = d; panel = nativePanel(() => session, bridge, () => binding); document.body.append(panel) })
   const waitFor = async (condition: () => boolean) => { const start = performance.now(); while (!condition()) { assert.ok(performance.now() - start < 15000, "Bounded native component condition timed out"); await new Promise(r => setTimeout(r, 20)) } }
-  await waitFor(() => !!panel.querySelector('input[value="approve"]'))
+  await waitFor(() => [...panel.querySelectorAll("button")].some(b=>b.textContent==="Утвердить"))
   assert.ok(panel.textContent!.includes(body)); assert.ok(panel.textContent!.includes("Material retention exception stays visible"))
   assert.equal(panel.querySelectorAll('input[type="radio"]:checked').length, 0)
-  const radio = panel.querySelector('input[value="approve"]') as HTMLInputElement; radio.checked = true; radio.dispatchEvent(new window.Event("change"))
-  const send = [...panel.querySelectorAll("button")].find(b => b.textContent === "Submit exact retained answer")!; send.click()
-  await waitFor(() => panel.textContent!.includes("original command retained"))
+  const send = [...panel.querySelectorAll("button")].find(b => b.textContent === "Утвердить")!; send.click()
+  await waitFor(() => panel.textContent!.includes("исходная команда сохранена"))
   const retained = await files.read(); assert.equal(retained.pending.kind, "answer"); const originalBytes = retained.pending.commandJSON
   assert.ok(!panel.textContent!.includes(originalOwner)); assert.ok(!panel.textContent!.includes(profile.agent.token))
   dispose(); await controller.close()

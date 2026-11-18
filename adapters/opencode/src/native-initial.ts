@@ -74,7 +74,8 @@ export class NativeInitialAdapter {
     private readonly auxiliary?:(event:SessionModelRequest)=>Promise<void>,
     private readonly contextPolicy?:(sessionID:string,profileRecordJSON:string)=>Promise<void>,
     private readonly cooperativeResume?:(sessionID:string,bindingJSON:string)=>Promise<boolean>,
-    private readonly continuedPacket?:(sessionID:string,bindingJSON:string)=>Promise<boolean>){}
+    private readonly continuedPacket?:(sessionID:string,bindingJSON:string)=>Promise<boolean>,
+    private readonly launchAdmission?:(assignment:unknown)=>Promise<void>){}
   managed(sessionID:string){return this.gates.has(sessionID)}
   /** Same-incarnation plugin reload only. Rebuild closed local gates from protected ORIGINAL
    * records, then re-enter the existing canonical ACTIVE release protocol. Never dispatch a prompt
@@ -116,7 +117,9 @@ export class NativeInitialAdapter {
     const frame=await this.registry.initialContext(this.controllerSessionID,{assignmentId:e.assignmentId,executionGeneration:e.executionGeneration,
       bindingJSON:contextJSON(e.binding)},e.intentId)
     if(this.closed||this.gates.get(e.nativeSessionId)!==gate||frame.envelopeJSON!==gate.original.raw||frame.envelopeDigest!==gate.original.digest||frame.packetJSON!==gate.original.packet||
-      !same(parse(frame.profileJSON),parse(gate.original.profileJSON)))nativeUnavailable()
+       !same(parse(frame.profileJSON),parse(gate.original.profileJSON)))nativeUnavailable()
+    const assignment=parse(frame.assignmentJSON)
+    await this.launchAdmission?.({key:assignment.key,generation:assignment.payload.generation})
     return frame
   }
   private async packet(gate:Gate){

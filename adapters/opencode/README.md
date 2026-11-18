@@ -7,6 +7,54 @@ than use a standalone or external-browser approval fallback.
 
 ## Boundaries
 
+### Typed model protocol
+
+Normal document authoring uses `writhelm_propose_document` (`intentId`, explicit clause
+`id/title/text`, optional context/document identity) and `writhelm_request_review` (exact
+read references and clause IDs). The adapter prepares text, UTF-8 ranges, digests and operation
+identities; it rereads the actual immutable service revision before returning its reference.
+Same-intent retries retain the original command; new meaning requires a new intent/revision.
+
+Knowledge tools take typed operation/payload or operation/subject inputs. Work tools load one
+operation's exact schema with `writhelm_work_contract`; only that chat's next outgoing tool
+schema is specialized, avoiding an always-loaded catalogue of every work type. Int64 fields
+use decimal strings at this model boundary and remain exact integers on the canonical wire.
+Old retained raw invocations retain the protected original-command path but are not the
+advertised authoring interface.
+
+`writhelm_schema` returns a compact index or selected operation/definition. Optional diagnostic
+sources are paged through the tool, never required external spill-file reads. These descriptions
+are not authority, approval or proof of semantic completeness.
+
+Structural knowledge declarations live in `KnowledgeProtocol.kt`. The retained portable
+`model-work-v1.json` resource supplies work structural admission and model schemas; existing
+domain constructors and wire serializers remain independent. Generate service model contracts
+with Gradle `generateModelContracts`, then run `generate-model-contracts.mjs` from this adapter
+directory (or supply `WRITHELM_MODEL_PROTOCOL` pointing at the generated knowledge JSON).
+`generate-model-contracts.mjs --check` refuses stale generated TypeScript. Ordinary builds need
+no private readiness workspace. Source-update importer inputs must be explicitly selected;
+it is not a runtime/network schema fetch.
+
+### Exact review panel
+
+Review comments address canonical item IDs and permanent named clause anchors. Full source and
+diagnostics are collapsed by default. Nonblank comments allow only changes-required; otherwise
+approve or reject are available, with a required canonical rejection reason. Linked re-reviews
+carry exact predecessor digests and complete item correspondence; unchanged unapproved points
+remain in decision scope. Legacy monolithic clauses are not silently split or rewritten.
+Point titles are visible independently of feedback. Right-click a point (or Shift+F10 on its
+focused card) exposes the sole menu action `возразить`, opening an inline field with native
+placeholder `возражение`. Empty points have no permanent visible comment field; restored nonempty
+drafts reveal only their exact point's field.
+
+Private native-main drafts are scoped to store/project/controller/chat/request and both digests,
+freshly source-authorized, and optimistically guarded against concurrent overwrites. Closing a
+tab or restoring a draft is never a decision. Drafts contain no canonical source cache.
+
+The Linux installed Desktop 2.2.5 synthetic review/draft/revision journey and preserving update
+of the owner's existing stand were exercised. This is not full H1 acceptance, cross-platform
+qualification, or approval of the owner's application contract.
+
 ### Governed primary entrypoint (uninstalled source implementation)
 
 The package now exports an actual server entrypoint, `build/src/primary-server.js`, alongside the
@@ -130,6 +178,131 @@ original held lifecycle and matching immutable packet/role restrictions. Missing
 never rewrite permissions or retry an uncertain effect. This initial adapter refuses resume rather
 than treating a paused/unknown operation as a new initial start. Existing native prompt, context,
 model and execute-before hooks still enforce current service authority at the actual effect boundary.
+
+### Automatic native approval delivery
+
+In managed automatic mode, the trusted enrollment broker prepares a protected approval client for
+each native chat. The Desktop main process selects it by the actual chat/project binding, not a
+model-supplied path or a globally last-selected profile. Owner credentials stay in native-main
+protected custody; controller/model tool replies contain none. Existing unresolved answers are
+never replaced during enrollment, project switching or reopening. Automatic mode refuses legacy
+setup/profile switching and owner-key rotation through this view.
+
+Successful `request_approval` requests native presentation automatically. `writhelm_open_approval`
+reopens an existing request using only `requestId`: the adapter reads and pins its exact request and
+packet digests under current access. The ordinary tool content reports `requested` or historically
+`rendered`; the full exact fallback reference is retained as tool metadata, not required manual input.
+Neither status is owner approval. The GUI opens only the routed originating chat's panel, validates
+the complete exact bundle and acknowledges loading separately from an explicit owner answer.
+Pending intents survive reopen and a cut before current-pointer publication; preparing another
+contract does not erase an earlier unrendered intent. Source text stays visible in full, with raw
+canonical detail and administrative controls in closed diagnostic sections.
+
+Model-free coverage includes the real JVM authorization/Git/HTTP service, controller command,
+built GUI/native-main code, protected per-chat files, exact panel, rendering acknowledgement and a
+synthetic explicit owner click resulting in a canonical resolution. Native session observation,
+IPC host transport and DOM rendering are explicit doubles; this is not installed Electron or live
+model acceptance, nor Windows/macOS qualification. The approval driver is an explicit optional
+offline prerequisite (`WRITHELM_APPROVAL_CLIENT`); Gradle tracks its compiled code and GUI as inputs.
+
+### Exact native launch-order selection
+
+Managed runtime composition now shares one owner-order admission check across dispatch activation/
+restore, direct/planned preparation, passive native preparation, initial start/restore, native
+continuation dispatch and automatic/legacy frontiers. Raw structured launch commands through
+`writhelm_work_command` also pass preflight on their retained original bytes. This governs the
+Writhelm API paths: it is **not** a detector of arbitrary shell behavior, a sandbox or writer fencing.
+Bash and existing service/native permission restrictions remain unchanged.
+
+The planner proposes a service-derived exact dispatch plan with `writhelm_request_launch_order`.
+The originating native panel shows the exact tasks and explicit owner ordering edges. Only its
+owner button submits the selection; proposing, polling, rendering or approving contracts does not.
+The choice binds store/project/controller/chat and exact plan/task versions. Native main rereads
+the task records on display and selection; the runtime independently checks current plan/task/input
+identity and authority before launch effects. Changed manifest/profile/resources cannot use a
+direct preparation command to escape the selected plan. Missing/stale/changed choices hold.
+
+An ordinary displayed task list imposes no serial barrier. Explicit `after` edges wait for service
+evidence of a prior launch, not its completion or acceptance. Unknown prior launch outcomes hold.
+Task dependencies, exclusive resource claims, approval and runtime/profile checks remain independent.
+Dependency closure creating a new task revision requires a new exact choice, not silent retargeting.
+An old native view cannot overwrite a newer selection. Retained originals survive uncertain native
+effects; current-assignment authorization reads do not rewrite the recovered command or generation.
+
+After selection a model-free lifecycle watcher admits the selected reconciler without another
+planner nudge. It cannot authorize a worker by itself; effect boundaries still perform current
+checks. Non-managed legacy compositions without the trusted owner surface remain held, not
+implicitly authorized. Evidence is Linux model-free tests with explicit native/service doubles,
+not installed Desktop rendering or live-role qualification.
+
+### Worker/reviewer pre-idle continuation
+
+The managed runtime uses pinned `experimental.idle` at successful native pre-idle boundaries, not
+Goal UI, failure/interruption polling or a separate model API. The service's `finishedHandoff`
+predicate is the completion witness; canonical reviewer handoffs already validate the report's
+own assignment and exact reviewed subjects. The adapter does not infer semantic review coverage
+or completion from prose, a check pass or the native session becoming idle.
+
+Incomplete ready assignments may admit one retained native synthetic continuation per obligation
+frontier. Own background work, explicit sourced blocked waits, pause/readiness loss and pending
+effects hold instead. Cosmetic plan-generation/text changes do not reset no-progress control.
+An unchanged frontier stalls after the one admitted continuation; lost native admission replies
+remain unknown across reopen, even if subsequent canonical progress changes. No new IDs or
+automatic resends repair an uncertain native effect. Normal model/provider/effort/permission
+admission still applies to any subsequent native turn.
+
+This is mechanical worker/reviewer continuation coverage, not proof of actual role efficacy.
+Missing/inaccessible canonical worker context is held rather than fabricated. Planner-specific
+outcome/wait continuation now uses this chat/controller's retained exact command selectors and
+owner selection, with private current-admission/task-progress observations. Successful wait
+recovery must match the retained native execution and binding; failed/interrupted,
+archived/reverted or newer executions cannot automatically wake it.
+
+A Linux installed Desktop2.2.5 synthetic model-free journey has exercised the actual approval
+panel/native-main/HTTP service, explicit exact order selection and persistence across full Desktop
+close/reopen. Canonical metadata and delivery/proposal intents were fixture-injected, not generated
+by a model. The unqualified no-call profile intentionally did not exercise worker execution.
+This is not live-role efficacy, qualification on other platforms or complete H1 acceptance.
+
+### Readable model reads and exact adapter references
+
+Managed `writhelm_knowledge_read` and `writhelm_work_read` now return readable text by default.
+Start with the existing `json` read envelope, then follow the returned `wr1_...` handle using the
+same tool's `reference` field. Do not supply both. Set `format: "canonical"` explicitly when exact
+original wire metadata is needed; command bytes, receipts and result/dispatch preflight are unchanged
+by this read projection. Read handles are navigation references, not canonical task inputs or grants.
+
+The protected adapter retains only exact selectors, binding identity and integrity guards—not source
+bodies, bearer credentials or cached authority. References bind store/project/controller, principal,
+chat and, for workers, exact delegation/assignment generation/binding. Each resolution rechecks that
+binding and makes a fresh authorized service read. Unknown/cross-scope/stale references refuse; no
+fallback to latest revision, generation, another project's profile or an old cached body occurs.
+The same supported binding can reopen retained references after an adapter restart.
+
+References are labelled by meaning: `exact` pins source/record versions or generations; `query`
+explicitly re-lists current navigation; `page` preserves the original snapshot/cursor; `live-status`
+observes current status for its exact subject. Pagination/completeness and current approval/provenance
+remain visible. An expired page does not restart the listing, and historical approval provenance is
+not promoted to current approval. Full revision text is not a whole-document accepted flag.
+
+Complete source text, UTF-8 spans, Unicode/CRLF, Int64 spellings and unknown adjacent task text are
+preserved. Knowledge digest framing and work record/body guards are checked; missing/inconsistent
+material or an oversized projection holds rather than truncating. Body links retain their authorized
+exact parent selector—knowing a bare body hash grants nothing. The primitive scalar/JSON transport
+is unchanged; readable output does not execute or promote embedded text into tool/role instructions.
+These are model-free adapter/service checks, not live-model comprehension or installed Desktop proof.
+
+### Packaged read contracts
+
+Read tools have separate packaged contracts: `writhelm_schema(name="knowledge-read1")` for
+knowledge reads and `writhelm_schema(name="work-read2")` for work reads. Command contracts are not
+read schemas. Listing requires the full versioned envelope and an exact operation such as
+`list_documents` or `list_work_records` (family `task-heads`); there is no generic `list`.
+Managed malformed read envelopes report `INVALID_READ_INPUT`, with read-contract guidance in the
+tool description, not a claim of service unavailability. Current rights and
+cross-project refusals remain enforced. Existing automatic installations can add these two missing
+read contracts as protected supplements without rewriting original bootstrap/command contract bytes;
+conflicting existing contracts still hold.
 
 ### Trusted execution deployment provisioning
 

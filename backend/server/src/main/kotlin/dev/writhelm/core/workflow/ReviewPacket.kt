@@ -23,6 +23,7 @@ class ReviewPacket(
     contexts: List<ContextReference>,
     dependencies: List<KnowledgeReference> = emptyList(),
     informationGaps: List<String> = emptyList(),
+    val followup: ReviewFollowup? = null,
 ) {
     val items = frozenList(items)
     val consequences = frozenList(consequences)
@@ -47,7 +48,7 @@ class ReviewPacket(
         (this.items.flatMap { listOfNotNull(it.before, it.target) } + this.contexts + this.dependencies).distinct()
     )
 
-    val digest: Digest = framedDigest("writhelm.review-packet.v1") {
+    val digest: Digest = framedDigest(if(followup==null)"writhelm.review-packet.v1" else "writhelm.review-packet.v2") {
         writeText(question)
         writeText(scope)
         writeText(rationale)
@@ -64,6 +65,61 @@ class ReviewPacket(
         }
         writeReferences(this@ReviewPacket.contexts)
         writeReferences(this@ReviewPacket.dependencies)
+        followup?.let { previous ->
+            writeUuid(previous.requestId);write(previous.requestDigest.bytes());write(previous.packetDigest.bytes())
+            writeInt(previous.items.size)
+            previous.items.forEach { item ->
+                writeBoolean(item.previousItemId!=null);item.previousItemId?.let {writeUuid(it)}
+                writeBoolean(item.itemId!=null);item.itemId?.let {writeUuid(it)}
+                writeText(item.disposition);writeText(item.explanation)
+            }
+        }
+    }
+}
+
+/** Explicit authored correspondence, never inferred from paragraph position or similarity. */
+data class ReviewFollowupItem(val previousItemId:UUID?,val itemId:UUID?,val disposition:String,val explanation:String) {
+    init {
+        requireText(explanation)
+        require(explanation.toByteArray(Charsets.UTF_8).size<=4096)
+        require(when(disposition) {
+            "revised","unchanged" -> previousItemId!=null&&itemId!=null
+            "removed","retained" -> previousItemId!=null&&itemId==null
+            "added" -> previousItemId==null&&itemId!=null
+            else -> false
+        })
+    }
+}
+class ReviewFollowup(val requestId:UUID,val requestDigest:Digest,val packetDigest:Digest,items:List<ReviewFollowupItem>) {
+    val items=frozenList(items)
+    init {
+        require(this.items.isNotEmpty()&&this.items.size<=256)
+        val old=this.items.mapNotNull {it.previousItemId};val next=this.items.mapNotNull {it.itemId}
+        require(old.distinct().size==old.size&&next.distinct().size==next.size)
+    }
+}
+
+/** Shared admission/restore law. Retention never approves a previously unapproved point. */
+internal fun validReviewFollowup(packet:ReviewPacket,requests:Map<UUID,ApprovalRequest>,
+    resolutions:Map<UUID,ApprovalResolution>,approved:Set<KnowledgeReference>):Boolean {
+    val link=packet.followup ?: return true
+    val previous=requests[link.requestId] ?: return false
+    if(previous.digest!=link.requestDigest||previous.packet.digest!=link.packetDigest||link.requestId !in resolutions)return false
+    val old=previous.packet.items.associateBy {it.id};val next=packet.items.associateBy {it.id}
+    if(link.items.mapNotNull {it.previousItemId}.toSet()!=old.keys||
+        link.items.mapNotNull {it.itemId}.toSet()!=next.keys)return false
+    if(packet.items.any {it.target.revision.document.projectId!=previous.projectId})return false
+    return link.items.all { change ->
+        val before=change.previousItemId?.let {old[it]?.target}
+        val target=change.itemId?.let {next[it]?.target}
+        when(change.disposition) {
+            "unchanged" -> before==target
+            "revised" -> before!=null&&target!=null&&before.subject()==target.subject()&&before!=target
+            "retained" -> before in approved&&before in packet.dependencies
+            "removed" -> before!=null
+            "added" -> target!=null
+            else -> false
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 # Knowledge approval and pinned-input transitions
 
-Contract K-WORKFLOW, revision 1. Task: `docs/tasks/CORE-002.md`.
+Contract K-WORKFLOW, revision 3. Task: `docs/tasks/CORE-002.md`.
 Derived from accepted R1/P2/T1/U1 and K-APP; logical in-memory transitions only, not a running service.
 The contract precedes implementation/tests. Source publication and independent verification remain separate.
 
@@ -21,9 +21,12 @@ the request digest; changing wording, item/order, context or guards cannot reuse
 Creating a request does not approve anything. A known information gap is not an uncertainty that
 can be hidden by a summary; approval remains blocked. No automatic semantic-completeness proof.
 
-**WF-03 — Structured answer and exact replay.** Only approve, reject and changes-required exist.
-Only changes-required carries text, with at least one nonblank comment under a valid item ID from
-that request. The exact request and packet digests must match. Reject/changes settle the request
+**WF-03 — Structured answer and exact replay.** Approve, reasoned rejection and changes-required
+are the current decision forms. A reasoned rejection carries a nonblank, bounded reason as part
+of the canonical answer (`reject-with-reason`); a native new rejection must not be sent without it.
+Legacy `reject` remains a distinct decodable historical/legacy form; adding reasons must not
+rewrite its bytes, fingerprints or resolutions. Changes-required carries at least one nonblank
+comment under a valid item ID from that request. The exact request and packet digests must match. Reject/changes settle the request
 without granting approval. A matching answer retry by the original actor returns the same resolution
 without another effect, after current-access checks. A different answer/actor cannot rewrite it.
 Cancel/dismiss is no answer; no implicit cancellation-to-approval transition exists.
@@ -70,6 +73,45 @@ provenance; this unit does not create or requalify code-test evidence. T1 trusts
 harnesses against deliberate identity/approval-channel impersonation; this does not waive the above
 domain checks. No JSON wire codec, command-key journal, durable Git publication, network, real GUI,
 credential verifier or native execution is implemented by this contract.
+
+**WF-09 — Exact follow-up review.** A follow-up packet binds a settled previous request by
+request/packet digests and an explicit complete correspondence of previous and new item IDs.
+Each correspondence states added, revised, unchanged, removed or retained, with a nonblank
+explanation. Revised items keep their stable subject; unchanged items keep the exact reference.
+Retained points are outside the new decision, must already have direct canonical approval and
+remain explicit dependencies, so current blocker/context checks still apply;
+unchanged unapproved points remain enumerated decision items. Removed is a declared removal from
+the new proposal, not revocation of historical approval. No positional/text-similarity mapping or
+implicit approval is permitted. Every old item and every new item is accounted for exactly once.
+The service derives re-review material and old comments from those authenticated exact records.
+Complete required source retrieval/authorization still precedes projection; hidden unchanged
+material remains available, and the decision's actual scope must be disclosed.
+Legacy packets omit follow-up metadata and keep their original digest domain/encoding. A linked
+packet uses the v2 packet-digest domain and includes the full correspondence in that digest.
+
+**WF-10 — Source language and exact localized review.** The owner requires English contract
+source and presentation in the user's interface language (Russian in the current case). A
+localized review is an explicitly authored, version-bound representation of each exact decision
+item, not unrelated packet prose, an inferred correspondence or a second set of obligations.
+This is an approved requirement; the per-language packet implementation is outstanding at this
+source checkpoint, not an implemented/qualified localization claim.
+Each supplied language covers every item exactly once with a human title and text; source/item
+identity remains unchanged. The request/packet digest binds the complete representation actually
+offered for review. Full exact English source remains retrievable behind a disclosure.
+
+New packets may carry explicit per-language presentations. Old packets without presentations retain
+their exact bytes/digest domains. Presentation-bearing packets use a distinct v3 digest domain,
+including both followup presence/data and all presentation fields. New owner decisions still bind
+exact request and packet digests; no translated display can grant authority or approve by omission.
+Service checks mechanical completeness/binding, not semantic translation equivalence.
+
+Localized source text has source-read sensitivity: a request/presentation may be projected only
+after current authorization for its referenced exact source material, including record-read paths
+that would otherwise expose that text. No cached authorization or broader grant follows.
+The renderer presents one ordered localized document with permanent point IDs; objections anchor
+to those exact items. Do not show a translated summary and separate English cards as though they
+were two corresponding canonical structures. Missing requested-language coverage is explicit,
+not a silently invented translation or unrelated-language decision view.
 
 ## Finite case obligations
 

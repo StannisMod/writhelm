@@ -269,6 +269,14 @@
         }
       }
     },
+    "reviewFollowup": {
+      "type":"object","additionalProperties":false,"required":["requestId","requestDigest","packetDigest","items"],
+      "properties":{"requestId":{"$ref":"#/$defs/uuid"},"requestDigest":{"$ref":"#/$defs/digest"},"packetDigest":{"$ref":"#/$defs/digest"},
+        "items":{"type":"array","minItems":1,"maxItems":256,"items":{"type":"object","additionalProperties":false,
+          "required":["previousItemId","itemId","disposition","explanation"],
+          "properties":{"previousItemId":{"oneOf":[{"$ref":"#/$defs/uuid"},{"type":"null"}]},"itemId":{"oneOf":[{"$ref":"#/$defs/uuid"},{"type":"null"}]},
+            "disposition":{"enum":["revised","unchanged","removed","retained","added"]},"explanation":{"type":"string","minLength":1,"maxLength":4096,"pattern":"\\S"}}}}}
+    },
     "packet": {
       "type": "object",
       "additionalProperties": false,
@@ -330,6 +338,7 @@
         "dependencies": {
           "$ref": "#/$defs/references"
         },
+        "followup":{"$ref":"#/$defs/reviewFollowup"},
         "informationGaps": {
           "$ref": "#/$defs/texts"
         }
@@ -353,6 +362,14 @@
     },
     "answer": {
       "oneOf": [
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["kind", "reason"],
+          "properties": {
+            "kind": {"const": "reject-with-reason"},
+            "reason": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "\\S"}
+          }
+        },
         {
           "type": "object",
           "additionalProperties": false,
@@ -2589,6 +2606,7 @@
             }
           ]
         },
+        "followupJSON":{"type":"string","maxLength":4194304},
         "materials": {
           "type": "array",
           "items": {

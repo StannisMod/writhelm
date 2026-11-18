@@ -48,8 +48,9 @@ export function validateRetained(profile: Json) {
     closed(c.payload, ["requestId", "requestDigest", "packetDigest", "answer"])
     requireThat(uuid.test(c.payload.requestId) && digest.test(c.payload.requestDigest) && digest.test(c.payload.packetDigest), "PROTECTION_FAILED")
     const a = c.payload.answer
-    requireThat(["approve", "reject", "changes-required"].includes(a.kind), "PROTECTION_FAILED")
-    closed(a, a.kind === "changes-required" ? ["kind", "comments"] : ["kind"])
+    requireThat(["approve", "reject", "reject-with-reason", "changes-required"].includes(a.kind), "PROTECTION_FAILED")
+    closed(a, a.kind === "changes-required" ? ["kind", "comments"] : a.kind==="reject-with-reason"?["kind","reason"]:["kind"])
+    if(a.kind==="reject-with-reason")requireThat(typeof a.reason==="string"&&a.reason.isWellFormed()&&!!a.reason.trim()&&Buffer.byteLength(a.reason)<=4096,"PROTECTION_FAILED")
     if (a.kind === "changes-required") {
       requireThat(Array.isArray(a.comments) && a.comments.length > 0 && a.comments.length <= 16, "PROTECTION_FAILED")
       for (const comment of a.comments) { closed(comment, ["itemId", "text"]); requireThat(uuid.test(comment.itemId) && typeof comment.text === "string" && comment.text.trim() && Buffer.byteLength(comment.text) <= 4096, "PROTECTION_FAILED") }

@@ -1,6 +1,6 @@
 # H1 — governed agent workflow inside OpenCode
 
-Contract K-HARNESS, revision 7. Status: H1 boundary, practical-control, connected-work coordination, deterministic correction, grouped delivery, owner-directed vertical-journey and chat-bound planner/document-only coordination amendments approved,
+Contract K-HARNESS, revision 8. Status: H1 boundary, practical-control, connected-work coordination, deterministic correction, grouped delivery, owner-directed vertical-journey, chat-bound planner/document-only coordination and role-completion/native approval UX amendments approved,
 including initial cooperative execution. Component implementation/qualification still required. First user-pilot
 target, not a claim of implemented orchestration or acceptance of the whole draft specification.
 
@@ -135,7 +135,14 @@ with explicit dependency/readiness relations and exact contracts. Required owner
 remain owner decisions; the harness must not treat a proposed design as approved merely because
 implementation is waiting.
 
-The harness itself schedules and launches every eligible implementation task with maximum available
+Before first implementation launch, the planner completes the planning outcome in H1-11: obtain
+the required exact contract approvals, show the concise implementation/dependency graph and ask
+the owner for execution order. Retain that choice against the exact chat/controller and applicable
+task/plan revisions. Contract approval alone is not launch-order authorization. Owner ordering may
+deliberately constrain parallelism; display it as owner ordering, not an invented dependency.
+Changes outside the selected scope/order require the applicable decision, not silent expansion.
+
+Within that authorized order/scope, the harness itself schedules and launches every eligible implementation task with maximum available
 parallelism, subject to its dependencies/readiness, resource claims, configured capacity and actual
 runtime/authority constraints. It must not serialize unrelated ready tasks merely because they were
 listed sequentially, nor wait for an unrelated slow task to finish before starting newly eligible
@@ -204,6 +211,51 @@ This is a binding architectural invariant, not evidence of implementation. Concr
 service-lifetime, migration and recovery mechanisms still require their scoped design/qualification;
 existing execution/retention, current-authority and K-RUN gates remain unchanged.
 
+## H1-11 — Outcome-complete roles, without native Goal UI
+
+Each role must pursue its authorized outcome to completion. Announcing the next known actionable
+step is not completion and must not require a routine owner nudge. Stop/wait only for an actual
+owner decision, external dependency, explicit pause, missing authority/resource, failure/unknown
+outcome or technical execution limit; retain the blocker, exact unfinished operations and resumption
+point. Do not continue through a refusal, replay an uncertain effect as new, or loop model calls
+without progress. Native Goal UI/state is not used as this workflow's authority or user surface.
+
+Planner's planning outcome is all necessary scoped tasks and contract(s), required owner approval
+of their exact versions, a concise implementation/dependency graph, and an explicit question about
+execution order before launch. Contracts may be presented as a coherent exact approval set; this
+does not require owner approval of each routine technical step. Unresolved branches remain visibly
+draft/blocked, not falsely complete. After the owner's decision, continue the authorized workflow
+without an additional nudge, subject to H1-09 and all independent gates.
+
+Worker's outcome is the scoped task result, actual checks/evidence, durable exact-result report and
+explicit remaining blockers, not merely an implementation plan or success announcement. Reviewer's
+outcome is a complete assessment of the exact relevant diff against the task/contracts, with coverage,
+evidence, concrete requirement-linked findings and disposition. A reviewer cannot edit assessed
+code, treat checks alone as semantic review, or claim unseen material was reviewed.
+
+## H1-12 — Readable exact references and native approval presentation
+
+Adapter-managed references hide manual hash construction while retaining immutable exact identity,
+current access checks and original operation IDs. A retained reference must never silently resolve
+to a newer revision. Missing/stale/ambiguous/cross-project references refuse explicitly.
+
+Model-facing reads present readable source text with compact necessary metadata and exact references,
+not full transport JSON by default. Preserve all required source text, provenance, completeness/
+pagination and normative/proposed status; optional detail may be loaded separately. Presentation
+must not truncate mandatory obligations or convert untrusted document text into tool instructions.
+Canonical wire/storage formats and digest verification remain unchanged unless separately designed.
+
+Creating/confirming an approval request should open that exact request in the native panel of its
+originating chat and project. A fallback reference remains available, but is not proof that the
+panel opened or loaded. Automatically resolve the protected project-bound approval client without
+exposing owner credentials to model tools. Never fall back to another project's profile. Ordinary
+approval shows the readable exact contract/decision and explicit choices, not administrative setup;
+configuration failures are visible blockers. Only an explicit owner action submits the exact answer.
+
+Localize user-visible tool labels and approval UI while preserving programmatic tool IDs. Verify
+the installed host's supported presentation API before selecting a mechanism; do not invent a
+display-name field or change unrelated user-wide harness configuration.
+
 ## Next component designs and approval scope
 
 Prepare K-TASK, dispatch/claims/external-effect binding, mandatory context/execution profiles,
@@ -213,6 +265,13 @@ H1 approval does not approve unspecified schemas, new capability semantics, runt
 second-harness/provider coverage or blanket source publication.
 
 ## Approval provenance
+
+Revision 8 records the owner's approval on 2026-11-17 of the disclosed role-completion, launch-order,
+readable exact-reference, project-bound native approval and localization package, with direction to
+record it and check prerequisites. These are accepted requirements, not implemented/verified behavior.
+Concrete missing host APIs, authority/profile routing, durable continuation and compatibility details
+remain explicit readiness gates. No live-model calls, decisions on the owner's case, integration,
+commit/push or private-material publication are authorized by this amendment.
 
 On 2026-11-05 owner explicitly approved the conversational H1 boundary with “границу H1 утверждаю”.
 The disclosed decision was full governed-agent pilot scope and separation of canonical service

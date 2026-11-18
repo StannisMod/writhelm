@@ -7,8 +7,75 @@ import type { Plugin } from "@opencode/plugin"
 import type { ToolContext } from "@opencode/plugin/promise/tool"
 import { boundedWorkChannel, boundedDispatchAttemptChannel, LinuxWorkRequestCustody, registerConnectedWorkTools } from "../src/connected-tools.js"
 import { exactJSON } from "../src/strict-json.js"
+import { OwnerOrderHold } from "../src/native-owner-order.js"
 
 type MockTool = { name: string; execute(input: unknown, actual: ToolContext): Promise<{ content?: unknown }> }
+test("operation help specializes only the requesting chat's work schema; typed executor retains exact Int64 wire",async()=>{
+  const tools=new Map<string,any>(),sent:string[]=[];let hook!:(event:any)=>void
+  const id="00000000-0000-0000-0000-000000000001"
+  const ctx={
+    session:{hook:async(_name:string,callback:any)=>{hook=callback;return {dispose:async()=>{}}}},
+    tool:{reload:async()=>{},transform:async(callback:any)=>{
+      callback({add:(t:any)=>tools.set(t.name,t)})
+      return {dispose:async()=>{}}
+    }},
+  } as unknown as Plugin.Context
+  const registered=await registerConnectedWorkTools(ctx,{resolve:async()=>({scope:"controller",projectID:id,
+    send:async(_route,raw)=>{sent.push(raw);return '{"kind":"settled"}'}})})
+  try{
+    const actual={sessionID:"ses_typed",signal:new AbortController().signal} as ToolContext
+    await tools.get("writhelm_work_contract").execute({kind:"commands",operation:"update_plan"},actual)
+    const a={sessionID:"ses_typed",tools:{writhelm_work_command:{input:{}}}},b={sessionID:"ses_other",tools:{writhelm_work_command:{input:{}}}}
+    hook(a);hook(b)
+    assert.equal((a.tools.writhelm_work_command.input as any).properties.operation.const,"update_plan")
+    assert.equal((b.tools.writhelm_work_command.input as any).properties.operation.const,undefined)
+    const payload={key:{projectId:id,id,revision:"0"},task:{projectId:id,taskId:id,revision:"0"},
+      expectedGeneration:"9223372036854775807",steps:[],reason:"Exact typed plan",previousCheckpoint:null,bodies:[],assignment:null}
+    const result=await tools.get("writhelm_work_command").execute({operation:"update_plan",requestKey:id,payload},actual)
+    assert.equal(JSON.parse(result.content).kind,"settled")
+    assert.ok(sent[0]!.includes('"expectedGeneration":9223372036854775807'))
+    await tools.get("writhelm_work_command").execute({operation:"update_plan",requestKey:id,payload:{...payload,owner:"wrong"}},actual)
+    assert.equal(sent.length,1,"excess typed authority fields refuse before dispatch")
+  }finally{await registered.dispose()}
+})
+test("raw launch-command preflight runs on retained originals including replay before HTTP effects",async()=>{
+  const base=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(base)
+  const root=await fs.mkdtemp(path.join(base,"launch-command-")),work=path.join(root,"work");await fs.mkdir(work)
+  const custody=new LinuxWorkRequestCustody(path.join(root,"requests"),[work])
+  const project="00000000-0000-0000-0000-000000000002",key="00000000-0000-0000-0000-000000000003"
+  const raw=` {"formatVersion":3,"projectId":"${project}","requestKey":"${key}","operation":"reserve_assignment","payload":{}} `
+  let posts=0,checks=0
+  const channel=boundedWorkChannel(project,"controller","http://127.0.0.1:18679","wh1.synthetic",4096,custody,"binding",
+    async()=>{posts++;return new Response('{"kind":"error","code":"FORBIDDEN"}')})
+  const tools=new Map<string,MockTool>()
+  const ctx={tool:{reload:async()=>{},transform:async(callback:any)=>{
+    callback({add:(tool:MockTool)=>tools.set(tool.name,tool)});return {dispose:async()=>{}}
+  }}} as unknown as Plugin.Context
+  const registered=await registerConnectedWorkTools(ctx,{resolve:async()=>channel},undefined,undefined,async original=>{
+    checks++;assert.equal(original,raw);throw new OwnerOrderHold("OWNER_ORDER_REQUIRED")
+  })
+  try{
+    const actual={sessionID:"ses_launch",id:"call_launch",messageID:"msg_launch",signal:new AbortController().signal} as unknown as ToolContext
+    for(let i=0;i<2;i++)assert.match(String((await tools.get("writhelm_work_command")!.execute({json:raw},actual)).content),/OWNER_ORDER_REQUIRED/)
+    assert.equal(checks,2);assert.equal(posts,0)
+    const retained=await fs.readdir(path.join(root,"requests"));assert.equal(retained.length,1)
+  }finally{await registered.dispose()}
+})
+test("bound malformed work listing reports its contract while unbound reads remain unavailable",async()=>{
+  const tools=new Map<string,MockTool>();let sent=0
+  const ctx={tool:{transform:async(callback:any)=>{callback({add:(tool:MockTool)=>tools.set(tool.name,tool)});return {dispose:async()=>{}}},reload:async()=>{}}} as unknown as Plugin.Context
+  await registerConnectedWorkTools(ctx,{resolve:async actual=>actual.sessionID==="ses_bound"?{
+    scope:"controller",projectID:"project",send:async()=>{sent++;return '{"kind":"read","data":{"items":[]}}'}
+  } as never:undefined})
+  const actual={sessionID:"ses_bound",signal:new AbortController().signal} as unknown as ToolContext
+  const tool=tools.get("writhelm_work_read")!
+  const invalid=await tool.execute({json:'{"projectId":"project","operation":"list"}',format:"canonical"},actual)
+  assert.equal(JSON.parse(String(invalid.content)).code,"INVALID_WORK_READ_INPUT");assert.equal(sent,0)
+  const valid=await tool.execute({json:'{"formatVersion":2,"projectId":"project","operation":"list_work_records","subject":{"family":"task-heads","taskId":null,"pageSize":32,"cursor":null}}',format:"canonical"},actual)
+  assert.equal(JSON.parse(String(valid.content)).kind,"read");assert.equal(sent,1)
+  const denied=await tool.execute({json:'{"operation":"list"}',format:"canonical"},{...actual,sessionID:"ses_unbound"} as unknown as ToolContext)
+  assert.equal(JSON.parse(String(denied.content)).code,"WORK_UNAVAILABLE_OR_FORBIDDEN")
+})
 test("MOCK native tool uses actual ToolContext, exact Int64 request bytes, protected original custody and no owner/actor argument", async () => {
   const configured = process.env.WRITHELM_NATIVE_TEST_ROOT
   assert.ok(configured); await fs.mkdir(configured, { recursive: true })
@@ -54,6 +121,13 @@ test("shared strict parser retains legacy scalar/UTF8/duplicate refusal without 
   assert.equal(decoded.n.value, "9223372036854775807")
   for (const text of ['{"n":1.0}', '{"n":1e0}', '{"n":-0}', '{"x":1,"\\u0078":2}', '{"s":"\\ud800"}', '\ufeff{}'])
     assert.throws(() => exactJSON(text, fail))
+})
+
+test("bounded transport does not strip an outer JSON BOM before exact read validation",async()=>{
+  const channel=boundedWorkChannel("project","controller","http://127.0.0.1:18679","wh1.synthetic",4096,
+    {retain:async(_b,_k,raw)=>raw},"synthetic binding",async()=>new Response('\ufeff{"kind":"error","code":"FORBIDDEN"}'))
+  await assert.rejects(channel.send("reads",'{"formatVersion":2,"projectId":"project","operation":"list_work_records","subject":{}}',
+    new AbortController().signal))
 })
 
 test("result preflight sees retained original before effects and replay never repeats effect",async()=>{

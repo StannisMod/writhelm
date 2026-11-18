@@ -23,6 +23,7 @@ import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { NativeSessionToolRouter } from "../src/native-runtime.js"
 import { registerAutomaticClientUI } from "../src/primary-tui.js"
+import { ApprovalDelivery } from "../src/approval-delivery.js"
 
 const id="00000000-0000-0000-0000-000000000001"
 test("native UI persists ordinary sessions and recovers an uncertain creation without a second create",async()=>{
@@ -386,6 +387,23 @@ test("automatic provisioning retains explicit execution policy separately and re
   await assert.rejects(provisionAutomaticPrimary({...config,executionDeployments:[]}))
   assert.equal(await custody.read("automatic-execution-deployments","current"),policy)
 })
+test("read-contract addition preserves original bootstrap and refuses replacement of existing contracts",async()=>{
+  const f=await executionInstallation()
+  const config={root:path.join(f.area,"read-contract-upgrade"),forbiddenAreas:[f.work],storeId:id,
+    serviceOrigin:"http://127.0.0.1:18671",nativeOrigin:"http://127.0.0.1:18672",
+    nativeRegistrationFile:path.join(f.area,"registration.json"),clientPolicyFile:path.join(f.area,"profile/opencode.json"),
+    plugin:path.join(f.area,"plugin"),schemas:{"work-command3":"original command contract"}}
+  await provisionAutomaticPrimary(config)
+  const custody=new LinuxNativeCustody(path.join(config.root,"bootstrap"),[f.work]);await custody.initialize()
+  const original=await custody.read("automatic-bootstrap","current")
+  const read=contextJSON({formatVersion:1,kind:"canonical-codec-source-v1",namespace:"knowledge-read1",files:[]})
+  await provisionAutomaticPrimary({...config,schemas:{...config.schemas,"knowledge-read1":read}})
+  assert.equal(await custody.read("automatic-bootstrap","current"),original)
+  assert.equal(await custody.read("read-contract","knowledge-read1"),read)
+  await assert.rejects(provisionAutomaticPrimary({...config,schemas:{"work-command3":"changed command contract","knowledge-read1":read}}))
+  await assert.rejects(provisionAutomaticPrimary({...config,schemas:{...config.schemas,"unknown-new-contract":"not approved"}}))
+  assert.equal(await custody.read("automatic-bootstrap","current"),original)
+})
 test("Linux native identity uses OS hostname while retaining PID, origin and executable pins",async()=>{
   const origin="http://127.0.0.1:18671"
   const info={version:"2.2.5",pid:process.pid,hostname:hostname(),urls:[origin],paths:{tmp:"/synthetic"}}
@@ -545,33 +563,78 @@ test("package server entrypoint refuses absent trusted bootstrap instead of pres
   try{await assert.rejects(Promise.resolve().then(()=>primaryServer.setup({app:{version:"2.2.5"}} as unknown as Plugin.Context)))}
   finally{if(previous!==undefined)process.env.WRITHELM_PRIMARY_ROOT=previous}
 })
-async function fixture() {
+async function fixture(withApproval=false) {
   const base=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(base)
   const root=await fs.mkdtemp(path.join(base,"primary-")),work=path.join(root,"work")
   await fs.mkdir(work);await fs.writeFile(path.join(work,"README.md"),"existing project, read-only")
   await installFreshPrimaryPolicy(work)
   const hooks=new Map<string,(event:any)=>Promise<void>>(),tools=new Map<string,any>(),sessions=new Map<string,any>()
-  let readable=true,scope:"controller"|"assignment"="controller",binds=0
+  let readable=true,scope:"controller"|"assignment"="controller",binds=0,knowledgeReads=0
   const bound=new Set<string>()
   for(const sessionID of ["ses_primary","ses_competitor","ses_child"])
     sessions.set(sessionID,{id:sessionID,location:{directory:work},parentID:sessionID==="ses_child"?"ses_primary":undefined,permissions:[]})
   const hook=(domain:string)=>(name:string,callback:(event:any)=>Promise<void>)=>{
     hooks.set(domain+":"+name,callback);return Promise.resolve({dispose:async()=>{hooks.delete(domain+":"+name)}})
   }
+  let knowledgeReply=contextJSON({formatVersion:1,kind:"read",operation:"list_documents",basis:{algorithm:"sha1",hex:"a".repeat(40)},
+    data:{snapshotId:id,nextCursor:null,complete:true,items:[]}})
   const registry={scopeKind:(id:string)=>bound.has(id)?scope:undefined,bound:(id:string)=>bound.has(id),
     restore:async()=>false,
     bind:async(sessionID:string)=>{binds++;bound.add(sessionID)},inspect:async()=>({scope,credentialId:id}),
-    sourceIdentity:async()=>{if(!readable)throw Error("MOCK current READ withdrawn");return {scope,projectId:id,controllerId:id}}} as unknown as NativeCredentialRegistry
+    sourceIdentity:async()=>{if(!readable)throw Error("MOCK current READ withdrawn");return {scope,projectId:id,controllerId:id}},
+    planningKnowledgeChannel:async(actual:any)=>({scope,projectID:id,readBinding:contextJSON({
+      storeId:id,projectId:id,controllerId:id,sessionID:actual.sessionID,principalId:id,scope,
+      delegationId:null,assignmentId:null,executionGeneration:null,bindingJSON:null}),
+      send:async()=>{knowledgeReads++;return knowledgeReply}})} as unknown as NativeCredentialRegistry
   const ctx={app:{version:"2.2.5"},location:{directory:work},
     session:{get:async({sessionID}:{sessionID:string})=>sessions.get(sessionID),context:async()=>[],
       update:async({sessionID,permissions}:{sessionID:string;permissions:unknown})=>{sessions.get(sessionID).permissions=permissions},hook:hook("session")},
     permission:{hook:hook("permission")},tool:{hook:hook("tool"),reload:async()=>{},
       transform:async(callback:(editor:any)=>void)=>{callback({add:(t:any)=>tools.set(t.name,t)});return {dispose:async()=>tools.clear()}}}} as unknown as Plugin.Context
-  const governor=await registerPrimaryGovernor(ctx,registry,new LinuxNativeCustody(path.join(root,"private"),[work]),
-    {workRoot:work,controllerId:id,controllerCredentialId:id,projectId:id,schemas:{"work-command3":"synthetic schema fixture"}})
+  const custody=new LinuxNativeCustody(path.join(root,"private"),[work]);await custody.initialize()
+  const delivery=new ApprovalDelivery(custody)
+  const governor=await registerPrimaryGovernor(ctx,registry,custody,
+    {workRoot:work,controllerId:id,controllerCredentialId:id,projectId:id,schemas:{"work-command3":"synthetic schema fixture"},
+      ...(withApproval?{approvalDelivery:delivery}:{})})
   const invoke=(name:string,event:any)=>hooks.get(name)!(event)
-  return {root,work,hooks,tools,sessions,governor,invoke,binds:()=>binds,revoke:()=>{readable=false},assignment:()=>{scope="assignment"}}
+  return {root,work,hooks,tools,sessions,governor,invoke,delivery,reply:(raw:string)=>{knowledgeReply=raw},binds:()=>binds,knowledgeReads:()=>knowledgeReads,revoke:()=>{readable=false},assignment:()=>{scope="assignment"}}
 }
+
+test("approval tool resolves exact digests itself, retains originating chat and rechecks current access",async()=>{
+  const f=await fixture(true)
+  try{
+    await f.invoke("session:prompt",{sessionID:"ses_primary",messageID:"msg_review",prompt:{text:"Prepare the contract"}})
+    const tool=f.tools.get("writhelm_open_approval"),actual={sessionID:"ses_primary",signal:new AbortController().signal}
+    f.reply(contextJSON({kind:"read",operation:"read_request",data:{record:{family:"requests",key:id,payload:{
+      projectId:id,requestDigest:"a".repeat(64),packetDigest:"b".repeat(64)}}}}))
+    const result=await tool.execute({requestId:id},actual)
+    assert.match(result.content,/requested/);assert.match(result.content,/not approval/)
+    assert.equal(result.content.includes("a".repeat(64)),false)
+    assert.match(result.metadata.writhelmReviewReference,/^writhelm-review\/v1\//)
+    assert.equal((await f.delivery.current("ses_primary",id))?.requestDigest,"a".repeat(64))
+    assert.equal(await f.delivery.current("ses_competitor",id),undefined)
+    await assert.rejects(tool.execute({requestId:id,requestDigest:"c".repeat(64)},actual))
+    f.reply(contextJSON({kind:"read",operation:"read_request",data:{record:{family:"requests",key:id,payload:{
+      projectId:"00000000-0000-0000-0000-000000000002",requestDigest:"a".repeat(64),packetDigest:"b".repeat(64)}}}}))
+    await assert.rejects(tool.execute({requestId:id},actual))
+    f.revoke();await assert.rejects(tool.execute({requestId:id},actual))
+  }finally{await f.governor.close()}
+})
+
+test("malformed knowledge listing points to its read contract, not service unavailability",async()=>{
+  const f=await fixture()
+  try{
+    await f.invoke("session:prompt",{sessionID:"ses_primary",messageID:"msg_read",prompt:{text:"Inspect current project"}})
+    const tool=f.tools.get("writhelm_knowledge_read"),actual={sessionID:"ses_primary",signal:new AbortController().signal}
+    assert.match(tool.description,/knowledge-read1/)
+    const invalid=await tool.execute({json:JSON.stringify({projectId:id,operation:"list"})},actual)
+    assert.match(invalid.content,/INVALID_READ_INPUT/);assert.equal(f.knowledgeReads(),0)
+    const valid=await tool.execute({json:JSON.stringify({formatVersion:1,projectId:id,operation:"list_documents",subject:{cursor:null,pageSize:32}}),format:"canonical"},actual)
+    assert.equal(JSON.parse(valid.content).kind,"read");assert.equal(f.knowledgeReads(),1)
+    f.revoke()
+    await assert.rejects(tool.execute({json:'{"operation":"list"}'},actual))
+  }finally{await f.governor.close()}
+})
 
 test("ordinary broad primary prompt binds once, preserves owner input and cannot dispatch cached shell/patch/subagent",async()=>{
   const f=await fixture()

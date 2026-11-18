@@ -9,6 +9,27 @@ Task: [DESIGN-009](../tasks/DESIGN-009.md). Dependencies: [K-CODEC](state-codec.
 [K-WORKFLOW](knowledge-workflow.md), [T1/U1](../design/approval-interface.md).
 Existing domain laws, command bytes/fingerprints and atomicity remain unchanged.
 
+### Owner-approved typed model boundary
+
+Ordinary model clients consume typed operation inputs and bounded operation/definition help, not
+whole implementation-source bundles or unrestricted JSON strings. Structural declarations generate
+model-facing schemas and guard service structural admission; typed domain construction, exact wire
+encoding, current authority, graph/history and publication laws remain independent checks.
+
+Document authors explicitly supply permanent clause IDs, human titles and exact text. The adapter
+deterministically renders the declared format and computes UTF-8 partitions/digests, then verifies
+the actual proposed immutable revision through the service. It never infers clauses from prose or
+changes content/approval semantics. Exact read references are freshly resolved to canonical targets
+under their original chat/scope; no latest fallback, cached authorization or owner credential.
+
+Stable logical operation identities and protected original bytes survive uncertain effects.
+Per-chat operation-help selection may specialize outgoing tool schemas; this is disposable
+presentation state, never a shared planner, execution permit or canonical knowledge cache.
+Int64 fields that cannot be represented safely by tool JSON numbers use exact decimal strings at
+the model boundary only; the adapter restores original integer wire encoding without rounding.
+Full source retrieval is optional diagnostic material, addressed/paged through the same tool and
+never dependent on filesystem access to a harness spill file.
+
 ## Revision-3 owner correction — presenter inside the harness
 
 The owner explicitly requires review inside the coding harness through a plugin, extension, panel

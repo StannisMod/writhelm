@@ -7,6 +7,12 @@ import { NativeRuntimeClient, NativeRuntimeReadHold, nativeUnavailable } from ".
 import { LinuxNativeCustody } from "./native-runtime-custody.js"
 import { createNativeCredentialRegistry } from "./native-host-identity.js"
 import { LinuxWorkRequestCustody, registerConnectedWorkTools } from "./connected-tools.js"
+import { ModelReads } from "./model-read.js"
+import { NativeOwnerOrder, OwnerOrderHold } from "./native-owner-order.js"
+import { NativeLaunchAdmission } from "./native-launch-admission.js"
+import { NativeRoleContinuation } from "./native-role-continuation.js"
+import { NativePlannerActivity, NativePlannerProgress } from "./native-planner-progress.js"
+import { NativePlannerWait } from "./native-planner-wait.js"
 import { ProtectedNativeBridge } from "./native-bridge.js"
 import { ConnectedNativeAdapter } from "./connected-native.js"
 import { listenNativeTransport } from "./native-transport.js"
@@ -90,6 +96,7 @@ export type NativeRuntimeConfiguration = Readonly<{
   controllerSessionID: string; assignmentSessionIDs: readonly string[]
   serviceProof: Uint8Array; transportProof: Uint8Array
   activationStage?:(stage:string)=>Promise<void>
+  ownerOrderRoot?:string
   /** Trusted bootstrap-selected candidate/check execution adapter. No default command runner or
    * implicit platform qualification; absent profile leaves delivery unavailable. */
   candidateDelivery?:Readonly<{profile:CandidateDeliveryProfile;pollMillis:number;
@@ -248,7 +255,16 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
   const controller = await registry.inspect(config.controllerSessionID)
   if (!controller || controller.scope !== "controller") nativeUnavailable()
   await config.activationStage?.("runtime-controller-inspected")
-  const bridge = new ProtectedNativeBridge(registry, custody, config.controllerSessionID, config.hostId)
+  const orderCustody=new LinuxNativeCustody(path.join(config.ownerOrderRoot??config.root,"owner-orders"),forbidden)
+  await orderCustody.initialize()
+  const launchAdmission=new NativeLaunchAdmission(new NativeOwnerOrder(orderCustody,{
+    storeId:config.storeId,projectId:config.projectId,controllerId:config.controllerId,sessionID:config.controllerSessionID}),
+    registry,config.controllerSessionID,config.projectId)
+  const bridge = new ProtectedNativeBridge(registry, custody, config.controllerSessionID, config.hostId,async sessionID=>{
+    const frame=await registry.workerContext(sessionID)
+    await launchAdmission.assignment({projectId:config.projectId,id:frame.assignmentId},BigInt(frame.recordGeneration),
+      new AbortController().signal)
+  })
   const sources = new NativeContextSources(registry, custody)
   await Promise.all([...new Set([...restored, ...config.assignmentSessionIDs])].map(sessionID => bridge.manage(sessionID)))
   const adapter = new ConnectedNativeAdapter(ctx, native.session, bridge, config.hostId)
@@ -264,8 +280,10 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
     const binding=await registry.inspect(event.sessionID);if(!binding)nativeUnavailable()
     await nativeContextAdmission(config.root,config.hostId,binding.workRoot).request(event)
   },checkContextPolicy,(sessionID,bindingJSON)=>adapter.sameBindingCooperativelyPaused(sessionID,bindingJSON),
-    (sessionID,bindingJSON)=>adapter.continuedPacketMatches(sessionID,bindingJSON))
-  const initialStart=new NativeInitialStart(registry,initial,custody,deployment,config.controllerSessionID,config.projectId)
+    (sessionID,bindingJSON)=>adapter.continuedPacketMatches(sessionID,bindingJSON),
+    assignment=>{const a=assignment as {key:unknown;generation:unknown}
+      return launchAdmission.assignment(a.key,a.generation,new AbortController().signal)})
+  const initialStart=new NativeInitialStart(registry,initial,custody,deployment,config.controllerSessionID,config.projectId,launchAdmission)
   let automaticReview:NativeAutomaticCandidateReview|undefined
   const candidateReview=new NativeCandidateReviewLifecycle(registry,initialStart,custody,config.controllerSessionID,config.projectId,
     (profile,candidate,selection,signal)=>{
@@ -286,6 +304,43 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
   const closeDelivery=async()=>{await deliveryLoop?.close()}
   let reference:RuntimeReference|undefined
   let transport: Awaited<ReturnType<typeof listenNativeTransport>> | undefined
+  const plannerStore=new LinuxNativeCustody(path.join(config.root,"planner-state"),forbidden);await plannerStore.initialize()
+  const plannerActivity=new NativePlannerActivity(plannerStore,{storeId:config.storeId,projectId:config.projectId,
+    controllerId:config.controllerId,sessionID:config.controllerSessionID})
+  const plannerProgress=new NativePlannerProgress(plannerActivity,registry,launchAdmission.order)
+  let plannerWait:NativePlannerWait|undefined
+  let roleHook:{dispose():Promise<void>}|undefined
+  const roles=new NativeRoleContinuation(custody,async sessionID=>{
+    if(sessionID===config.controllerSessionID){
+      if(plannerWait&&!await plannerWait.permitted())nativeUnavailable()
+      return plannerProgress.observe(new AbortController().signal)
+    }
+    if((await registry.inspect(sessionID))?.scope!=="assignment")return
+    const frame=await registry.workerContext(sessionID)
+    if(frame.nativeReady&&!frame.finishedHandoff)
+      await launchAdmission.assignment({projectId:config.projectId,id:frame.assignmentId},BigInt(frame.recordGeneration),
+        new AbortController().signal)
+    return {assignmentId:frame.assignmentId,executionGeneration:frame.executionGeneration,bindingJSON:frame.bindingJSON,
+      nativeReady:frame.nativeReady,finishedHandoff:frame.finishedHandoff,planJSON:frame.planJSON,checkpointJSON:frame.checkpointJSON}
+  },async input=>{
+    if(input.sessionID===config.controllerSessionID){
+      if(plannerWait&&!await plannerWait.permitted())nativeUnavailable()
+      if(!await registry.controllerPlanningAdmission(input.sessionID,new AbortController().signal))nativeUnavailable()
+    }
+    return ctx.session.synthetic(input)
+  })
+  plannerWait=new NativePlannerWait(plannerStore,plannerActivity.scope,controller.workRoot,async()=>{
+    const binding=await registry.inspect(config.controllerSessionID)
+    if(binding?.scope!=="controller")nativeUnavailable()
+    const actual=await native.session.get({sessionID:config.controllerSessionID})
+    return {id:actual.id,directory:actual.location.directory,busy:actual.time.busy,idle:actual.time.idle,outcome:actual.outcome,
+      archived:actual.time.archived!==undefined,reverted:actual.revert!==undefined,
+      binding:contextJSON({hostId:binding.hostId,epoch:binding.epoch,sessionID:binding.sessionID,controllerId:config.controllerId})}
+  },roles)
+  let orderTimer:ReturnType<typeof setInterval>|undefined,orderWork:Promise<void>|undefined,orderClosed=false
+  const orderAbort=new AbortController()
+  let orderStatus="waiting-owner-order"
+  const closeOrder=async()=>{orderClosed=true;if(orderTimer)clearInterval(orderTimer);orderAbort.abort();await orderWork}
   let preparationTool:{dispose():Promise<void>}|undefined,tools:{dispose():Promise<void>}|undefined
   try {
   const passiveRaw=await deployment.read("passive-profile","current")
@@ -305,13 +360,13 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
         if(await deployment.read("execution-profile",profileKeyJSON)!==undefined)return
         await provisionHarnessExecutionDeployment({root:config.root,projectId:config.projectId,
           forbiddenAreas:[controller.workRoot,p.worktreeParent],sessionID:config.controllerSessionID,
-          workRoot:controller.workRoot,profileRecordJSON},native)
-      })
+           workRoot:controller.workRoot,profileRecordJSON},native)
+       },(selection,signal)=>launchAdmission.preparation(selection,signal))
     // This instance supplies only immutable proof. Effect dispatch is bound to the actual worker
     // below and still requires a separately qualified service permit, denied by default.
     retentionProof=new NativeResultRetention(controller.workRoot,custody,witness,async()=>false,async()=>false)
     preparations=new NativeWorkerPreparation(registry,workers,custody,config.controllerSessionID,
-      {projectId:config.projectId,controllerId:config.controllerId,hostId:config.hostId,worktreeParent:p.worktreeParent})
+      {projectId:config.projectId,controllerId:config.controllerId,hostId:config.hostId,worktreeParent:p.worktreeParent},launchAdmission)
     automaticReview=new NativeAutomaticCandidateReview(registry,preparations,candidateReview,custody,config.controllerSessionID,config.projectId)
     canonicalDispatch=new CanonicalDispatchActivation(custody,config.projectId,config.controllerSessionID,
       async(planId,signal)=>{
@@ -319,7 +374,7 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
         if(typeof frame.planJSON!=="string")nativeUnavailable()
         return {planJSON:frame.planJSON}
       },
-      planId=>new NativeDispatchFrontier(registry,preparations!,initialStart,custody,config.controllerSessionID,planId,4,1000))
+      planId=>new NativeDispatchFrontier(registry,preparations!,initialStart,custody,config.controllerSessionID,planId,4,1000,launchAdmission),launchAdmission)
     const explicitChecks=await deployment.read("project-check-profile","current"),templateChecks=await deployment.read("project-check-template","current")
     if(explicitChecks!==undefined&&templateChecks!==undefined)nativeUnavailable()
     const projectChecksKind=templateChecks===undefined?"project-check-profile":"project-check-template"
@@ -360,9 +415,46 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
     await config.activationStage?.("runtime-transport-listening")
     const initialRecovery=await initial.restore() // no model wake, canonical transition or incarnation adoption
     await config.activationStage?.("runtime-initial-restored")
-    tools = await registerConnectedWorkTools(ctx, registry,resultSubmissionPreflight(registry,custody,controller.workRoot,()=>workers,()=>retentionWitness))
+    roleHook=await roles.register(ctx,sessionID=>plannerWait!.afterIdle(sessionID))
+    const modelReads=new ModelReads(new LinuxNativeCustody(path.join(config.root,"read-references"),forbidden))
+    await modelReads.initialize()
+    tools = await registerConnectedWorkTools(ctx, registry,resultSubmissionPreflight(registry,custody,controller.workRoot,()=>workers,()=>retentionWitness),modelReads,
+      async(raw,actual)=>{
+        const command=exactJSON(raw,nativeUnavailable),p=command.payload
+        const assignmentOps=["bind_assignment","rebind_assignment","replace_isolated_assignment"]
+        if(command.operation==="reserve_assignment"){
+          if(actual.sessionID!==config.controllerSessionID)nativeUnavailable()
+          await launchAdmission.preparation({task:p.task,manifest:p.manifest,profile:p.profile,resources:p.resources,
+            reviewSubjects:p.reviewSubjects},actual.signal)
+        }else if(assignmentOps.includes(command.operation)||
+          command.operation==="request_native_transition"&&["start","resume"].includes(p.transition)){
+          if(actual.sessionID!==config.controllerSessionID)nativeUnavailable()
+          await launchAdmission.assignment({projectId:config.projectId,id:p.assignmentId},p.expectedGeneration,actual.signal)
+        }
+        if(actual.sessionID===config.controllerSessionID)await plannerActivity.before(raw)
+      },async(raw,reply,actual)=>{
+        if(actual.sessionID===config.controllerSessionID)await plannerActivity.after(raw,reply)
+      })
     await config.activationStage?.("runtime-work-tools-registered")
     preparationTool=await ctx.tool.transform(editor=>{
+      editor.add({name:"writhelm_request_launch_order",
+        description:"Propose the exact dispatch plan/task graph for native owner selection; this cannot authorize launch. Empty edges preserve ready-task parallelism; explicit after edges wait for predecessor launch, not result acceptance.",
+        input:{type:"object",additionalProperties:false,required:["planId","edges"],properties:{
+          planId:{type:"string",maxLength:36},edges:{type:"array",maxItems:128,items:{
+            type:"object",additionalProperties:false,required:["taskId","after"],properties:{
+              taskId:{type:"string",maxLength:36},after:{type:"array",maxItems:128,items:{type:"string",maxLength:36}}}}}}},
+        execute:async(input,actual)=>{
+          if(actual.sessionID!==config.controllerSessionID)nativeUnavailable()
+          await registry.sourceIdentity(actual.sessionID,actual.signal)
+          const value=closedObject(input,["planId","edges"])
+          if(!uuidPattern.test(value.planId)||!Array.isArray(value.edges))nativeUnavailable()
+          for(const edge of value.edges){closedObject(edge,["taskId","after"])
+            if(!uuidPattern.test(edge.taskId)||!Array.isArray(edge.after)||edge.after.some((id:unknown)=>typeof id!=="string"||!uuidPattern.test(id)))nativeUnavailable()}
+          const call=createHash("sha256").update(contextJSON([config.controllerSessionID,actual.messageID,actual.id])).digest("hex").slice(0,32)
+          const proposalId=`${call.slice(0,8)}-${call.slice(8,12)}-${call.slice(12,16)}-${call.slice(16,20)}-${call.slice(20)}`
+          const proposal=await launchAdmission.propose(value.planId,value.edges,proposalId)
+          return {content:`Launch-order proposal ${proposal.proposalId} awaits explicit native owner selection. No launch authorized.`}
+        },options:{codemode:false}})
       editor.add({name:"writhelm_project_checks",description:"List the protected approved project-check IDs available to this controller. Plan project-check-v1 with exactly one listed ID; do not invent executables or arguments. Missing profile is an explicit hold, not permission for arbitrary shell execution.",
         input:{type:"object",additionalProperties:false,properties:{}},execute:async(input,actual)=>{
           closedObject(input,[])
@@ -413,7 +505,7 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
             if(caller?.scope!=="controller"||actual.sessionID!==config.controllerSessionID||!canonicalDispatch||dispatch)nativeUnavailable()
             await canonicalDispatch.activate(value.planId,actual.signal)
             return {content:contextJSON({phase:"dispatch-activated",planId:value.planId})}
-          }catch(error){
+            }catch(error){
             if(!(error instanceof NativeRuntimeReadHold))throw error
             return {content:contextJSON({phase:"dispatch-held",planId:value.planId,httpStatus:error.status,
               reason:error.status===429?"native-service-read-admission-limit":"native-service-read-unavailable",
@@ -470,7 +562,7 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
       if(d.formatVersion?.value!=="1"||!preparations||typeof d.planId!=="string"||
         !/^(?:[1-9]|[12][0-9]|3[0-2])$/.test(d.capacity?.value??"")||
         !/^(?:[1-9][0-9]{2,4})$/.test(d.pollMillis?.value??""))nativeUnavailable()
-      dispatch=new NativeDispatchFrontier(registry,preparations,initialStart,custody,config.controllerSessionID,d.planId,Number(d.capacity.value),Number(d.pollMillis.value))
+      dispatch=new NativeDispatchFrontier(registry,preparations,initialStart,custody,config.controllerSessionID,d.planId,Number(d.capacity.value),Number(d.pollMillis.value),launchAdmission)
       dispatch.start()
     }
     if(config.candidateDelivery){
@@ -478,8 +570,29 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
       if(!retentionWitness)nativeUnavailable()
       deliveryLoop=startCandidateDeliveryLoop(controller.workRoot,custody,retentionWitness,registry,config.controllerSessionID,selected)
     }
+    if(canonicalDispatch&&dispatchRaw===undefined){
+      const wake=()=>{
+        if(orderClosed||orderWork)return
+        orderWork=(async()=>{
+          try{
+            const current=await launchAdmission.order.current()
+            if(orderClosed)return
+            const plan=exactJSON(current.selection.planRefJSON,nativeUnavailable)
+            await canonicalDispatch!.activate(plan.key.id,orderAbort.signal)
+            orderStatus="selected-plan-activated"
+          }catch(error){orderStatus=error instanceof OwnerOrderHold?error.code:"owner-order-admission-held"}
+        })().finally(()=>{orderWork=undefined})
+      }
+      orderTimer=setInterval(wake,1000);orderTimer.unref();wake()
+    }
+    plannerWait.start()
     return Object.freeze({ registry, bridge, sources, workers, preparations, initial, initialStart, initialRecovery, dispatch,
-      get candidateDeliveryStatus(){return deliveryLoop?.status},async close() {
+      roleContinuationState:(sessionID:string)=>roles.state(sessionID),
+      get plannerWaitHold(){return plannerWait?.lastFailure},
+      get ownerOrderStatus(){return orderStatus},get candidateDeliveryStatus(){return deliveryLoop?.status},async close() {
+       await roleHook?.dispose()
+       await plannerWait?.close()
+       await closeOrder()
       if(runtimeReferences.get(config.root)===reference)runtimeReferences.delete(config.root)
       await dispatch?.close()
       await canonicalDispatch?.close()
@@ -493,6 +606,9 @@ export async function startProtectedNativeRuntime(ctx: Plugin.Context, native: O
       await bridge.close()
     } })
   } catch (error) {
+    await roleHook?.dispose()
+    await plannerWait?.close()
+    await closeOrder()
     await closeDelivery()
     await dispatch?.close()
     await canonicalDispatch?.close()

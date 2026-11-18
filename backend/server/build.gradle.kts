@@ -15,20 +15,24 @@ application {
 // The canonical codecs are the current wire-format authority, not a handwritten approximation
 // advertised as a complete JSON Schema. Ship exact public contract sources with content digests.
 val clientContractGroups = mapOf(
-    "work-command3" to listOf("work/WorkCodec.kt", "work/WorkValues.kt", "work/WorkValueRegistry.kt", "work/WorkValueDecoders.kt", "work/WorkValueEncoders.kt"),
+    "work-command3" to listOf("work/WorkCodec.kt", "work/WorkValues.kt", "work/WorkValueRegistry.kt", "work/WorkValueDecoders.kt", "work/WorkValueEncoders.kt", "codec/WorkProtocol.kt", "protocol/model-work-v1.json"),
     "work-execution-values" to listOf("work/ExecutionDescriptors.kt", "work/Model2Values.kt", "work/ResultDescriptors.kt"),
-    "knowledge-command1" to listOf("codec/CommandCodec.kt", "codec/CoreRecordCodec.kt", "codec/CoreSnapshotCodec.kt", "workflow/WorkflowRecords.kt"),
+    "knowledge-command1" to listOf("codec/CommandCodec.kt", "codec/CoreRecordCodec.kt", "codec/CoreSnapshotCodec.kt", "codec/KnowledgeProtocol.kt", "workflow/WorkflowRecords.kt", "workflow/ReviewPacket.kt"),
+    "knowledge-read1" to listOf("app/H1LegacyReads.kt", "app/H1ProtectedReads.kt", "app/H1Navigation.kt", "codec/CoreRecordCodec.kt", "knowledge/References.kt"),
+    "work-read2" to listOf("work/WorkCodec.kt", "work/WorkValues.kt", "work/WorkValueRegistry.kt", "work/WorkValueDecoders.kt", "work/WorkValueEncoders.kt", "codec/WorkProtocol.kt", "protocol/model-work-v1.json"),
     "wire-json" to listOf("codec/StrictJson.kt", "codec/WorkIdentityCodec.kt"),
 )
 val clientContractsDirectory = layout.buildDirectory.dir("generated/client-contracts")
 val generateClientContracts by tasks.registering {
     val core = layout.projectDirectory.dir("src/main/kotlin/dev/writhelm/core")
-    inputs.files(clientContractGroups.values.flatten().distinct().map { core.file(it) })
+    fun contractFile(relative:String)=if(relative=="protocol/model-work-v1.json")
+        layout.projectDirectory.file("src/main/resources/writhelm/model-work-v1.json") else core.file(relative)
+    inputs.files(clientContractGroups.values.flatten().distinct().map { contractFile(it) })
     outputs.dir(clientContractsDirectory)
     doLast {
         val contracts = clientContractGroups.mapValues { (namespace, paths) ->
             val files = paths.map { relative ->
-                val bytes = core.file(relative).asFile.readBytes()
+                val bytes = contractFile(relative).asFile.readBytes()
                 mapOf("path" to relative, "sha256" to MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) },
                     "source" to bytes.toString(Charsets.UTF_8))
             }
@@ -45,6 +49,20 @@ val generateClientContracts by tasks.registering {
 }
 sourceSets["main"].resources.srcDir(clientContractsDirectory)
 tasks.processResources { dependsOn(generateClientContracts) }
+
+val modelProtocolDirectory=layout.buildDirectory.dir("generated/model-contracts")
+val generateModelContracts by tasks.registering(JavaExec::class) {
+    dependsOn(tasks.named("compileKotlin"))
+    classpath=files(sourceSets["main"].output.classesDirs,layout.projectDirectory.dir("src/main/resources"),configurations.runtimeClasspath)
+    mainClass.set("dev.writhelm.core.codec.GenerateKnowledgeProtocol")
+    val output=modelProtocolDirectory.get().file("writhelm/model-knowledge-v1.json")
+    args(output.asFile.absolutePath)
+    outputs.file(output)
+    inputs.file(layout.projectDirectory.file("src/main/resources/writhelm/model-work-v1.json"))
+    outputs.file(modelProtocolDirectory.get().file("writhelm/model-work-export-v1.json"))
+}
+sourceSets["main"].resources.srcDir(modelProtocolDirectory)
+tasks.processResources { dependsOn(generateModelContracts) }
 
 group = "dev.writhelm"
 version = "0.1.0-SNAPSHOT"
@@ -79,6 +97,19 @@ tasks.test {
 }
 
 tasks.withType<Test>().configureEach {
+    val nativeJS = providers.environmentVariable("WRITHELM_NATIVE_JS")
+    inputs.property("nativeJSConfigured", nativeJS.isPresent)
+    if (nativeJS.isPresent) inputs.files(fileTree(nativeJS.get()) { include("**/*.js", "**/*.cjs") })
+    // Explicit model-free external adapter journey: changing its compiled driver, adapter or GUI
+    // must invalidate a prior pass/skip; a path-only environment variable is not a Gradle input.
+    val approvalClient = providers.environmentVariable("WRITHELM_APPROVAL_CLIENT")
+    inputs.property("approvalClientConfigured", approvalClient.isPresent)
+    if (approvalClient.isPresent) {
+        val driver = file(approvalClient.get())
+        inputs.file(driver)
+        inputs.files(fileTree(driver.parentFile.parentFile.resolve("src")) { include("**/*.js", "**/*.cjs") })
+        inputs.file(driver.parentFile.parentFile.parentFile.resolve("dist/gui-experimental.cjs"))
+    }
     val fixtures = layout.projectDirectory.dir("src/test/resources/h1")
     mapOf(
         "WRITHELM_H1_READY_ROOT" to "frozen",

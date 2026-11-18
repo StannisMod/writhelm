@@ -3,8 +3,9 @@
 import { isLosslessNumber } from "lossless-json"
 import { exactJSON } from "./strict-json.js"
 import { Fault, requireThat, type WorkFamily } from "./contracts.js"
+import { mutableReadFamilies } from "./read-families.js"
 
-export const mutableWorkFamilies = new Set<WorkFamily>(["task-heads", "assignments", "plans", "continuations", "integration-intents", "deliveries", "claims"])
+export const mutableWorkFamilies:ReadonlySet<WorkFamily> = mutableReadFamilies as ReadonlySet<WorkFamily>
 export function workResult(raw: string, operation?: string): any {
   const value = exactJSON(raw,() => { throw new Fault("INTEGRITY") })
   if (value.kind === "error") {

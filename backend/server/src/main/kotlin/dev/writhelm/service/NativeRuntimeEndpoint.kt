@@ -86,8 +86,9 @@ internal class NativeRuntimeEndpoint(private val app: H1Application,private val 
         val operation=decoded.entries["operation"]?.string() ?: throw ServiceFault("INVALID_INPUT",400)
         if(candidate && operation !in setOf("candidate-assembly-permit","candidate-test-plan","candidate-test-permit","candidate-delivery","candidate-review-ticket","candidate-review-report","candidate-review-status","candidate-review-preparation"))throw ServiceFault("INVALID_INPUT",400)
         val fields=when(operation) {
-            "identity","source-identity","worker-context","connect" -> decoded.fields("formatVersion","operation","projectId")
+            "identity","source-identity","worker-context","connect","controller-planning-admission" -> decoded.fields("formatVersion","operation","projectId")
             "controller-context" -> decoded.fields("formatVersion","operation","projectId","profileJSON")
+            "planner-task-progress" -> decoded.fields("formatVersion","operation","projectId","taskReferenceJSON")
             "dispatch-context" -> decoded.fields("formatVersion","operation","projectId","planId")
             "candidate-assembly-permit" -> decoded.fields("formatVersion","operation","projectId","requestJSON")
             "candidate-test-plan" -> decoded.fields("formatVersion","operation","projectId","planRefJSON")
@@ -172,7 +173,11 @@ internal class NativeRuntimeEndpoint(private val app: H1Application,private val 
         } else if(operation=="controller-context") {
             val profile=WorkIdentityCodec().decodeKey(WorkFamily.PROFILES,fields.getValue("profileJSON").string().toByteArray(Charsets.UTF_8)) as WorkKey.Profile
             app.nativeControllerContext(token,project,controller,profile)
-        } else if(operation=="worker-context")app.nativeWorkerContext(token,project,controller,host)
+        } else if(operation=="planner-task-progress"){
+            val ref=WorkIdentityCodec().decodeReference(fields.getValue("taskReferenceJSON").string().toByteArray(Charsets.UTF_8))
+            app.nativePlannerTaskProgress(token,project,controller,host,ref)
+        } else if(operation=="controller-planning-admission")app.nativeControllerPlanningAdmission(token,project,controller,host)
+        else if(operation=="worker-context")app.nativeWorkerContext(token,project,controller,host)
         else if(operation in setOf("identity","source-identity"))app.nativeRuntimeRead(token,project,controller,host,null,null,null,sourceIdentity=operation=="source-identity")
         else {
             val decimal=fields.getValue("executionGeneration").string()

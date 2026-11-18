@@ -61,7 +61,11 @@ class NativePrimaryJourneyTest {
                 process.outputStream.use { it.write(StrictJson.encode(cfg,65536)) }
                 val result=process.inputStream.readNBytes(4097)
                 assertTrue(process.waitFor(90,TimeUnit.SECONDS));assertEquals(0,process.exitValue(),Files.readString(root.resolve("client.stderr")))
-                assertEquals(JBoolean(true),(StrictJson.decode(result) as JObject).entries.getValue("draftCreated"))
+                val reply=(StrictJson.decode(result) as JObject).entries
+                assertEquals(JBoolean(true),reply.getValue("draftCreated"))
+                assertEquals(JBoolean(true),reply.getValue("plannerProgressReopened"))
+                assertEquals(JBoolean(true),reply.getValue("plannerContinuedOnce"))
+                println("PASS real service planner draft/refusal -> private current planning admission -> exact chat-bound frontier -> protected reopen -> one native continuation admission double, no model calls")
                 val state=app.coordinationCapture(plannerToken,project).work
                 assertEquals("draft",state.task(key).state)
                 assertEquals(1,connected)

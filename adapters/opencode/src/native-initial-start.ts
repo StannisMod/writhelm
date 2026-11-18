@@ -9,6 +9,7 @@ import { exactJSON } from "./strict-json.js"
 import { closedObject, nativeUnavailable, uuidPattern } from "./native-runtime-client.js"
 import { sendContext } from "./native-context-protocol.js"
 import type { BoundWorkChannel } from "./connected-tools.js"
+import type { LaunchAdmission } from "./native-launch-admission.js"
 
 const parse=(raw:string)=>exactJSON(raw,nativeUnavailable)
 const same=(a:unknown,b:unknown)=>contextJSON(a)===contextJSON(b)
@@ -20,7 +21,7 @@ type Actual=Pick<ToolContext,"sessionID"|"messageID"|"id"|"signal">
 export class NativeInitialStart {
   constructor(private readonly registry:NativeCredentialRegistry,private readonly initial:NativeInitialAdapter,
     private readonly custody:LinuxNativeCustody,private readonly deployment:LinuxNativeCustody,
-    private readonly controllerSessionID:string,private readonly projectId:string){}
+    private readonly controllerSessionID:string,private readonly projectId:string,private readonly admission?:LaunchAdmission){}
   async run(selectionJSON:string,actual:Actual,startId?:string){
     if(actual.sessionID!==this.controllerSessionID||actual.signal.aborted)nativeUnavailable()
     const channel=await this.registry.resolve(actual)
@@ -52,6 +53,7 @@ export class NativeInitialStart {
     const selection=closedObject(parse(selectionJSON),["assignment","binding"]),key=selection.assignment?.key,binding=selection.binding
     if(selection.assignment?.family!=="assignments"||key?.projectId!==this.projectId||binding?.family!=="assignment-bindings"||
       binding.key?.projectId!==this.projectId||binding.key?.assignmentId!==key.id||binding.key?.generation?.value!=="0")nativeUnavailable()
+    await this.admission?.assignment(key,selection.assignment.generation,signal)
     await this.custody.initialize()
     let id=startId
     if(id===undefined){
@@ -82,6 +84,7 @@ export class NativeInitialStart {
     const command=parse(job.requestJSON)
     if(command.operation!=="request_native_transition"||command.projectId!==this.projectId||command.payload?.transition!=="start"||
       command.payload.assignmentId!==key.id||command.payload.intentId!==job.intentId)nativeUnavailable()
+    await this.admission?.assignment(key,selection.assignment.generation,signal)
     const requested=await sendContext(channel,"commands",job.requestJSON,actual.signal)
     if(requested.kind!=="settled"||requested.outcome?.kind!=="success")return {startId:id,phase:"start-intent-held",outcome:requested}
     const subject={assignmentId:key.id,executionGeneration:"0",bindingJSON:contextJSON(binding)}
@@ -91,6 +94,7 @@ export class NativeInitialStart {
       await this.initial.prepare(subject,job.intentId);await this.initial.release(envelope.nativeSessionId)
       return {startId:id,phase:"active-admission-restored",assignmentId:key.id,intentId:job.intentId,completionAsserted:false}
     }
+    await this.admission?.assignment(key,selection.assignment.generation,signal)
     await this.initial.deliver(subject,job.intentId)
     const witness=await this.initial.witness(job.intentId)
     if(!witness?.heldJSON)await this.initial.awaitBoundary(envelope.nativeSessionId,actual.signal)
@@ -103,6 +107,7 @@ export class NativeInitialStart {
         observations:[{kind:"work",reference:binding}],bodies:[]}})
       await this.custody.retain("initial-observe-command",id,observed)
     }
+    await this.admission?.assignment(key,selection.assignment.generation,signal)
     const result=await sendContext(channel,"commands",observed,actual.signal)
     if(result.kind!=="settled"||result.outcome?.kind!=="success")return {startId:id,phase:"active-observation-held",outcome:result}
     await this.initial.release(envelope.nativeSessionId)

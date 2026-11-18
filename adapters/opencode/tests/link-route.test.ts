@@ -28,7 +28,7 @@ function fixture(reference=literal()){
  let current:any=session,contributions:any[]=[],opened:any[]=[],toasts:any[]=[],reads:any[]=[],answers=0,fileCalls=0,dispose!:()=>void,renderDispose:(()=>void)|undefined
  const bridge={status:async()=>reply('OK',{pageJSON:JSON.stringify({formatVersion:1,kind:'read',basis:{algorithm:'sha1',hex:'a'.repeat(40)},operation:'list_projects',data:{snapshotId:'00000000-0000-0000-0000-000000000777',nextCursor:null,complete:true,items:[{projectId:ref.project}]}})}),pending:async()=>reply(),
   open:async(input:any)=>{reads.push(input);return reply('OK',{handle:'00000000-0000-0000-0000-000000000899',bundleJSON:raw})},answer:async()=>{answers++;return reply()},dismiss:async()=>reply(),connect:async()=>reply(),setup:async()=>reply(),rotate:async()=>reply(),reconcile:async()=>reply()}
- const sandbox:any={console,Buffer,URL,TextDecoder,TextEncoder,document,window,setTimeout,clearTimeout,module:{exports:{}},exports:{}}
+ const sandbox:any={console,Buffer,URL,TextDecoder,TextEncoder,document,window,setTimeout,clearTimeout,setInterval,clearInterval,module:{exports:{}},exports:{}}
  sandbox.exports=sandbox.module.exports
  sandbox.require=(id:string)=>id==='@opencode/plugin/gui'?sdk:id==='solid-js'?solid:id==='effect'?effect:id==='electron'?{dialog:{}}:id==='node:child_process'?{spawn(){throw Error('No helper process in GUI route tests')}}:require(id)
  runInNewContext(readFileSync(new URL('../../dist/gui-experimental.cjs',import.meta.url),'utf8'),sandbox)

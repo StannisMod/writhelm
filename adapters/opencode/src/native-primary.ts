@@ -11,13 +11,23 @@ import { nativeUnavailable, uuidPattern, closedObject } from "./native-runtime-c
 import { primaryPermissionRules, requirePrimaryPolicy, requirePrimaryPolicyFile } from "./primary-policy.js"
 import type { NativeContextAdmission } from "./native-context-reference.js"
 import type { AutomaticEnrollmentClient, AutomaticSessionEnrollment } from "./primary-bootstrap.js"
+import type { ApprovalDelivery } from "./approval-delivery.js"
+import { ModelReads, ModelReadFault, modelReadInput } from "./model-read.js"
+import type { NativePlannerActivity } from "./native-planner-progress.js"
+import {ModelKnowledge} from "./model-knowledge.js"
+import {knowledgeProtocol,operationSchema,validateModelContract,typedKnowledgeReadInput,typedReadInput,modelContractHelp} from "./model-contracts.js"
 
-export const primaryTools = new Set(["question", "read", "writhelm_work_command", "writhelm_work_read", "writhelm_knowledge_command", "writhelm_knowledge_read", "writhelm_schema", "writhelm_prepare_worker", "writhelm_start_worker", "writhelm_activate_dispatch", "writhelm_activate_candidate", "writhelm_start_candidate_review", "writhelm_candidate_review_report", "writhelm_project_checks"])
+export const primaryTools = new Set(["question", "read", "writhelm_request_launch_order", "writhelm_open_approval", "writhelm_work_command", "writhelm_work_read", "writhelm_knowledge_command", "writhelm_knowledge_read", "writhelm_propose_document", "writhelm_request_review", "writhelm_schema", "writhelm_prepare_worker", "writhelm_start_worker", "writhelm_activate_dispatch", "writhelm_activate_candidate", "writhelm_start_candidate_review", "writhelm_candidate_review_report", "writhelm_project_checks"])
+primaryTools.add("writhelm_work_contract")
 export const primaryInstructions = `You are the Writhelm primary PLANNER, not a coding executor.
 The owner's ordinary message is the objective, not an executable implementation contract. First read applicable canonical knowledge and existing tasks. Clarify consequential missing requirements, intended users, scope, constraints and acceptance; do not invent a stack or prototype merely to start coding. Ask only questions that materially affect the work.
 New product/design meaning requires an exact canonical proposal and structured owner approval through the Writhelm native review panel. Explain the decision and surface its exact review reference. Chat assent, model output, a ready flag or a passing test is NOT that approval. Do not ask the owner to approve every ordinary technical step or delegation.
-After confirming an approval request and its exact request/packet digests, surface its native reference as standalone inline code: writhelm-review/v1/<project UUID>/<request UUID>/<request SHA256>/<packet SHA256>. Do not make it an HTTPS/file URL or Markdown link and do not invent missing digests. Wait for the canonical owner resolution, not a chat acknowledgement.
-Create separately versioned task contracts through the service: objective, exact inputs/approved design, read/write/decision scope, constraints, dependencies, acceptance, escalation, expected output and execution/verification profiles. Keep unresolved work draft. Read operation schemas before constructing canonical JSON. Service refusals are blockers, never permission to use shell or edit canonical Git.
+Successful request_approval automatically requests the exact native panel. For an existing request use writhelm_open_approval with its requestId; the adapter resolves exact digests, not you. A requested delivery is not a rendered panel, user review or approval. Report its actual status, not a claim the contract was shown. A raw exact reference is only a fallback when native delivery is held. Wait for the canonical owner resolution, not a chat acknowledgement.
+Author contracts with writhelm_propose_document: explicit permanent document-prefixed clause IDs, human titles and exact text, not a monolithic specification. The adapter deterministically prepares canonical text, UTF-8 spans, revision IDs and digests; never calculate these manually or read Kotlin sources to discover ordinary input fields. Use a stable intentId for each logical operation; retry the SAME intentId and identical input after uncertainty, never a new identity. Use the returned revisionReference plus clauseId with writhelm_request_review. Never renumber/reuse an existing anchor, infer canonical points by visually splitting prose, or rewrite a retained request. Changed meaning requires a new exact revision/request. Unchanged unapproved clauses do not acquire approval by omission. A rejection reason or item comment is canonical input to the next planning step, not an invitation to ask the owner to repeat it in chat.
+After settled feedback use writhelm_request_review.followup with the predecessor requestId and complete previousItemId/new itemKey correspondence. The adapter resolves exact predecessor digests itself, not by latest lookup. Revised preserves subject identity; unchanged preserves the exact reference and remains a decision item if unapproved. Retained is outside the new decision only with prior approval and an explicit dependency; removed does not withdraw historical approval. Do not misuse before to refer to an unapproved draft: before still names the current direct approved head, while followup names the previous review/comment. Source code is optional diagnostics; compact operation/definition help is available via writhelm_schema.
+Create separately versioned task contracts through the service: objective, exact inputs/approved design, read/write/decision scope, constraints, dependencies, acceptance, escalation, expected output and execution/verification profiles. Keep unresolved work draft. Select work operation contracts with writhelm_work_contract to load the exact typed fields into this chat's next tool call; no Kotlin source reads required. Supply Int64 counters as decimal strings, not rounded JSON numbers. Service refusals are blockers, never permission to use shell or edit canonical Git.
+Before implementation launch, complete required exact contract approval, show a concise dependency graph, and propose the exact dispatch plan with writhelm_request_launch_order. Ask the owner to choose in the native launch-order panel. A proposal or contract approval is NOT launch authorization. Empty edges permit all independently ready work; explicit owner ordering edges wait for prior launch, not completion/acceptance. A changed exact plan/task needs a new choice. Never submit an owner choice yourself.
+Read tools default to readable text and adapter-managed wr1_ references. Follow those references with the SAME read tool; do not reconstruct hashes or substitute latest versions after a stale/expired/denied read. Query references explicitly re-list current navigation; exact references pin immutable selectors/generations. Read handles are not canonical knowledge/work references, approval or authority: request format:canonical only when exact wire metadata is needed to construct an authorized command. Preserve completeness, source text and recorded provenance/status; a proposed or merely read document is not automatically approved.
 Project mutation belongs to exact service-bound execution, never unrestricted editing by this primary session or a generic subagent. A ready task is not itself a native execution permit. Current rights, complete pinned inputs, resource claims and native safety must pass immediately before launch. If runtime qualification is unavailable, say work is held; do not claim implementation has started.
 Use writhelm_prepare_worker for the ready-task reservation/passive-receiver/enrollment/bind sequence, not hand-written native IDs or a generic subagent. Its binding-confirmed phase is NOT active execution or evidence that a model started. Retain preparationId and exact selection for recovery. If preparation is held, resolve its actual blocker without inventing a profile qualification or bypassing the service.
 After recording a canonical dispatch plan through the service, activate that exact plan with writhelm_activate_dispatch. This is an internal planning step, not a user button or mode switch. The client reconciles the retained plan automatically after restart; activation does not override task, authority or qualification checks. Never invent another plan identity to bypass an uncertain original effect.
@@ -38,6 +48,8 @@ export type PrimaryConfiguration = Readonly<{
   schemas: Readonly<Record<string,string>>
   clientPolicyFile?:string;admissionHooks?:boolean
   activationStage?:(stage:string)=>Promise<void>
+  approvalDelivery?:ApprovalDelivery
+  plannerActivity?:(sessionID:string)=>NativePlannerActivity
 }>
 
 /** Actual ordinary-prompt enrollment + live model/tool/permission admission. This is cooperative
@@ -56,6 +68,9 @@ export async function registerPrimaryGovernor(ctx: Plugin.Context, registry: Nat
   await config.activationStage?.("primary-policy-verified")
   if(!Object.keys(config.schemas).length||Object.values(config.schemas).some(raw=>typeof raw!=="string"||Buffer.byteLength(raw)>512*1024))nativeUnavailable()
   await custody.initialize();await custody.requireOutside(workRoot)
+  const modelReads=new ModelReads(new LinuxNativeCustody(path.join(path.dirname(custody.root),"read-references"),[workRoot]))
+  const modelKnowledge=new ModelKnowledge(modelReads)
+  await modelReads.initialize()
   await config.activationStage?.("primary-custody-verified")
   let closed=false
   let connected:Promise<void>|undefined
@@ -98,6 +113,37 @@ export async function registerPrimaryGovernor(ctx: Plugin.Context, registry: Nat
     }
     if(onBound){connected??=onBound(sessionID);await connected}
     return "controller" as const
+  }
+  const openApproval=async(requestId:string,actual:Parameters<NativeCredentialRegistry["planningKnowledgeChannel"]>[0])=>{
+    if(!config.approvalDelivery||!uuidPattern.test(requestId)||await selected(actual.sessionID)!=="controller")nativeUnavailable()
+    const channel=await registry.planningKnowledgeChannel(actual)
+    const raw=await channel.send("reads",contextJSON({formatVersion:1,projectId:config.projectId,
+      operation:"read_request",subject:{id:requestId}}),actual.signal)
+    const value=exactJSON(raw,nativeUnavailable),record=value.data?.record
+    if(value.kind!=="read"||value.operation!=="read_request"||record?.family!=="requests"||record.key!==requestId||
+      record.payload?.projectId!==config.projectId)nativeUnavailable()
+    return config.approvalDelivery.request(actual.sessionID,{project:config.projectId,requestId,
+      requestDigest:record.payload.requestDigest,packetDigest:record.payload.packetDigest})
+  }
+  const sendKnowledge=async(raw:string,actual:Parameters<NativeCredentialRegistry["planningKnowledgeChannel"]>[0])=>{
+    const command=exactJSON(raw,nativeUnavailable)
+    if(!planningKnowledgeCommands.has(command.operation)||command.projectId!==config.projectId)nativeUnavailable()
+    const channel=await registry.planningKnowledgeChannel(actual)
+    let original=raw
+    const activity=config.plannerActivity?.(actual.sessionID)
+    const result=await channel.send("commands",raw,actual.signal,activity?async retained=>{
+      original=retained;await activity.before(retained)
+    }:undefined)
+    if(activity)await activity.after(original,result)
+    if(command.operation==="request_approval"&&config.approvalDelivery){
+      const outcome=exactJSON(result,nativeUnavailable)
+      if(outcome.kind==="settled"&&outcome.outcome?.kind==="success"){
+        try{const presentation=await openApproval(command.payload.requestId,actual)
+          return result+"\n\nNative approval panel: "+presentation.state+". This is not an owner decision."
+        }catch{return result+"\n\nNative approval delivery held. The canonical command is not rolled back. Use writhelm_open_approval with the SAME requestId; do not create another request."}
+      }
+    }
+    return result
   }
   try {
     if(config.admissionHooks!==false){
@@ -144,24 +190,70 @@ export async function registerPrimaryGovernor(ctx: Plugin.Context, registry: Nat
     registrations.push(await ctx.tool.transform(editor=>{
       for(const [name,route,allowed] of [["writhelm_knowledge_command","commands",planningKnowledgeCommands],
         ["writhelm_knowledge_read","reads",planningKnowledgeReads]] as const)editor.add({name,
-        description:"Scoped canonical knowledge v1 planning operation. Read writhelm_schema first. Approval is human-only; never send owner/actor/credential fields.",
-        input:{type:"object",additionalProperties:false,required:["json"],properties:{json:{type:"string",maxLength:2*1024*1024}}},
-        execute:async(input,actual)=>{
-          if(await selected(actual.sessionID)!=="controller"||!input||typeof input!=="object"||Object.keys(input).join(",")!=="json")nativeUnavailable()
-          const raw=(input as {json:unknown}).json
+        description:route==="reads"
+           ?"Typed current-authorized knowledge read: operation + subject, or an exact wr1_ reference. Project/version injected by adapter. Readable output by default; no manual hashes or latest fallback. Operation help uses writhelm_schema(name='knowledge-read1')."
+           :"Typed canonical knowledge command: operation, requestKey, payload. Prefer writhelm_propose_document and writhelm_request_review for document/review authoring; they prepare byte ranges, hashes and exact source refs. No owner actions.",
+          input:route==="reads"?typedKnowledgeReadInput:{
+            type:"object",
+            $defs:knowledgeProtocol.commands.propose_revision!.$defs,
+            anyOf:[...planningKnowledgeCommands].map(operation=>{
+              const {$defs,...payload}=operationSchema("commands",operation)
+              return {type:"object",additionalProperties:false,required:["operation","requestKey","payload"],
+                properties:{operation:{const:operation},requestKey:{type:"string",pattern:uuidPattern.source},payload}}
+            })},
+         execute:async(input,actual)=>{
+          if(await selected(actual.sessionID)!=="controller")nativeUnavailable()
+          if(route==="reads"){
+            try{
+              const channel=await registry.planningKnowledgeChannel(actual)
+               return await modelReads.read("knowledge",channel,actual.sessionID,typedReadInput(input,config.projectId),allowed,actual.signal)
+            }catch(error){
+               if(error instanceof ModelReadFault)return {content:`Writhelm knowledge read held: ${error.code}\nNo source content returned. Use typed operation/subject inputs; references are never refreshed automatically.`}
+              throw error
+            }
+          }
+           if(!input||typeof input!=="object")nativeUnavailable()
+           // Decode retained old invocations without advertising a raw-JSON authoring path.
+           let raw:unknown
+           if(Object.keys(input).join(",")==="json")raw=(input as {json:unknown}).json
+           else {
+             const v=input as any
+             if(Object.keys(v).sort().join(",")!=="operation,payload,requestKey"||!planningKnowledgeCommands.has(v.operation)||
+               typeof v.requestKey!=="string"||!uuidPattern.test(v.requestKey))nativeUnavailable()
+             validateModelContract(operationSchema("commands",v.operation),v.payload)
+             raw=contextJSON({formatVersion:1,projectId:config.projectId,operation:v.operation,requestKey:v.requestKey,payload:v.payload},2*1024*1024)
+           }
           if(typeof raw!=="string"||Buffer.byteLength(raw)>2*1024*1024)nativeUnavailable()
           const command=exactJSON(raw,nativeUnavailable)
           if(!allowed.has(command.operation)||command.projectId!==config.projectId)nativeUnavailable()
-          const channel=await registry.planningKnowledgeChannel(actual)
-          return {content:await channel.send(route,raw,actual.signal)}
-        },options:{codemode:false}})
-      editor.add({name:"writhelm_schema",description:"Pinned canonical wire-contract sources supplied by the installed package. Read the exact codecs and referenced value contracts; this is not a standalone JSON Schema validator, approval or service state.",
-        input:{type:"object",additionalProperties:false,required:["name"],properties:{name:{type:"string",enum:Object.keys(config.schemas)}}},
+           return {content:await sendKnowledge(raw,actual)}
+         },options:{codemode:false}})
+      for(const [name,operation]of [["writhelm_propose_document","propose_document"],["writhelm_request_review","request_review"]] as const)
+        editor.add({name,description:operation==="propose_document"
+          ?"Propose a document from explicit stable clause IDs, human titles and exact text. Adapter prepares canonical bytes, UTF-8 spans, hashes and identities. Stable intentId reconciles the SAME operation after uncertainty. Returns revisionReference for review; not approval."
+          :"Request native human review of exact sources: target/reference wr1_ + clauseId from propose_document. Adapter resolves current-authorized exact refs and predecessor digests. before is the approved head, not an unapproved draft. Stable intentId; never approves.",
+          input:operationSchema("authoring",operation),execute:async(input,actual)=>{
+            if(await selected(actual.sessionID)!=="controller")nativeUnavailable()
+            const channel=await registry.planningKnowledgeChannel(actual)
+            return operation==="propose_document"
+              ?modelKnowledge.propose(input,channel,actual.sessionID,actual.signal,raw=>sendKnowledge(raw,actual))
+              :modelKnowledge.review(input,channel,actual.sessionID,actual.signal,raw=>sendKnowledge(raw,actual))
+          },options:{codemode:false}})
+      if(config.approvalDelivery)editor.add({name:"writhelm_open_approval",
+        description:"Open an existing exact approval in this chat's native panel. Supply only requestId; the adapter resolves and checks immutable request/packet digests. No owner decision is submitted. requested is not rendered/approved.",
+        input:{type:"object",additionalProperties:false,required:["requestId"],properties:{requestId:{type:"string",maxLength:36}}},
         execute:async(input,actual)=>{
-          if(await selected(actual.sessionID)!=="controller"||!input||typeof input!=="object"||Object.keys(input).join(",")!=="name")nativeUnavailable()
-          const name=(input as {name:unknown}).name
-          if(typeof name!=="string"||!Object.hasOwn(config.schemas,name))nativeUnavailable()
-          return {content:config.schemas[name]!}
+          if(!input||typeof input!=="object"||Object.keys(input).join(",")!=="requestId")nativeUnavailable()
+          const value=await openApproval((input as {requestId:string}).requestId,actual)
+          return {content:`Native approval panel: ${value.state} for request ${(input as {requestId:string}).requestId}.\nAwait the canonical owner resolution; panel delivery is not approval.`,
+            metadata:{writhelmReviewReference:value.reference}}
+        },options:{codemode:false}})
+      editor.add({name:"writhelm_schema",description:"Compact operation/definition help. Default is an index, never a source dump. Optional diagnostic source pages use file and offset. No external filesystem read or source-code knowledge required for typed authoring.",
+        input:{type:"object",additionalProperties:false,required:["name"],properties:{name:{type:"string",enum:Object.keys(config.schemas)},
+          operation:{type:"string",maxLength:128},definition:{type:"string",maxLength:128},file:{type:"string",maxLength:256},offset:{type:"integer",minimum:0}}},
+        execute:async(input,actual)=>{
+          if(await selected(actual.sessionID)!=="controller")nativeUnavailable()
+          return {content:modelContractHelp(config.schemas,input)}
         },options:{codemode:false}})
     }))
     await config.activationStage?.("tools-transform-completed")

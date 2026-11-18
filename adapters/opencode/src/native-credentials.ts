@@ -9,6 +9,7 @@ import { LinuxNativeCustody } from "./native-runtime-custody.js"
 import { NativeRuntimeClient, NativeRuntimeReadHold, closedObject, nativeUnavailable, uuidPattern, type NativeSubject } from "./native-runtime-client.js"
 import { boundedWorkChannel, boundedPlanningKnowledgeChannel, boundedDelegationEnrollmentChannel, boundedDispatchAttemptChannel, boundedDispatchMaterializationChannel, LinuxWorkRequestCustody, type BoundWorkChannel, type NativeWorkCredentialResolver } from "./connected-tools.js"
 import { exactJSON } from "./strict-json.js"
+import { contextJSON } from "./native-context-codec.js"
 
 type SecretRecord = Readonly<{ formatVersion: 1; kind: "native-scoped-key-v1"; storeId: string; projectId: string
   principalId: string; credentialId: string; token: string }>
@@ -226,6 +227,15 @@ export class NativeCredentialRegistry implements NativeWorkCredentialResolver {
   async sourceIdentity(sessionID: string, signal?: AbortSignal) {
     return this.#service.identity((await this.verifiedCredential(sessionID)).token, signal, true)
   }
+  async controllerPlanningAdmission(sessionID:string,signal:AbortSignal){
+    if((await this.inspect(sessionID))?.scope!=="controller")nativeUnavailable()
+    const key=await this.verifiedCredential(sessionID)
+    return this.#service.controllerPlanningAdmission(key.token,signal)
+  }
+  async plannerTaskProgress(sessionID:string,taskReferenceJSON:string,signal:AbortSignal){
+    if((await this.inspect(sessionID))?.scope!=="controller")nativeUnavailable()
+    return this.#service.plannerTaskProgress((await this.verifiedCredential(sessionID)).token,taskReferenceJSON,signal)
+  }
   async workerContext(sessionID: string, signal?: AbortSignal) {
     const binding = await this.inspect(sessionID)
     if (!binding || binding.scope !== "assignment") nativeUnavailable()
@@ -274,8 +284,22 @@ export class NativeCredentialRegistry implements NativeWorkCredentialResolver {
     if(!bound || bound.scope!=="controller")nativeUnavailable()
     const key=await this.verifiedCredential(actual.sessionID)
     await this.sourceIdentity(actual.sessionID,actual.signal)
-    return boundedPlanningKnowledgeChannel(bound.projectID,this.#serviceOrigin,key.token,this.#requests,
-      JSON.stringify([this.#service.storeId,this.#service.projectId,this.#epoch,actual.sessionID,"primary-knowledge-v1"]))
+    return {...boundedPlanningKnowledgeChannel(bound.projectID,this.#serviceOrigin,key.token,this.#requests,
+      JSON.stringify([this.#service.storeId,this.#service.projectId,this.#epoch,actual.sessionID,"primary-knowledge-v1"])),
+      readBinding:bound.readBinding}
+  }
+  /** Internal current-controller observation, not a fabricated native ToolContext or model tool.
+   * No command route, caller-selected credential/principal or persisted authorization cache. */
+  async planningKnowledgeContextChannel(sessionID:string,signal:AbortSignal){
+    if((await this.inspect(sessionID))?.scope!=="controller")nativeUnavailable()
+    const key=await this.verifiedCredential(sessionID)
+    await this.sourceIdentity(sessionID,signal)
+    const channel=boundedPlanningKnowledgeChannel(this.#service.projectId,this.#serviceOrigin,key.token,this.#requests,
+      contextJSON([this.#service.storeId,this.#service.projectId,this.#epoch,sessionID,"planner-knowledge-observation"]))
+    return {send:async(route:"reads",raw:string,actualSignal:AbortSignal)=>{
+      if(route!=="reads")nativeUnavailable()
+      return channel.send("reads",raw,actualSignal)
+    }}
   }
   async connectRuntime(sessionID:string) {
     const binding=await this.inspect(sessionID)
@@ -365,9 +389,13 @@ export class NativeCredentialRegistry implements NativeWorkCredentialResolver {
       const identity = await this.#service.identity(credential.token, actual.signal)
       if (identity.scope !== binding.scope || identity.principalId !== binding.principalId || identity.delegationId !== binding.delegationId || identity.assignmentId !== binding.assignmentId
         || identity.executionGeneration !== binding.executionGeneration) return undefined
-      return boundedWorkChannel(this.#service.projectId, binding.scope, this.#serviceOrigin, credential.token, 4 * 1024 * 1024,
+      return {...boundedWorkChannel(this.#service.projectId, binding.scope, this.#serviceOrigin, credential.token, 4 * 1024 * 1024,
         this.#requests, JSON.stringify([this.#service.storeId, this.#service.projectId, binding.hostId, binding.epoch,
-          binding.sessionID, binding.assignmentId, binding.executionGeneration, binding.bindingJSON]))
+          binding.sessionID, binding.assignmentId, binding.executionGeneration, binding.bindingJSON])),
+        readBinding:contextJSON({storeId:this.#service.storeId,projectId:this.#service.projectId,sessionID:actual.sessionID,
+          controllerId:this.#service.controllerId,principalId:binding.principalId,scope:binding.scope,
+          delegationId:binding.delegationId,assignmentId:binding.assignmentId,
+          executionGeneration:binding.executionGeneration,bindingJSON:binding.bindingJSON})}
     } catch(error) {
       if(error instanceof NativeRuntimeReadHold)throw error // Preserve a transient hold; never turn it into an unbound caller.
       return undefined

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 export type ExactLink = { project: string; requestId: string; requestDigest: string; packetDigest: string }
+export const approvalReference=(ref:ExactLink)=>`writhelm-review/v1/${ref.project}/${ref.requestId}/${ref.requestDigest}/${ref.packetDigest}`
 
 const uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 const digest = "[0-9a-f]{64}"

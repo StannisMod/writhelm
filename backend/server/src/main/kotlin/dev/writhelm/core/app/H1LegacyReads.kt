@@ -16,6 +16,7 @@ internal class H1LegacyReads(private val navigation: H1Navigation) {
     fun read(base: H1BoundState,key: PresentedCredential,bytes: ByteArray): JsonValue {
         val f=StrictJson.decode(bytes,JsonLimits(bytes=16384)).fields("formatVersion","projectId","operation","subject")
         version(f.getValue("formatVersion"));val op=f.getValue("operation").string();val sub=f.getValue("subject")
+        KnowledgeProtocol.reads[op]?.let {shape(it.accepts(sub))}
         val stored=base.authority.credentials[key.credentialId] ?: throw AppAccessFault(AppAccessProblem.UNAUTHENTICATED)
         val c=base.authority.authenticate(key,stored.credential.projectId) ?: throw AppAccessFault(AppAccessProblem.UNAUTHENTICATED)
         val project=c.credential.projectId
@@ -72,8 +73,12 @@ internal class H1LegacyReads(private val navigation: H1Navigation) {
                     is WorkflowResult.Failure -> blockers.add(probe.problem.name)
                     is WorkflowResult.Success -> Unit
                 }
-                obj("request" to record,"resolution" to (if(id in snapshot.resolutions)record(base,key,c,snapshot,"resolutions",id,op) else JNull),
+                val result=obj("request" to record,"resolution" to (if(id in snapshot.resolutions)record(base,key,c,snapshot,"resolutions",id,op) else JNull),
                     "materials" to JArray(materials),"actionable" to JBoolean(blockers.isEmpty()),"blockers" to JArray(blockers.map(::str)),"complete" to JBoolean(true))
+                val previous=reviewFollowupProjection(request.packet,snapshot,
+                    {family,previousId->record(base,key,c,snapshot,family,previousId,op)},
+                    {ref->material(base,key,c,snapshot,ref,op)})
+                previous?.let {JObject(result.entries+("followupJSON" to str(StrictJson.encode(it).decodeToString())))} ?: result
             }
             else -> throw H1ReadFault("INVALID_INPUT")
         }

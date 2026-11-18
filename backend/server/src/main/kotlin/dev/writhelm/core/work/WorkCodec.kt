@@ -88,6 +88,7 @@ internal class WorkCodec(
         payload.entries.forEach { (name,v)->strings(v,name=="bodies") }
         uniqueLogicalIds(payload)
         shape(f.getValue("formatVersion").long()==3L)
+        WorkProtocol.validate("commands",f.getValue("operation").string(),payload)
         val value=WorkCommand(uuid(f.getValue("requestKey")),uuid(f.getValue("projectId")),
             decodeWorkOperation(f.getValue("operation").string(),f.getValue("payload")))
         sameProject(encodeWorkOperation(value.operation),value.projectId)
@@ -198,6 +199,7 @@ internal class WorkCodec(
             .fields("formatVersion","projectId","operation","subject")
         shape(f.getValue("formatVersion").long()==2L)
         val project=uuid(f.getValue("projectId")); val name=f.getValue("operation").string(); val s=f.getValue("subject")
+        WorkProtocol.validate("reads",name,s)
         if(name=="list_work_records")return WorkRead.Listing(project,decodeRListWorkRecords(s))
         if(name=="read_condition_status")return WorkRead.ConditionStatus(project,exact(project,WorkFamily.CONDITIONS,s,false))
         if(name=="read_work_body") {

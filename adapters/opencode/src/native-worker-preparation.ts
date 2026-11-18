@@ -11,6 +11,8 @@ import { closedObject, nativeUnavailable, uuidPattern } from "./native-runtime-c
 import { sendContext } from "./native-context-protocol.js"
 import type { BoundWorkChannel } from "./connected-tools.js"
 import type { NativeInitialStart } from "./native-initial-start.js"
+import type { LaunchAdmission } from "./native-launch-admission.js"
+import { OwnerOrderHold } from "./native-owner-order.js"
 
 const parse=(raw:string)=>exactJSON(raw,nativeUnavailable)
 const same=(a:unknown,b:unknown)=>contextJSON(a)===contextJSON(b)
@@ -23,7 +25,8 @@ type PlannedAttempt=Readonly<{planRefJSON:string;previousRefJSON?:string;rootPre
 export class NativeWorkerPreparation {
   constructor(private readonly registry:NativeCredentialRegistry,private readonly passive:NativePassiveWorkers,
     private readonly custody:LinuxNativeCustody,private readonly controllerSessionID:string,
-    private readonly config:Readonly<{projectId:string;controllerId:string;hostId:string;worktreeParent:string}>){}
+    private readonly config:Readonly<{projectId:string;controllerId:string;hostId:string;worktreeParent:string}>,
+    private readonly admission?:LaunchAdmission){}
   private async assignment(channel:BoundWorkChannel,id:string,taskId:string,signal:AbortSignal){
     let cursor:string|null=null,count=0;const seen=new Set<string>()
     do{
@@ -111,6 +114,7 @@ export class NativeWorkerPreparation {
     if(selection.task?.projectId!==this.config.projectId||selection.manifest?.key?.projectId!==this.config.projectId||
       selection.manifest.family!=="input-manifests"||selection.profile?.projectId!==this.config.projectId||
       !Array.isArray(selection.resources)||!selection.resources.length||!Array.isArray(selection.reviewSubjects))nativeUnavailable()
+    await this.admission?.preparation(selection,signal)
     await this.custody.initialize()
     let id=preparationId
     if(id===undefined){
@@ -159,13 +163,15 @@ export class NativeWorkerPreparation {
       }
       const retained=parse(binding)
       if(retained.projectId!==this.config.projectId||retained.operation!=="bind_dispatch_attempt"||!same(retained.payload,payload)||!uuidPattern.test(retained.requestKey))nativeUnavailable()
-      const bindChannel=await this.registry.dispatchAttemptChannel(actual.sessionID)
-      if(bindChannel.scope!=="controller"||bindChannel.projectID!==this.config.projectId)nativeUnavailable()
+       const bindChannel=await this.registry.dispatchAttemptChannel(actual.sessionID)
+       if(bindChannel.scope!=="controller"||bindChannel.projectID!==this.config.projectId)nativeUnavailable()
+       await this.admission?.preparation(selection,signal)
       const bound=await sendContext(bindChannel,"commands",binding,actual.signal)
       if(bound.kind!=="settled"||bound.outcome?.kind!=="success")return {preparationId:id,phase:"attempt-binding-held",outcome:bound}
       if(bound.identity?.projectId!==this.config.projectId||bound.identity?.operation!=="bind_dispatch_attempt"||bound.identity?.requestKey!==retained.requestKey||
         bound.outcome?.result?.key?.projectId!==this.config.projectId||bound.outcome?.result?.key?.id!==id)nativeUnavailable()
     }
+    await this.admission?.preparation(selection,signal)
     const result=await sendContext(channel,"commands",job.reserveJSON,actual.signal)
     if(result.kind!=="settled"||result.outcome?.kind!=="success")return {preparationId:id,phase:"reservation-held",outcome:result}
     let current=await this.assignment(channel,expected.assignmentId,selection.task.taskId,actual.signal),a=current.payload
@@ -173,6 +179,7 @@ export class NativeWorkerPreparation {
       a.executionGeneration?.value!=="0"||!same(a.intendedExecution,expected.intendedExecution))nativeUnavailable()
     const credential=await this.registry.prepare(job.principalId,job.credentialId)
     if(!a.binding){
+      await this.admission?.preparation(selection,signal)
       const prepared=await this.passive.prepare(expected.assignmentId,"0",actual.signal)
       const observation=await this.passive.proof(expected.assignmentId,"0");if(!observation)nativeUnavailable()
       const enrollmentName="preparation-enroll"
@@ -187,6 +194,7 @@ export class NativeWorkerPreparation {
         await this.custody.retain(enrollmentName,id,enrollment)
       }
       const enroller=await this.registry.preparationEnrollmentChannel(actual.sessionID)
+      await this.admission?.preparation(selection,signal)
       const enrolled=await sendContext(enroller,"commands",enrollment,actual.signal)
       if(enrolled.kind!=="settled"||enrolled.outcome?.kind!=="success")return {preparationId:id,phase:"enrollment-held",outcome:enrolled}
       let bind=await this.custody.read("preparation-bind",id)
@@ -197,6 +205,7 @@ export class NativeWorkerPreparation {
           nativeSessionId:prepared.sessionID,workspaceId:expected.workspaceId,observations:[{kind:"artifact",artifact:parse(observation.snapshotJSON)}],bodies:[]}})
         await this.custody.retain("preparation-bind",id,bind)
       }
+      await this.admission?.preparation(selection,signal)
       const bound=await sendContext(channel,"commands",bind,actual.signal)
       if(bound.kind!=="settled"||bound.outcome?.kind!=="success")return {preparationId:id,phase:"binding-held",outcome:bound}
       current=await this.assignment(channel,expected.assignmentId,selection.task.taskId,actual.signal);a=current.payload
@@ -204,6 +213,7 @@ export class NativeWorkerPreparation {
     if(!a.binding||a.execution?.executionId!==expected.intendedExecution.executionId||a.execution.principalId!==credential.principalId||
       a.execution.credentialId!==credential.credentialId||a.delegationId!==job.delegationId||!same(a.intendedExecution,expected.intendedExecution))nativeUnavailable()
     const directory=path.join(this.config.worktreeParent,expected.workspaceId)
+    await this.admission?.preparation(selection,signal)
     await this.registry.bind(expected.intendedExecution.nativeSessionId,credential.credentialId,directory,
       {assignmentId:expected.assignmentId,executionGeneration:"0",bindingJSON:contextJSON(a.binding)})
     return {preparationId:id,phase:"binding-confirmed",state:a.state,currentIntent:a.currentIntent,assignmentId:expected.assignmentId,executionGeneration:"0",binding:a.binding,
@@ -225,7 +235,8 @@ export class NativeDispatchFrontier {
   private readonly reconciledStarts=new Set<string>()
   constructor(private readonly registry:NativeCredentialRegistry,private readonly preparation:NativeWorkerPreparation,
     private readonly initial:NativeInitialStart,private readonly custody:LinuxNativeCustody,private readonly sessionID:string,
-    private readonly planId:string,private readonly capacity:number,private readonly pollMillis:number){
+    private readonly planId:string,private readonly capacity:number,private readonly pollMillis:number,
+    private readonly admission?:LaunchAdmission){
     if(!uuidPattern.test(planId)||!Number.isInteger(capacity)||capacity<1||capacity>32||!Number.isInteger(pollMillis)||pollMillis<250||pollMillis>60000)nativeUnavailable()
   }
   get lastFailure(){return this.failure}
@@ -247,6 +258,7 @@ export class NativeDispatchFrontier {
   private async scan(){
     const signal=this.controller.signal,frame=await this.registry.dispatchContext(this.sessionID,this.planId,signal)
     if(this.closed)return
+    await this.admission?.plan(frame.planJSON,signal)
     const plan=parse(frame.planJSON),basis=contextJSON(frame.basis),planDigest=createHash("sha256").update(frame.planJSON,"utf8").digest("hex")
     const planRefJSON=contextJSON({family:"dispatch-plans",key:plan.key,digest:planDigest})
     const attempts=frame.attemptsJSON.map((raw:string)=>({raw,row:parse(raw)}))
@@ -261,6 +273,9 @@ export class NativeDispatchFrontier {
       const last=typeof id==="string"?this.lastScan.get(id):undefined
       if(typeof id!=="string"||!declaration||this.inflight.has(id)||
         (last?.basis===basis&&Date.now()-last.at<this.pollMillis))continue
+      const admissionSelection=projected.closedJSON?parse(parse(projected.closedJSON).selectionJSON):selection
+      try{await this.admission?.task(admissionSelection.task,signal)}
+      catch(error){if(error instanceof OwnerOrderHold){this.failure=error;continue}throw error}
       const future=Array.isArray(declaration.futureDependencies)&&declaration.futureDependencies.length>0
       if(future && projected.closedJSON!=null){
         const closed=closedObject(parse(projected.closedJSON),["materializationJSON","closureJSON","taskJSON","manifestJSON","selectionJSON"])
@@ -284,8 +299,9 @@ export class NativeDispatchFrontier {
           !same(command.payload?.plan,parse(planRefJSON))||!same(command.payload?.task,task.key))nativeUnavailable()
         this.lastScan.set(id,{basis,at:Date.now()})
         const operation=(async()=>{
-          const channel=await this.registry.dispatchMaterializationChannel(this.sessionID)
-          if(channel.scope!=="controller"||channel.projectID!==command.projectId)nativeUnavailable()
+           const channel=await this.registry.dispatchMaterializationChannel(this.sessionID)
+           if(channel.scope!=="controller"||channel.projectID!==command.projectId)nativeUnavailable()
+           await this.admission?.task(selection.task,signal)
           const result=await sendContext(channel,"commands",raw!,signal)
           if(result.kind!=="settled"||result.outcome?.kind!=="success")return
           if(result.identity?.operation!==command.operation||result.identity?.projectId!==command.projectId||result.identity?.requestKey!==command.requestKey||
@@ -314,6 +330,7 @@ export class NativeDispatchFrontier {
           }
           if(closure.operation!=="close_dispatch_inputs"||closure.projectId!==command.projectId||!uuidPattern.test(closure.requestKey)||
             !same(closure.payload?.materialization,materialization))nativeUnavailable()
+          await this.admission?.task(selection.task,signal)
           const closed=await sendContext(channel,"commands",closureRaw,signal)
           if(closed.kind==="settled"&&closed.outcome?.kind==="rejected"&&closed.outcome?.code==="STALE_GENERATION"){
             if(closed.identity?.operation!==closure.operation||closed.identity?.projectId!==closure.projectId||closed.identity?.requestKey!==closure.requestKey)nativeUnavailable()

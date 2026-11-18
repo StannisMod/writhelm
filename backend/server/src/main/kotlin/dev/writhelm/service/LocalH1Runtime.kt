@@ -26,7 +26,7 @@ internal object PackagedClientContracts {
             .use {it.readNBytes(1536*1024+1)}
         require(bytes.size<=1536*1024)
         val entries=(StrictJson.decode(bytes,JsonLimits(bytes=2*1024*1024,stringBytes=512*1024,tokens=100000)) as JObject).entries
-        require("work-command3" in entries && "knowledge-command1" in entries && entries.size<=16)
+        require(setOf("work-command3","knowledge-command1","work-read2","knowledge-read1").all {it in entries} && entries.size<=16)
         return entries.mapValues { (namespace,value) ->
             val raw=value.string();require(raw.toByteArray(Charsets.UTF_8).size<=512*1024)
             val contract=StrictJson.decode(raw.toByteArray(Charsets.UTF_8),JsonLimits(bytes=512*1024,stringBytes=262144,tokens=100000))
@@ -314,7 +314,7 @@ internal class LinuxAutomaticTestClient private constructor(private val profile:
                     TestClientNativeSessions(nativeOrigin,authorization).observe(session)
                 }
                 val broker=LinuxTestClientEnrollment(instance.app,privateRoot.resolve("enrollment"),instance.storeId,instance.anchorProjectId,instance.ownerToken,
-                    LinuxTestClientRepository(profile.git,profile.gitDigest),observer)
+                    LinuxTestClientRepository(profile.git,profile.gitDigest),serviceOrigin,observer)
                 val passive=AutomaticPassiveDeployment(profile.root.resolve("worktrees"),privateRoot,profile.git,profile.gitDigest)
                 val projectChecks=AutomaticProjectCheckDeployment(profile.root.resolve("installation"))
                 val router=NativeRuntimeEndpointRouter();val manager=SharedH1ControllerRuntime(instance.app,router,privateRoot.resolve("controllers"),facts,

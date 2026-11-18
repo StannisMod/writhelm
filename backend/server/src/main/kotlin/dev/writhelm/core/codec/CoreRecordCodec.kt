@@ -79,15 +79,41 @@ internal fun structure(v: JsonValue): StructureIndex {
     val f=v.fields("clauses","context")
     return checked { StructureIndex(f.getValue("clauses").list().map { val c=it.fields("id","span"); ClauseSpan(ClauseId(c.getValue("id").string()),span(c.getValue("span"))) },f.getValue("context").list().map(::span)) }
 }
-internal fun packet(v: ReviewPacket): JsonValue = obj("items" to array(v.items) { obj("id" to uuid(it.id),"target" to reference(it.target),"before" to (it.before?.let(::reference) ?: JNull)) },"question" to str(v.question),"scope" to str(v.scope),"rationale" to str(v.rationale),"consequences" to array(v.consequences,::str),"alternatives" to array(v.alternatives,::str),"uncertainties" to array(v.uncertainties,::str),"contexts" to array(v.contexts,::reference),"dependencies" to array(v.dependencies,::reference),"informationGaps" to array(v.informationGaps,::str))
+internal fun followup(v:ReviewFollowup):JsonValue=obj("requestId" to uuid(v.requestId),"requestDigest" to digest(v.requestDigest),
+    "packetDigest" to digest(v.packetDigest),"items" to array(v.items) {item->obj(
+        "previousItemId" to (item.previousItemId?.let(::uuid) ?: JNull),"itemId" to (item.itemId?.let(::uuid) ?: JNull),
+        "disposition" to str(item.disposition),"explanation" to str(item.explanation))})
+internal fun followup(v:JsonValue):ReviewFollowup {
+    val f=v.fields("requestId","requestDigest","packetDigest","items")
+    return checked {ReviewFollowup(uuid(f.getValue("requestId")),digest(f.getValue("requestDigest")),digest(f.getValue("packetDigest")),
+        f.getValue("items").list().map {item->val i=item.fields("previousItemId","itemId","disposition","explanation")
+            ReviewFollowupItem(i.getValue("previousItemId").let {if(it===JNull)null else uuid(it)},
+                i.getValue("itemId").let {if(it===JNull)null else uuid(it)},i.getValue("disposition").string(),i.getValue("explanation").string())})}
+}
+/** Both service adapters supply their current-authorized record/material readers. */
+internal fun reviewFollowupProjection(packet:ReviewPacket,snapshot:WorkflowSnapshot,
+    record:(String,UUID)->JsonValue,material:(KnowledgeReference)->JsonValue):JsonValue? {
+    val link=packet.followup ?: return null
+    if(!validReviewFollowup(packet,snapshot.requests,snapshot.resolutions,snapshot.approvals.keys))
+        refuse(CodecProblem.INVALID_GRAPH)
+    val old=snapshot.requests.getValue(link.requestId)
+    return obj("link" to followup(link),"request" to record("requests",link.requestId),
+        "resolution" to record("resolutions",link.requestId),"materials" to JArray(old.packet.references.map(material)))
+}
+internal fun packet(v: ReviewPacket): JsonValue {
+    val base=obj("items" to array(v.items) { obj("id" to uuid(it.id),"target" to reference(it.target),"before" to (it.before?.let(::reference) ?: JNull)) },"question" to str(v.question),"scope" to str(v.scope),"rationale" to str(v.rationale),"consequences" to array(v.consequences,::str),"alternatives" to array(v.alternatives,::str),"uncertainties" to array(v.uncertainties,::str),"contexts" to array(v.contexts,::reference),"dependencies" to array(v.dependencies,::reference),"informationGaps" to array(v.informationGaps,::str))
+    return v.followup?.let {JObject(base.entries+("followup" to followup(it)))} ?: base
+}
 internal fun packet(v: JsonValue): ReviewPacket {
-    val f=v.fields("items","question","scope","rationale","consequences","alternatives","uncertainties","contexts","dependencies","informationGaps")
+    val extra=if((v as? JObject)?.entries?.containsKey("followup")==true)arrayOf("followup")else emptyArray()
+    val f=v.fields("items","question","scope","rationale","consequences","alternatives","uncertainties","contexts","dependencies","informationGaps",*extra)
     fun texts(k: String)=f.getValue(k).list().map { it.string() }
-    return checked { ReviewPacket(f.getValue("items").list().map { val i=it.fields("id","target","before"); ReviewItem(uuid(i.getValue("id")),reference(i.getValue("target")),i.getValue("before").let { before -> if(before==JNull) null else reference(before) }) },f.getValue("question").string(),f.getValue("scope").string(),f.getValue("rationale").string(),texts("consequences"),texts("alternatives"),texts("uncertainties"),f.getValue("contexts").list().map(::context),f.getValue("dependencies").list().map(::reference),texts("informationGaps")) }
+    return checked { ReviewPacket(f.getValue("items").list().map { val i=it.fields("id","target","before"); ReviewItem(uuid(i.getValue("id")),reference(i.getValue("target")),i.getValue("before").let { before -> if(before==JNull) null else reference(before) }) },f.getValue("question").string(),f.getValue("scope").string(),f.getValue("rationale").string(),texts("consequences"),texts("alternatives"),texts("uncertainties"),f.getValue("contexts").list().map(::context),f.getValue("dependencies").list().map(::reference),texts("informationGaps"),f["followup"]?.let(::followup)) }
 }
 internal fun answer(v: StructuredAnswer): JsonValue = when(v) {
     StructuredAnswer.Approve -> obj("kind" to str("approve"))
     StructuredAnswer.Reject -> obj("kind" to str("reject"))
+    is StructuredAnswer.RejectWithReason -> obj("kind" to str("reject-with-reason"),"reason" to str(v.reason))
     is StructuredAnswer.ChangesRequired -> {
         JsonConstruction.collection(v.comments.size)
         obj("kind" to str("changes-required"),"comments" to array(v.comments.entries.sortedBy { it.key.toString() }) { obj("itemId" to uuid(it.key),"text" to str(it.value)) })
@@ -98,6 +124,7 @@ internal fun answer(v: JsonValue): StructuredAnswer {
     return when(fields["kind"]?.string()) {
         "approve" -> { v.fields("kind"); StructuredAnswer.Approve }
         "reject" -> { v.fields("kind"); StructuredAnswer.Reject }
+        "reject-with-reason" -> { val f=v.fields("kind","reason"); checked { StructuredAnswer.RejectWithReason(f.getValue("reason").string()) } }
         "changes-required" -> { val f=v.fields("kind","comments"); val comments=LinkedHashMap<UUID,String>(); f.getValue("comments").list().forEach { val c=it.fields("itemId","text"); uniquePut(comments,uuid(c.getValue("itemId")),c.getValue("text").string()) }; checked { StructuredAnswer.ChangesRequired(comments) } }
         else -> refuse(CodecProblem.INVALID_SHAPE)
     }

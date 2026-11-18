@@ -154,7 +154,11 @@ internal class LinuxTestClientInstance private constructor(val app:H1Application
  * and non-destructive repository setup belong to the client integration, not caller role labels. */
 internal class LinuxTestClientEnrollment(private val app:H1Application,private val root:Path,
     private val storeId:UUID,private val anchorProject:UUID,private val anchorOwnerToken:String,
-    private val repositories:LinuxTestClientRepository,private val observeSession:(String)->ObservedTestClientSession) {
+    private val repositories:LinuxTestClientRepository,private val approvalOrigin:String?,
+    private val observeSession:(String)->ObservedTestClientSession) {
+    constructor(app:H1Application,root:Path,storeId:UUID,anchorProject:UUID,anchorOwnerToken:String,
+        repositories:LinuxTestClientRepository,observeSession:(String)->ObservedTestClientSession):
+        this(app,root,storeId,anchorProject,anchorOwnerToken,repositories,null,observeSession)
     companion object { private val processEnrollmentLock=Any() }
     private val custody=LinuxConnectedCustody(root)
     private val random=SecureRandom()
@@ -182,7 +186,55 @@ internal class LinuxTestClientEnrollment(private val app:H1Application,private v
                 "Session location changed; explicit controller rebind/recovery required"
             }
         }
-        return controller(project,nativeSessionId)
+        val controller=controller(project,nativeSessionId)
+        approvalOrigin?.let { prepareApprovalClient(nativeSessionId,observed.directory,project,controller,it) }
+        return controller
+    }
+    /** Native-main-only client files. Never returned by enrollment/tool replies. Each chat retains
+     * its own unresolved answer; opening another project cannot replace that journal or owner key. */
+    private fun prepareApprovalClient(session:String,directory:Path,project:Project,controller:Controller,origin:String)=locked {
+        HttpProfile(origin)
+        val target=root.resolve("approval-clients").resolve(Digest.of(session.toByteArray(Charsets.UTF_8)).hex)
+        LinuxConnectedCustody(target)
+        require(!target.startsWith(project.directory) && !project.directory.startsWith(target))
+        fun retain(name:String,bytes:ByteArray) {
+            val file=target.resolve(name)
+            if(!Files.exists(file,LinkOption.NOFOLLOW_LINKS)) {
+                FileChannel.open(file,setOf(StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE),
+                    PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------"))).use { channel ->
+                    val buffer=java.nio.ByteBuffer.wrap(bytes);while(buffer.hasRemaining())channel.write(buffer);channel.force(true)
+                }
+                FileChannel.open(target,StandardOpenOption.READ).use {it.force(true)}
+            }
+        }
+        val binding=StrictJson.encode(obj("formatVersion" to num(1),"storeId" to uuid(storeId),
+            "projectId" to uuid(project.projectId),"sessionId" to str(session),
+            "directory" to str(directory.toRealPath().toString()),"projectRoot" to str(project.directory.toString()),
+            "controllerId" to uuid(controller.controllerId)))
+        retain("binding.json",binding)
+        require(protectedRuntimeBytes(target,target.resolve("binding.json"),16384).contentEquals(binding))
+        val owner=app.inspectAccess(project.ownerToken)
+        val ownerCredential=requireNotNull(dev.writhelm.core.auth.PresentedCredential.parse(project.ownerToken)).use {it.credentialId}
+        val profile=obj("formatVersion" to num(1),"origin" to str(origin),"storeId" to uuid(storeId),
+            "projectId" to uuid(project.projectId),"principalId" to uuid(owner.principalId),
+            "active" to obj("credentialId" to uuid(ownerCredential),"token" to str(project.ownerToken)),
+            "agent" to obj("principalId" to uuid(controller.principalId),"credentialId" to uuid(controller.credentialId),
+                "token" to str(controller.token)),"pending" to JNull)
+        retain("profile.json",StrictJson.encode(profile))
+        // Never overwrite retained pending/rotated state, including after a lost answer reply.
+        val old=StrictJson.decode(protectedRuntimeBytes(target,target.resolve("profile.json"),256*1024))
+            .fields("formatVersion","origin","storeId","projectId","principalId","active","agent","pending")
+        require(old.getValue("formatVersion").long()==1L && old.getValue("origin").string()==origin &&
+            uuid(old.getValue("storeId"))==storeId && uuid(old.getValue("projectId"))==project.projectId &&
+            uuid(old.getValue("principalId"))==owner.principalId &&
+            StrictJson.encode(old.getValue("agent")).contentEquals(StrictJson.encode(profile.entries.getValue("agent"))))
+        val active=old.getValue("active").fields("credentialId","token")
+        val access=app.inspectAccess(active.getValue("token").string())
+        require(access.storeId==storeId && access.projectId==project.projectId && access.principalId==owner.principalId &&
+            Capability.MANAGE in access.capabilities)
+        requireNotNull(dev.writhelm.core.auth.PresentedCredential.parse(active.getValue("token").string())).use {
+            require(it.credentialId==uuid(active.getValue("credentialId")))
+        }
     }
     private fun <T> locked(block:()->T):T = synchronized(processEnrollmentLock) {
         val file=root.resolve("enrollment.lock")

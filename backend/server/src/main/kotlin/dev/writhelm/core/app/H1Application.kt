@@ -343,6 +343,10 @@ internal class H1Application private constructor(private val storeId: UUID,priva
             }) { h -> val state=checkNotNull(captured);integrity(state.basis==h.oid);block(state,presentation) }
         }
     }
+    @Synchronized internal fun nativeControllerPlanningAdmission(token:String,project:UUID,controller:UUID,host:UUID):JsonValue=
+        capture(token) {state,key->NativeRuntimeAccess(controller,host).controllerPlanningAdmission(state,key,project)}
+    @Synchronized internal fun nativePlannerTaskProgress(token:String,project:UUID,controller:UUID,host:UUID,ref:WorkReference):JsonValue=
+        capture(token) {state,key->NativeRuntimeAccess(controller,host).plannerTaskProgress(state,key,project,ref)}
     @Synchronized fun inspectAccess(token: String): AppAccessView=capture(token) { state,key ->
         val target=state.authority.credentials[key.credentialId] ?: throw AppAccessFault(AppAccessProblem.UNAUTHENTICATED)
         val c=state.authority.authenticate(key,target.credential.projectId) ?: throw AppAccessFault(AppAccessProblem.UNAUTHENTICATED)

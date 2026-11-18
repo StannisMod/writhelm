@@ -20,6 +20,16 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class ApprovalWorkflowTest {
+    @Test fun `WF-03 reasoned rejection settles without approval and exact replay preserves reason`() {
+        val f=WorkflowFixture();f.add(f.a)
+        val request=f.pending(packet(listOf(ReviewItem(f.id(),f.a.x())),listOf(f.a.contextReference())))
+        val reason=StructuredAnswer.RejectWithReason("Изменить границы договора.")
+        val result=f.answer(request,reason)
+        assertEquals(reason,result.answer);assertTrue(result.approved.isEmpty())
+        bad(WorkflowProblem.UNAPPROVED_INPUT,f.state.approvalTrace(reader,f.a.x()))
+        val retry=good(f.state.resolve(owner,project,request.id,request.digest,request.packet.digest,reason))
+        assertEquals(reason,retry.value.answer)
+    }
     @Test
     fun `WF-02 proposal and pending request grant no authority then exact owner approval succeeds`() {
         val f = WorkflowFixture()

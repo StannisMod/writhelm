@@ -87,9 +87,15 @@ test("real local credential transport with MOCK service policy/native session: p
     nativeSessionId = "ses_fixture"
     await registry.bind("ses_fixture", id, work, subject)
     const actual = { sessionID: "ses_fixture", messageID: "msg_fixture", id: "call_fixture", signal: new AbortController().signal } as unknown as ToolContext
-    assert.equal((await registry.resolve(actual))?.scope, "assignment")
+    const firstChannel=await registry.resolve(actual)
+    assert.equal(firstChannel?.scope, "assignment")
+    const readScope=JSON.parse(firstChannel!.readBinding!)
+    assert.equal(readScope.storeId,id);assert.equal(readScope.projectId,id);assert.equal(readScope.sessionID,"ses_fixture")
+    assert.equal(readScope.controllerId,id);assert.equal(readScope.delegationId,id)
+    assert.equal(readScope.bindingJSON,subject.bindingJSON);assert.equal(firstChannel!.readBinding!.includes("wh1."),false)
     const reopened = new NativeCredentialRegistry(ctx, custody, service, origin, requests, "a".repeat(64))
-    assert.equal((await reopened.resolve(actual))?.scope, "assignment")
+    const reopenedChannel=await reopened.resolve(actual)
+    assert.equal(reopenedChannel?.scope, "assignment");assert.equal(reopenedChannel!.readBinding,firstChannel!.readBinding)
     readHold=true
     await assert.rejects(reopened.resolve(actual),error=>error instanceof NativeRuntimeReadHold&&error.status===503)
     assert.equal(reopened.bound("ses_fixture"),true,"Transient read refusal is not an unbound session")

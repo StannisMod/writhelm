@@ -118,6 +118,31 @@ test("answer loss retains exact original bytes; wrong window/session/anchor cann
   assert.equal(recovered.ok, true); assert.equal(sent[0], sent[1]); assert.equal((await f.files.read()).pending, null)
   assert.ok(!JSON.stringify([view, failed, recovered]).includes(f.profile.active.token)); await c.close()
 })
+test("native rejection requires canonical reason and retains it before uncertain delivery",async()=>{
+  const f=await files();let sends=0
+  const c=new Controller(host,async(url,init)=>{
+    if(String(url).endsWith("/reads"))return new Response(raw)
+    sends++
+    const stored=await f.files.read()
+    assert.equal(stored.pending.commandJSON,init!.body)
+    throw Error("synthetic lost reply")
+  })
+  await c.attach(f.files)
+  try{
+    const view=await c.dispatch("open",{...open,session},caller)
+    assert.equal(view.ok,true)
+    for(const reason of [undefined,"  "]){
+      const refused=await c.dispatch("answer",{session,handle:view.handle,choice:"reject",comments:[],reason},caller)
+      assert.equal(refused.code,"INVALID_INPUT")
+    }
+    assert.equal(sends,0)
+    const reason="Пересмотреть ограничение.\r\nСохранить исходный смысл."
+    await c.dispatch("answer",{session,handle:view.handle,choice:"reject",comments:[],reason},caller)
+    assert.equal(sends,1)
+    const retained=JSON.parse((await f.files.read()).pending.commandJSON)
+    assert.deepEqual(retained.payload.answer,{kind:"reject-with-reason",reason})
+  }finally{await c.close()}
+})
 test("rotation persists replacement before dispatch and reload retries original key with new credential", async () => {
   const f = await files(); let published = false; let exactCommand = ""; let nextToken = ""
   const fetcher: typeof fetch = async (_url, init) => {
@@ -192,13 +217,11 @@ test("native DOM component renders full material, no default assent, anchored ch
   await drain()
   for (const material of b.materials) for (const fragment of material.fragments) assert.ok(root.textContent!.includes(fragment.text))
   assert.ok(root.textContent!.includes(b.request.payload.packet.consequences[0])); assert.equal(root.querySelectorAll('input[type="radio"]:checked').length, 0)
-  const send = [...root.querySelectorAll("button")].find(b => b.textContent === "Submit exact retained answer")!
+   const send = [...root.querySelectorAll("button")].find(b => b.textContent === "Вернуть с замечаниями")!
   send.click(); await drain(); assert.equal(answered.length, 0)
-  const radio = root.querySelector('input[value="changes-required"]') as HTMLInputElement; radio.checked = true; radio.dispatchEvent(new window.Event("change"))
-  const area = root.querySelector("textarea")! as HTMLTextAreaElement; area.value = "Exact anchored correction\r\n"
+   const area = root.querySelector("[data-item-id] textarea")! as HTMLTextAreaElement; area.value = "Exact anchored correction\r\n";area.dispatchEvent(new window.Event("input"))
   send.click(); await drain(); assert.equal(answered.length, 1); assert.equal(answered[0].comments[0].itemId, b.request.payload.packet.items[0].id); assert.equal(answered[0].comments[0].text, area.value)
-  ;(root.querySelector('[data-action="dismiss"]') as HTMLButtonElement).click(); await drain(); assert.equal(answered.length, 1); assert.equal(dismissed, 1)
-  dispose()
+   dispose();await drain();assert.equal(answered.length,1);assert.equal(dismissed,1)
 })
 test("exact links carry only closed nonsecret identities, not credentials or assent", () => {
   const link = `writhelm://review/${uid(2)}/${open.requestId}/${open.requestDigest}/${open.packetDigest}`

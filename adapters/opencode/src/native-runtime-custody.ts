@@ -13,9 +13,13 @@ type WriteQueue={tail:Promise<void>;pending:number}
 // module-local Map is therefore not a process lock. Share only scheduling on the actual process
 // object; all root verification and the exclusive filesystem lock remain authoritative.
 const queueKey=Symbol.for("dev.writhelm.native-custody-writes-v1")
-const hostQueues=process as unknown as Record<symbol,Map<string,WriteQueue>|undefined>
-if(hostQueues[queueKey]===undefined)Object.defineProperty(process,queueKey,{value:new Map<string,WriteQueue>()})
-const processWrites=hostQueues[queueKey]!
+// GUI bundles evaluate main-only imports in windows too. Do not touch Node's process at module
+// scope; the renderer must be able to import the bundle without creating custody/runtime state.
+function writeQueues(){
+  const hostQueues=process as unknown as Record<symbol,Map<string,WriteQueue>|undefined>
+  if(hostQueues[queueKey]===undefined)Object.defineProperty(process,queueKey,{value:new Map<string,WriteQueue>()})
+  return hostQueues[queueKey]!
+}
 
 /** Explicit Linux operational custody, not an authority/credential database in canonical Git.
  * Every operation revalidates root identity. Existing insecure roots are refused, not chmod-repaired.
@@ -136,6 +140,7 @@ export class LinuxNativeCustody {
    * identity/owner/link/sync check remain authoritative across instances/processes. Native inbox
    * acknowledgement and its concurrent held-boundary witness must not conflict in one instance. */
   private serialize<T>(operation:()=>Promise<T>):Promise<T>{
+    const processWrites=writeQueues()
     let queue=processWrites.get(this.root)
     if(!queue){queue={tail:Promise.resolve(),pending:0};processWrites.set(this.root,queue)}
     if(queue.pending>=32)unavailable()

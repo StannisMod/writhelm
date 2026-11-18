@@ -124,6 +124,7 @@ internal class WrithelmService private constructor(val app: MechanismApp?,val li
         }
         version(f.getValue("formatVersion"))
         val op=f.getValue("operation").string();val sub=f.getValue("subject")
+        KnowledgeProtocol.reads[op]?.let {shape(it.accepts(sub))}
         val view=checkNotNull(app).captureRead(token);val a=view.access
         if(op=="list_projects") { if(f.getValue("projectId")!=JNull)stop("INVALID_INPUT",400) }
         else if(uuid(f.getValue("projectId"))!=a.projectId)stop("FORBIDDEN",403)
@@ -228,7 +229,9 @@ internal class WrithelmService private constructor(val app: MechanismApp?,val li
             is WorkflowResult.Failure -> blockers.add(probe.problem.name)
             is WorkflowResult.Success -> Unit
         }
-        return obj("request" to record(s,r.projectId,"requests",id),"resolution" to (if(id in s.resolutions)record(s,r.projectId,"resolutions",id) else JNull),
+        val result=obj("request" to record(s,r.projectId,"requests",id),"resolution" to (if(id in s.resolutions)record(s,r.projectId,"resolutions",id) else JNull),
             "materials" to JArray(materials),"actionable" to JBoolean(blockers.isEmpty()),"blockers" to JArray(blockers.map(::str)),"complete" to JBoolean(true))
+        val previous=reviewFollowupProjection(r.packet,s,{family,previousId->record(s,r.projectId,family,previousId)},{ref->material(v,s,ref)})
+        return previous?.let {JObject(result.entries+("followupJSON" to str(StrictJson.encode(it).decodeToString())))} ?: result
     }
 }

@@ -70,6 +70,13 @@ data class ReviewItem(val id: UUID, val target: KnowledgeReference, val before: 
 sealed interface StructuredAnswer {
     data object Approve : StructuredAnswer
     data object Reject : StructuredAnswer
+    /** Distinct additive form: legacy Reject bytes and historical resolutions stay unchanged. */
+    data class RejectWithReason(val reason: String) : StructuredAnswer {
+        init {
+            requireText(reason)
+            require(reason.toByteArray(Charsets.UTF_8).size<=4096) { "Rejection reason too large" }
+        }
+    }
 
     class ChangesRequired(comments: Map<UUID, String>) : StructuredAnswer {
         val comments: Map<UUID, String> = frozenMap(comments)

@@ -62,6 +62,7 @@ class ApprovalWorkflow private constructor(
     ): WorkflowResult<Transition<ApprovalRequest>> {
         if (!policy.allows(actor, project, Capability.PLAN)) return failure(WorkflowProblem.FORBIDDEN)
         if (id in requests) return failure(WorkflowProblem.DUPLICATE_ID)
+        if(!validReviewFollowup(packet,requests,resolutions,approvals.keys))return failure(WorkflowProblem.INVALID_REFERENCE)
         validateReferences(project, packet.references)?.let { return failure(it) }
         validateContexts(packet.references, packet.contexts)?.let { return failure(it) }
         if (packet.items.any { it.before != heads[it.target.subject()] }) return failure(WorkflowProblem.STALE_SUBJECT)

@@ -39,6 +39,7 @@ internal object WorkflowSnapshotValidator {
         graph(s.resolutions.keys.all { it in s.requests })
         s.requests.forEach { (id,r) ->
             edge(); graph(id==r.id)
+            graph(validReviewFollowup(r.packet,s.requests,s.resolutions,s.approvals.keys))
             r.packet.references.forEach { valid(it,r.projectId) }; contexts(r.packet.references,r.packet.contexts)
             graph(r.generations.keys==r.packet.items.map { it.target.subject() }.toSet())
             graph(r.generations.values.all { it>=0 })

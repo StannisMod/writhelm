@@ -100,6 +100,117 @@ internal class CompositionSyntheticFacts : H1RuntimeFacts {
 
 /** Real local helper/Git setup with public deterministic verifier vectors, never live keys. */
 class LocalH1SetupTest {
+    @Test fun automaticApprovalClientIsBoundPerChatAndPreservesPendingAnswer() {
+        val root=Files.createTempDirectory(Path.of(System.getenv("WRITHELM_NATIVE_TEST_ROOT") ?: System.getProperty("java.io.tmpdir")),
+            "writhelm-approval-binding-")
+        val work=Files.createDirectory(root.resolve("project"));val second=Files.createDirectory(root.resolve("second"))
+        val native=mutableMapOf("ses_approval_a" to work,"ses_approval_b" to work,"ses_approval_c" to second)
+        val git=Path.of("/usr/bin/git").toRealPath()
+        dev.writhelm.service.LinuxTestClientInstance.open(root.resolve("private/instance"),H1Options(UnavailableH1RuntimeFacts,workModelVersion=4)).use {instance->
+            val broker=LinuxTestClientEnrollment(instance.app,root.resolve("private/enrollment"),instance.storeId,
+                instance.anchorProjectId,instance.ownerToken,LinuxTestClientRepository(git,Digest.of(Files.readAllBytes(git))),
+                "http://127.0.0.1:18679") {session->LinuxTestClientEnrollment.ObservedTestClientSession(session,native.getValue(session),null)}
+            val a=broker.session("ses_approval_a");val b=broker.session("ses_approval_b");val c=broker.session("ses_approval_c")
+            assertEquals(a.projectId,b.projectId);assertNotEquals(a.controllerId,b.controllerId);assertNotEquals(a.projectId,c.projectId)
+            fun directory(session:String)=root.resolve("private/enrollment/approval-clients/${Digest.of(session.toByteArray()).hex}")
+            fun read(session:String)=StrictJson.decode(protectedRuntimeBytes(directory(session),directory(session).resolve("profile.json"),256*1024)) as JObject
+            val original=read("ses_approval_a")
+            assertEquals(uuid(a.projectId),original.entries.getValue("projectId"))
+            val owner=original.entries.getValue("active").fields("credentialId","token").getValue("token").string()
+            assertTrue(dev.writhelm.core.workflow.Capability.APPROVE in instance.app.inspectAccess(owner).capabilities)
+            assertFalse(dev.writhelm.core.workflow.Capability.APPROVE in instance.app.inspectAccess(a.token).capabilities)
+            val pending=obj("kind" to str("answer"),"commandJSON" to str("retained original test command"))
+            val changed=JObject(original.entries+("pending" to pending))
+            Files.write(directory("ses_approval_a").resolve("profile.json"),StrictJson.encode(changed))
+            val before=Files.readAllBytes(directory("ses_approval_a").resolve("profile.json"))
+            broker.session("ses_approval_a");broker.session("ses_approval_b");broker.session("ses_approval_c")
+            assertContentEquals(before,Files.readAllBytes(directory("ses_approval_a").resolve("profile.json")))
+            assertEquals(JNull,read("ses_approval_b").entries.getValue("pending"))
+            assertEquals(JNull,read("ses_approval_c").entries.getValue("pending"))
+            native["ses_approval_a"]=second
+            assertFails {broker.session("ses_approval_a")}
+            assertContentEquals(before,Files.readAllBytes(directory("ses_approval_a").resolve("profile.json")))
+        }
+    }
+
+    @Test fun realServiceExactApprovalPanelJourneyWithoutModels() {
+        org.junit.jupiter.api.Assumptions.assumeTrue(System.getenv("WRITHELM_NODE")!=null && System.getenv("WRITHELM_APPROVAL_CLIENT")!=null,
+            "Explicit offline Node/compiled approval driver required; no implicit downloads or native/model calls")
+        val node=Path.of(System.getenv("WRITHELM_NODE"))
+        val driver=Path.of(System.getenv("WRITHELM_APPROVAL_CLIENT"))
+        val root=Files.createTempDirectory(Path.of(System.getenv("WRITHELM_NATIVE_TEST_ROOT") ?: System.getProperty("java.io.tmpdir")),
+            "writhelm-approval-service-")
+        val work=Files.createDirectory(root.resolve("project"));val git=Path.of("/usr/bin/git").toRealPath()
+        val port=java.net.ServerSocket(0).use {it.localPort};val origin="http://127.0.0.1:$port"
+        dev.writhelm.service.LinuxTestClientInstance.open(root.resolve("private/instance"),H1Options(UnavailableH1RuntimeFacts,workModelVersion=4)).use {instance->
+            val broker=LinuxTestClientEnrollment(instance.app,root.resolve("private/enrollment"),instance.storeId,
+                instance.anchorProjectId,instance.ownerToken,LinuxTestClientRepository(git,Digest.of(Files.readAllBytes(git))),origin) {
+                session->LinuxTestClientEnrollment.ObservedTestClientSession(session,work,null)
+            }
+            val session="ses_approval_service";val controller=broker.session(session)
+            val prototype=revision(91001)
+            val revision=dev.writhelm.core.knowledge.DocumentRevision(
+                dev.writhelm.core.knowledge.RevisionKey(dev.writhelm.core.knowledge.DocumentKey(controller.projectId,java.util.UUID.randomUUID()),
+                    java.util.UUID.randomUUID()),prototype.content,prototype.structure)
+            fun publish(payload:CommandPayload) {
+                val result=assertIs<dev.writhelm.core.store.CommandResult.Settled>(instance.app.execute(controller.token,
+                    CommandCodec().encode(CoreCommand(java.util.UUID.randomUUID(),controller.projectId,payload))))
+                assertIs<dev.writhelm.core.store.LogicalOutcome.Success>(result.receipt.outcome)
+            }
+            publish(CommandPayload.Propose(revision))
+            val packet=packet(listOf(dev.writhelm.core.workflow.ReviewItem(java.util.UUID.randomUUID(),revision.x()),
+                dev.writhelm.core.workflow.ReviewItem(java.util.UUID.randomUUID(),revision.contextReference())),
+                listOf(revision.contextReference()))
+            val request=java.util.UUID.randomUUID()
+            val requestJSON=CommandCodec().encode(CoreCommand(java.util.UUID.randomUUID(),controller.projectId,
+                CommandPayload.Request(request,packet))).decodeToString()
+            // Unqualified synthetic metadata only, never an execution deployment or model call.
+            val profileKey=WorkKey.Profile(controller.projectId,java.util.UUID.randomUUID(),0)
+            val profile=WProfile("read-projection-no-call",emptyList(),WorkModelReference("synthetic","no-call",null),
+                "no-call","native-default",8192,512,512,512,"synthetic","synthetic","E-COOP-1",emptyList(),"linux","unqualified")
+            val profileCodec=WorkCodec()
+            val profileCommandJSON=profileCodec.encodeCommand(WorkCommand(java.util.UUID.randomUUID(),controller.projectId,
+                CCreateProfileOperation(CCreateProfile(profileKey,profile,emptyList())))).decodeToString()
+            val profileRecord=WorkRecord(WorkRecordIdentity(WorkFamily.PROFILES,profileKey),WProfilesPayload(profile))
+            val profileReadJSON=profileCodec.encodeRead(WorkRead.Exact(controller.projectId,profileRecord.identity,
+                profileCodec.digest(profileRecord),null)).decodeToString()
+            val http=HttpAdapter(WrithelmService(instance.app),HttpProfile(origin))
+            val server=embeddedServer(CIO,host="127.0.0.1",port=port){http.install(this)}
+            server.start(wait=false)
+            try{
+                val outputFile=root.resolve("approval-driver.log")
+                val child=ProcessBuilder(node.toString(),"--conditions=browser",driver.toString()).redirectErrorStream(true)
+                    .redirectOutput(outputFile.toFile()).start()
+                child.outputStream.use {it.write(StrictJson.encode(obj("root" to str(root.resolve("private").toString()),
+                    "work" to str(work.toString()),"sessionID" to str(session),"controllerId" to uuid(controller.controllerId),
+                    "projectId" to uuid(controller.projectId),"requestId" to uuid(request),"requestJSON" to str(requestJSON),
+                    "profileCommandJSON" to str(profileCommandJSON),"profileReadJSON" to str(profileReadJSON))))}
+                val finished=child.waitFor(45,TimeUnit.SECONDS)
+                if(!finished){child.destroy();if(!child.waitFor(2,TimeUnit.SECONDS))child.destroyForcibly()}
+                val output=Files.readString(outputFile)
+                assertTrue(finished,"Model-free driver timed out");assertEquals(0,child.exitValue(),output)
+                assertTrue(output.contains("PASS real service/controller credential"),output)
+                println(output.trim())
+            }finally{server.stop(0,5000);runBlocking{http.mcp.close()}}
+        }
+    }
+
+    @Test fun packagedClientIncludesExactKnowledgeAndWorkReadContracts() {
+        val schemas=dev.writhelm.service.PackagedClientContracts.load()
+        for((name,path,operation)in listOf(
+            Triple("knowledge-read1","app/H1LegacyReads.kt","list_documents"),
+            Triple("work-read2","work/WorkCodec.kt","list_work_records"))) {
+            val contract=StrictJson.decode(schemas.getValue(name).toByteArray()) as JObject
+            val files=contract.entries.getValue("files").list().map {it as JObject}
+            val source=files.single {it.entries.getValue("path").string()==path}.entries.getValue("source").string()
+            assertTrue(source.contains(operation))
+            assertTrue(source.contains("formatVersion"))
+        }
+        val listing=dev.writhelm.core.work.WorkCodec().decodeRead(StrictJson.encode(obj("formatVersion" to num(2),
+            "projectId" to uuid(java.util.UUID.randomUUID()),"operation" to str("list_work_records"),
+            "subject" to obj("family" to str("task-heads"),"taskId" to JNull,"pageSize" to num(32),"cursor" to JNull))))
+        assertTrue(listing is dev.writhelm.core.work.WorkRead.Listing)
+    }
     @Test fun launcherPreDiscoveryPreparationIsIdempotentAndPreservesUserBytesAndUnsafeGit() {
         val root=Files.createTempDirectory("writhelm-launch-preparation-")
         val workspace=Files.createDirectory(root.resolve("project"));val client=root.resolve("client")

@@ -13,7 +13,7 @@ export function nativeEffortMatches(effort:unknown,key:unknown,options:Readonly<
     typeof key==="string"&&key.length>0&&typeof options[key]==="string"&&options[key]===effort
 }
 /** Execution allowlist, not merely a model-context filter. Unknown/plugin/code-mode tools refuse. */
-export const reviewerToolAllowed=(name:string)=>["read","writhelm_work_read","writhelm_work_command"].includes(name)
+export const reviewerToolAllowed=(name:string)=>["read","writhelm_work_read","writhelm_work_command","writhelm_work_contract"].includes(name)
 const tokens=(value:any)=>{
   const raw=value?.value
   if(typeof raw!=="string"||!/^[1-9][0-9]*$/.test(raw)||BigInt(raw)>2147483647n)nativeUnavailable()

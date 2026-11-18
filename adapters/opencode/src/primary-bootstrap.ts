@@ -165,7 +165,15 @@ export async function provisionAutomaticPrimary(config:Readonly<{root:string;for
     const old=closedObject(exactJSON(previous,nativeUnavailable),[...Object.keys(descriptor),"enrollmentProof"])
     if(typeof old.enrollmentProof!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(old.enrollmentProof))nativeUnavailable()
     const {enrollmentProof:_,...original}=old
-    if(contextJSON(original)!==contextJSON(descriptor))nativeUnavailable()
+    // Add the two previously omitted read contracts without rewriting a retained bootstrap or
+    // changing any existing contract bytes. Other installation conflicts still hold.
+    if(!original.schemas||typeof original.schemas!=="object"||Array.isArray(original.schemas)||
+      Object.entries(original.schemas).some(([key,value])=>config.schemas[key]!==value)||
+      Object.keys(config.schemas).some(key=>!Object.hasOwn(original.schemas,key)&&!["knowledge-read1","work-read2"].includes(key))||
+      contextJSON(original)!==contextJSON({...descriptor,schemas:original.schemas}))nativeUnavailable()
+    for(const name of ["knowledge-read1","work-read2"])
+      if(config.schemas[name]!==undefined&&!Object.hasOwn(original.schemas,name))
+        await bootstrap.retain("read-contract",name,config.schemas[name]!)
     return
   }
   const proof=randomBytes(32)

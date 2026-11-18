@@ -2,6 +2,8 @@
 import { LinuxNativeCustody } from "./native-runtime-custody.js"
 import { closedObject, nativeUnavailable, uuidPattern } from "./native-runtime-client.js"
 import { exactJSON } from "./strict-json.js"
+import type { LaunchAdmission } from "./native-launch-admission.js"
+import { OwnerOrderHold } from "./native-owner-order.js"
 
 type Frontier=Readonly<{start():void;wake():void;close():Promise<void>}>
 /** Activation selects an existing canonical plan, never a model-supplied ready flag or bootstrap
@@ -12,7 +14,7 @@ export class CanonicalDispatchActivation {
   private closed=false
   constructor(private readonly custody:LinuxNativeCustody,private readonly projectId:string,
     private readonly controllerSessionID:string,private readonly observe:(planId:string,signal?:AbortSignal)=>Promise<{planJSON:string}>,
-    private readonly create:(planId:string)=>Frontier){}
+    private readonly create:(planId:string)=>Frontier,private readonly admission?:LaunchAdmission){}
   activate(planId:string,signal?:AbortSignal):Promise<void>{
     const operation=this.serial.then(()=>this.activateOne(planId,signal))
     this.serial=operation.catch(()=>{})
@@ -23,6 +25,7 @@ export class CanonicalDispatchActivation {
     const frame=await this.observe(planId,signal)
     const plan=exactJSON(frame.planJSON,nativeUnavailable)
     if(plan.family!=="dispatch-plans"||plan.key?.projectId!==this.projectId||plan.key?.id!==planId)nativeUnavailable()
+    await this.admission?.plan(frame.planJSON,signal)
     if(this.closed||signal?.aborted)nativeUnavailable()
     const current=this.active.get(planId)
     if(current){current.wake();return}
@@ -42,7 +45,7 @@ export class CanonicalDispatchActivation {
       const record=closedObject(exactJSON(entry.raw,nativeUnavailable),["formatVersion","projectId","controllerSessionID","planId"])
       if(record.formatVersion?.value!=="1"||record.projectId!==this.projectId||record.controllerSessionID!==this.controllerSessionID||
         typeof record.planId!=="string"||!uuidPattern.test(record.planId)||await this.custody.read("dispatch-activation",record.planId)!==entry.raw)nativeUnavailable()
-      await this.activate(record.planId)
+       try{await this.activate(record.planId)}catch(error){if(!(error instanceof OwnerOrderHold))throw error}
     }
   }
   async close(){this.closed=true;await this.serial;await Promise.allSettled([...this.active.values()].map(value=>value.close()));this.active.clear()}

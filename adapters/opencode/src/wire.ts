@@ -32,6 +32,41 @@ export function completeBundle(raw: string, id: string, requestDigest: string, p
   requireThat(p.informationGaps.length === 0, "INCOMPLETE")
   const declared = [...p.items.flatMap((i: Json) => [i.before, i.target].filter(Boolean)), ...p.contexts, ...p.dependencies]
   for (const ref of declared) requireThat(b.materials.some((m: Json) => referenceKey(m.reference) === referenceKey(ref)), "INCOMPLETE")
+  if(p.followup){
+    requireThat(typeof b.followupJSON==="string","INCOMPLETE")
+    const previous=exact(b.followupJSON),link=p.followup
+    requireThat(Object.keys(previous).sort().join(",")==="link,materials,request,resolution"&&referenceKey(previous.link)===referenceKey(link),"INTEGRITY")
+    // Structural validation of service-derived records, NOT a fabricated source/approval.
+    const plain=JSON.parse(b.followupJSON)
+    const envelope={formatVersion:1,kind:"read",basis:JSON.parse(raw).basis,operation:"read_review_bundle",
+      data:{request:plain.request,resolution:plain.resolution,materials:plain.materials,
+        complete:true,actionable:false,blockers:["ALREADY_RESOLVED"]}}
+    requireThat(service(envelope),"INTEGRITY")
+    const old=previous.request
+    requireThat(old.key===link.requestId&&old.payload.projectId===project&&old.payload.requestDigest===link.requestDigest&&
+      old.payload.packetDigest===link.packetDigest&&previous.resolution?.key===old.key,"INTEGRITY")
+    const oldItems=old.payload.packet.items,newItems=p.items
+    const oldIds=link.items.map((c:Json)=>c.previousItemId).filter(Boolean),newIds=link.items.map((c:Json)=>c.itemId).filter(Boolean)
+    const ids=(items:Json[])=>items.map(i=>i.id).sort().join(",")
+    requireThat(new Set(oldIds).size===oldIds.length&&new Set(newIds).size===newIds.length&&
+      [...oldIds].sort().join(",")===ids(oldItems)&&[...newIds].sort().join(",")===ids(newItems),"INTEGRITY")
+    const oldPacket=old.payload.packet
+    const oldRefs=[...oldItems.flatMap((i:Json)=>[i.before,i.target].filter(Boolean)),...oldPacket.contexts,...oldPacket.dependencies]
+    for(const ref of oldRefs)requireThat(previous.materials.some((m:Json)=>referenceKey(m.reference)===referenceKey(ref)),"INCOMPLETE")
+    const subject=(r:Json)=>referenceKey({kind:r.kind,document:r.revision.document,clauseId:r.clauseId??null})
+    for(const change of link.items){
+      const before=oldItems.find((i:Json)=>i.id===change.previousItemId)?.target
+      const target=newItems.find((i:Json)=>i.id===change.itemId)?.target
+      requireThat(change.disposition==="revised"?before&&target&&subject(before)===subject(target)&&referenceKey(before)!==referenceKey(target):
+        change.disposition==="unchanged"?before&&target&&referenceKey(before)===referenceKey(target):
+        change.disposition==="added"?!before&&!!target:
+        change.disposition==="removed"?!!before&&!target:
+        change.disposition==="retained"?before&&!target&&p.dependencies.some((r:Json)=>referenceKey(r)===referenceKey(before)):false,"INTEGRITY")
+    }
+    const answer=previous.resolution.payload.answer
+    if(answer.kind==="changes-required")requireThat(answer.comments.every((c:Json)=>oldItems.some((i:Json)=>i.id===c.itemId)),"INTEGRITY")
+    b.followup=previous
+  }else requireThat(b.followupJSON===undefined,"INTEGRITY")
   return b
 }
 export function loopback(origin: string): string {
