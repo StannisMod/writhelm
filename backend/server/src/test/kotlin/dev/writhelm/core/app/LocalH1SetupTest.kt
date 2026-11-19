@@ -1256,7 +1256,13 @@ class LocalH1SetupTest {
         assertEquals(project,adapter.prepare(nested))
         assertEquals(initial,read("rev-parse","HEAD"))
         assertContentEquals(bytes,Files.readAllBytes(user))
-        assertFailsWith<IllegalArgumentException> { LinuxTestClientRepository(git,Digest.of(byteArrayOf(1))).prepare(project) }
+        // Historical executable hashes no longer gate compatible system Git.
+        assertEquals(project,LinuxTestClientRepository(git,Digest.of(byteArrayOf(1))).prepare(project))
+        assertEquals(initial,read("rev-parse","HEAD"))
+        val incompatible=assertFailsWith<dev.writhelm.core.store.StoreFault> {
+            LinuxTestClientRepository(Path.of("/usr/bin/false"),Digest.of(byteArrayOf(1))).prepare(project)
+        }
+        assertEquals(dev.writhelm.core.store.StoreProblem.GIT_INCOMPATIBLE,incompatible.problem)
         val broken=Files.createDirectory(root.resolve("broken"));Files.writeString(broken.resolve(".git"),"invalid git metadata")
         assertFailsWith<IllegalArgumentException> {adapter.prepare(broken)}
         assertEquals("invalid git metadata",Files.readString(broken.resolve(".git")))

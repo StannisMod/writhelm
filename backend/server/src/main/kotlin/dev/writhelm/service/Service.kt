@@ -14,7 +14,7 @@ internal class ServiceReply(val status: Int,val value: JsonValue) {
     fun bytes(maximum: Int=4*1024*1024)=StrictJson.encode(value,maximum,true)
 }
 internal fun error(code: String,status: Int)=ServiceReply(status,obj("formatVersion" to num(1),"kind" to str("error"),"code" to str(code)))
-internal val agentOperations=setOf("propose_revision","request_approval","record_assessment","pin_consumer")
+internal val agentOperations=setOf("propose_revision","request_approval","submit_review","record_assessment","pin_consumer")
 internal class ServiceLimits(val responseBytes: Int=4*1024*1024,val snapshotBytes: Int=1024*1024,
     val snapshots: Int=2,val cursorCount: Int=512,val snapshotMillis: Long=300000) {
     init { require(responseBytes in 65536..4*1024*1024 && snapshotBytes in 1..1024*1024 &&
@@ -76,7 +76,7 @@ internal class WrithelmService private constructor(val app: MechanismApp?,val li
         catch(e: ServiceFault) { onError(error(e.code,e.status)) }
         catch(e: AppAccessFault) { onError(error(e.problem.name,if(e.problem==AppAccessProblem.UNAUTHENTICATED)401 else 403)) }
         catch(e: CodecFault) { onError(error(if(e.problem==CodecProblem.RESOURCE_UNAVAILABLE)"UNAVAILABLE" else "INVALID_INPUT",if(e.problem==CodecProblem.RESOURCE_UNAVAILABLE)503 else 400)) }
-         catch(e: StoreFault) { onError(error(when(e.problem) { StoreProblem.INTEGRITY -> "INTEGRITY"; StoreProblem.UNSUPPORTED -> "UNSUPPORTED"; StoreProblem.DENIED -> "FORBIDDEN"; else -> "UNAVAILABLE" },when(e.problem) { StoreProblem.INTEGRITY -> 500; StoreProblem.UNSUPPORTED -> 400; StoreProblem.DENIED -> 403; else -> 503 })) }
+         catch(e: StoreFault) { onError(error(when(e.problem) { StoreProblem.GIT_UNAVAILABLE,StoreProblem.GIT_INCOMPATIBLE -> e.problem.name;StoreProblem.INTEGRITY -> "INTEGRITY"; StoreProblem.UNSUPPORTED -> "UNSUPPORTED"; StoreProblem.DENIED -> "FORBIDDEN"; else -> "UNAVAILABLE" },when(e.problem) { StoreProblem.INTEGRITY -> 500; StoreProblem.UNSUPPORTED -> 400; StoreProblem.DENIED -> 403; else -> 503 })) }
          catch(e: H1ReadFault) { onError(error(e.code,when(e.code) { "NOT_FOUND" -> 404;"UNAVAILABLE","SNAPSHOT_EXPIRED","INCOMPLETE_PACKET" -> 503;"FORBIDDEN" -> 403;else -> 400 })) }
          catch(e: dev.writhelm.core.work.WorkFault) { onError(error(e.problem.name,when(e.problem) { dev.writhelm.core.work.WorkProblem.NOT_FOUND -> 404;dev.writhelm.core.work.WorkProblem.DIGEST_MISMATCH -> 409;else -> 400 })) }
     fun command(token: String,bytes: ByteArray,agent: Boolean=false): ServiceReply=guarded({
@@ -109,6 +109,7 @@ internal class WrithelmService private constructor(val app: MechanismApp?,val li
             CommandResult.Denied -> error("FORBIDDEN",403)
             CommandResult.Unknown -> error("PUBLICATION_UNKNOWN",503)
             is CommandResult.Refused -> error(when(r.problem) {
+                StoreProblem.GIT_UNAVAILABLE,StoreProblem.GIT_INCOMPATIBLE -> r.problem.name
                 StoreProblem.INTEGRITY -> "INTEGRITY"; StoreProblem.DENIED -> "FORBIDDEN"
                 StoreProblem.UNSUPPORTED -> "UNSUPPORTED"; else -> "UNAVAILABLE"
             },when(r.problem) { StoreProblem.INTEGRITY -> 500; StoreProblem.DENIED -> 403; StoreProblem.UNSUPPORTED -> 400; else -> 503 })
@@ -145,6 +146,10 @@ internal class WrithelmService private constructor(val app: MechanismApp?,val li
             }
             "read_request","read_resolution","read_manifest" -> {
                 val id=uuid(sub.fields("id").getValue("id"));val family=when(op) { "read_request" -> "requests"; "read_resolution" -> "resolutions"; else -> "manifests" }
+                // captureRead checked current project READ; localized records additionally require
+                // complete same-project source resolution, just as the full bundle does.
+                if(family=="requests")s.requests[id]?.takeIf { it.projectId==a.projectId && it.packet.presentations.isNotEmpty() }
+                    ?.packet?.references?.forEach { material(view,s,it) }
                 obj("record" to record(s,a.projectId,family,id))
             }
             "read_review_bundle" -> bundle(view,s,sub)

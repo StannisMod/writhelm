@@ -102,13 +102,23 @@ internal fun reviewFollowupProjection(packet:ReviewPacket,snapshot:WorkflowSnaps
 }
 internal fun packet(v: ReviewPacket): JsonValue {
     val base=obj("items" to array(v.items) { obj("id" to uuid(it.id),"target" to reference(it.target),"before" to (it.before?.let(::reference) ?: JNull)) },"question" to str(v.question),"scope" to str(v.scope),"rationale" to str(v.rationale),"consequences" to array(v.consequences,::str),"alternatives" to array(v.alternatives,::str),"uncertainties" to array(v.uncertainties,::str),"contexts" to array(v.contexts,::reference),"dependencies" to array(v.dependencies,::reference),"informationGaps" to array(v.informationGaps,::str))
-    return v.followup?.let {JObject(base.entries+("followup" to followup(it)))} ?: base
+    val linked=v.followup?.let {JObject(base.entries+("followup" to followup(it)))} ?: base
+    return if(v.presentations.isEmpty())linked else JObject(linked.entries+("presentations" to array(v.presentations) { p ->
+        obj("language" to str(p.language),"sourceLanguage" to str(p.sourceLanguage),"items" to array(p.items) {
+            obj("itemId" to uuid(it.itemId),"title" to str(it.title),"text" to str(it.text))
+        })
+    }))
 }
 internal fun packet(v: JsonValue): ReviewPacket {
-    val extra=if((v as? JObject)?.entries?.containsKey("followup")==true)arrayOf("followup")else emptyArray()
+    val extra=listOf("followup","presentations").filter { (v as? JObject)?.entries?.containsKey(it)==true }.toTypedArray()
     val f=v.fields("items","question","scope","rationale","consequences","alternatives","uncertainties","contexts","dependencies","informationGaps",*extra)
     fun texts(k: String)=f.getValue(k).list().map { it.string() }
-    return checked { ReviewPacket(f.getValue("items").list().map { val i=it.fields("id","target","before"); ReviewItem(uuid(i.getValue("id")),reference(i.getValue("target")),i.getValue("before").let { before -> if(before==JNull) null else reference(before) }) },f.getValue("question").string(),f.getValue("scope").string(),f.getValue("rationale").string(),texts("consequences"),texts("alternatives"),texts("uncertainties"),f.getValue("contexts").list().map(::context),f.getValue("dependencies").list().map(::reference),texts("informationGaps"),f["followup"]?.let(::followup)) }
+    return checked { ReviewPacket(f.getValue("items").list().map { val i=it.fields("id","target","before"); ReviewItem(uuid(i.getValue("id")),reference(i.getValue("target")),i.getValue("before").let { before -> if(before==JNull) null else reference(before) }) },f.getValue("question").string(),f.getValue("scope").string(),f.getValue("rationale").string(),texts("consequences"),texts("alternatives"),texts("uncertainties"),f.getValue("contexts").list().map(::context),f.getValue("dependencies").list().map(::reference),texts("informationGaps"),f["followup"]?.let(::followup),
+        f["presentations"]?.list()?.map { p -> val a=p.fields("language","sourceLanguage","items")
+            ReviewPresentation(a.getValue("language").string(),a.getValue("sourceLanguage").string(),a.getValue("items").list().map {
+                val i=it.fields("itemId","title","text");ReviewPresentationItem(uuid(i.getValue("itemId")),i.getValue("title").string(),i.getValue("text").string())
+            })
+        } ?: emptyList()) }
 }
 internal fun answer(v: StructuredAnswer): JsonValue = when(v) {
     StructuredAnswer.Approve -> obj("kind" to str("approve"))

@@ -56,7 +56,7 @@ test("real local credential transport with MOCK service policy/native session: p
     if (deny) { response.writeHead(403); response.end("{}"); return }
     response.setHeader("Content-Type", "application/json")
     const controller = credentialId === other
-    response.end(JSON.stringify(input.operation === "identity" ? { formatVersion: 1, storeId: id, projectId: id,
+    response.end(JSON.stringify(["identity","source-identity"].includes(input.operation) ? { formatVersion: 1, storeId: id, projectId: id,
       controllerId: id, nativeHostId: id, principalId: principal, credentialId, scope: controller ? "controller" : "assignment",
       delegationId: controller ? null : id, assignmentId: controller ? null : id,
       executionGeneration: controller ? null : subject.executionGeneration } : input.operation === "packet"
@@ -133,6 +133,17 @@ test("real local credential transport with MOCK service policy/native session: p
     }
     principal=id;deny=false;location=work
     assert.equal((await custody.scan("controller-connection")).length,1) // rejected identities never publish a connection
+    const oldReview='{"formatVersion":1,"projectId":"'+id+'","requestKey":"'+id+'","operation":"request_approval","payload":{"requestId":"'+other+'"}}'
+    const oldNamespace=JSON.stringify([id,id,"a".repeat(64),"ses_controller","primary-knowledge-v1"])+":request_approval"
+    await requests.retain(oldNamespace,id,oldReview)
+    await requests.retain(JSON.stringify([id,id,"a".repeat(64),"ses_other_controller","primary-knowledge-v1"])+":request_approval",other,"other chat original")
+    const planning=await controllerAfterRestart.planningKnowledgeChannel({...actual,sessionID:"ses_controller" as ToolContext["sessionID"]})
+    assert.equal(await planning.originalReview!(id),oldReview,"Restart must recover the exact legacy route, not submit_review")
+    assert.equal(await planning.originalReview!(other),undefined,"No original may be adopted from another chat")
+    assert.equal(await requests.original(oldNamespace,id),oldReview,"Historical original is not rewritten")
+    deny=true
+    await assert.rejects(controllerAfterRestart.planningKnowledgeChannel({...actual,sessionID:"ses_controller" as ToolContext["sessionID"]}))
+    deny=false
     const bridge = new ProtectedNativeBridge(registry, custody, "ses_controller", id)
     assert.equal(bridge.managed("ses_fixture"), true) // freshly bound sessions are guarded before a first envelope
     const rawJSON = `{"assignment":{"assignmentId":"${id}","generation":${generation}},"binding":${bindingJSON},"nativeHostId":"${id}","nativeSessionId":"ses_fixture"}`

@@ -71,7 +71,7 @@ try{
   assert.ok(ref)
   const caller={window:1,signal:actual.signal}
   const {document,window}=parseHTML("<html><body></body></html>");Object.assign(globalThis,{document,window})
-  const require=createRequire(import.meta.url),provided=new Map<any,any>(),panels:any[]=[],opens:any[]=[]
+  const require=createRequire(import.meta.url),provided=new Map<any,any>(),panels:any[]=[],opens:any[]=[],closes:any[]=[],toasts:any[]=[]
   process.env.WRITHELM_PRIMARY_ROOT=input.root // disposable test child only, not user configuration
   const sandbox:any={console,process,Buffer,URL,TextDecoder,TextEncoder,document,window,setTimeout,clearTimeout,setInterval,clearInterval,
     AbortSignal,AbortController,fetch,performance,module:{exports:{}},exports:{}}
@@ -86,11 +86,13 @@ try{
     windows:{get:()=>({}),on:()=>{}},storage:{store:()=>({value:{root:""},set:()=>{}})},
     provide:(token:any,implementation:any)=>provided.set(token,implementation),
   })
-  let ownerBundleRaw="",loaded=false,answerResult:undefined|{code:string;pending:boolean}
+  let ownerBundleRaw="",loaded=false,answerResult:undefined|{code:string;pending:boolean},answerRaw:any
+  let displayLanguage=""
   const mounted={...session,server:{id:"sidecar"},project:{worktree:input.work}}
   createRoot(d=>{
     disposeGUI=d
     definition.setup({app:{platform:"desktop",version:"2.2.5"},id:"writhelm-opencode",
+      locale:{locale:()=>displayLanguage},
       sessions:{current:()=>mounted},add:(token:any,item:any)=>{if(token===sdk.Panel)panels.push(item)},
       main:(token:any)=>new Proxy({},{get:(_target,method)=>{
         if(method==="state")return()=>undefined
@@ -99,10 +101,11 @@ try{
           const result=await provided.get(token)[method](value,caller)
           if(method==="open")ownerBundleRaw=result.bundleJSON
           if(method==="shown"&&result.ok)loaded=true
-          if(method==="answer")answerResult={code:result.code,pending:result.pending}
+          if(method==="answer"){answerResult={code:result.code,pending:result.pending};answerRaw=result}
           return result
         }
-      }}),layout:{open:(key:any,s:any)=>opens.push({key,session:s})},toast:{show:()=>({dismiss(){}})},
+      }}),layout:{open:(key:any,s:any)=>opens.push({key,session:s}),close:(key:any,s:any)=>closes.push({key,session:s})},
+      toast:{show:(options:any)=>{toasts.push(options);return {dismiss(){}}}},
     })
   })
   const deadline=Date.now()+15000
@@ -132,6 +135,10 @@ try{
   const resolution=await channel.send("reads",JSON.stringify({formatVersion:1,projectId:input.projectId,
     operation:"read_resolution",subject:{id:ref.requestId}}),actual.signal)
   assert.equal(exactJSON(resolution,()=>{throw Error("invalid")}).kind,"read","explicit click must publish the exact canonical resolution")
+  while(!closes.length&&Date.now()<deadline)await new Promise(resolve=>setImmediate(resolve))
+  assert.equal(closes[0]?.key,"writhelm-opencode:review","confirmed exact decision closes the panel: "+JSON.stringify({answer:answerRaw,status:root.textContent!.slice(-1200)}))
+  assert.equal(closes[0]?.session.id,session.id)
+  assert.equal(toasts[0]?.title,"Контракт утверждён.")
   const after=await tools.get("writhelm_open_approval").execute({requestId:input.requestId},actual)
   assert.match(after.content,/rendered/)
   // Additive reasoned rejection travels through real native-main/controller/HTTP custody.
@@ -269,9 +276,9 @@ try{
     operation:"read_resolution",subject:{id:correctionRecord.key}}),actual.signal),()=>{throw Error("invalid correction resolution")})
   assert.equal(approvedCorrection.data.record.payload.answer.kind,"approve")
   console.log("PASS real HTTP linked rejection -> exact inline item comments -> changed source revision -> service-derived predecessor/comment projection -> native re-review approval")
-  const authored={intentId:"synthetic-typed-document-v1",context:"Синтетический контекст 🧭.",
-    clauses:[{id:"CHECK-01",title:"Точный срок 🧭",text:"Срок сохраняется.\r\nТочные слова владельца не нормализуются."},
-      {id:"CHECK-02",title:"Вместимость",text:"Проверить свободные места перед подтверждением."}]}
+  const authored={intentId:"synthetic-typed-document-v1",context:"Synthetic context 🧭.",
+    clauses:[{id:"CHECK-01",title:"Exact deadline 🧭",text:"Preserve the deadline.\r\nDo not normalize the owner's exact words."},
+      {id:"CHECK-02",title:"Capacity",text:"Check available seats before confirmation."}]}
   const proposer=tools.get("writhelm_propose_document"),reviewer=tools.get("writhelm_request_review")
   assert.ok(proposer&&reviewer)
   const proposalReply=await proposer.execute(authored,actual),proposal=JSON.parse(proposalReply.content)
@@ -282,14 +289,18 @@ try{
   const typedRead=await tools.get("writhelm_knowledge_read").execute({reference:proposal.revisionReference,format:"canonical"},actual)
   const typedRevision=JSON.parse(typedRead.content).data
   assert.equal(typedRevision.structure.clauses.length,2)
-  assert.ok(typedRevision.body.includes("CHECK-01 — Точный срок 🧭"))
-  assert.ok(typedRevision.body.includes("Срок сохраняется.\r\n"))
+  assert.ok(typedRevision.body.includes("CHECK-01 — Exact deadline 🧭"))
+  assert.ok(typedRevision.body.includes("Preserve the deadline.\r\n"))
   loaded=false;answerResult=undefined
   const reviewInput={intentId:"synthetic-typed-review-v1",items:authored.clauses.map(clause=>({
     key:clause.id,target:{reference:proposal.revisionReference,clauseId:clause.id},before:null})),
     question:"Согласовать синтетический договор?",scope:"Два точных пункта.",rationale:"Проверка типизированного пути без чтения исходников.",
     consequences:["Только рассмотрение."],alternatives:["Вернуть с возражениями."],uncertainties:[],
-    contexts:[{reference:proposal.revisionReference}],dependencies:[],informationGaps:[]}
+    contexts:[{reference:proposal.revisionReference}],dependencies:[],informationGaps:[],
+    presentations:[{language:"ru",sourceLanguage:"en",items:[
+      {itemKey:"CHECK-01",title:"Точный срок 🧭",text:"Срок сохраняется.\r\nТочные слова владельца не нормализуются."},
+      {itemKey:"CHECK-02",title:"Вместимость",text:"Проверить свободные места перед подтверждением."}]}]}
+  displayLanguage="ru-RU"
   const requested=await reviewer.execute(reviewInput,actual)
   assert.match(requested.content,/Native approval panel: requested/)
   const typedLimit=Date.now()+15000
@@ -302,7 +313,9 @@ try{
   assert.equal(typedBundle.request.key,typedRequestId)
   assert.equal(typedBundle.request.payload.packet.items.length,2)
   assert.equal(typedBundle.resolution,null)
+  assert.equal(typedBundle.request.payload.packet.presentations[0].items[0].itemId,typedBundle.request.payload.packet.items[0].id)
   assert.ok(root.textContent!.includes("CHECK-01 — Точный срок 🧭"))
+  assert.equal(root.querySelector("[data-item-id] [data-canonical-text]")!.textContent,reviewInput.presentations[0].items[0].text)
   assert.equal((root.querySelector("[data-item-id] textarea") as HTMLTextAreaElement).hidden,true)
   console.log("PASS typed Unicode clauses -> adapter-generated exact byte spans/digests -> protected same-intent replay -> real canonical proposal -> exact read-reference review -> installed-bundle native panel; no manual hashes, schema source reads or owner decision")
   const read=tools.get("writhelm_knowledge_read")

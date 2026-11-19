@@ -67,3 +67,24 @@ The owner subsequently explicitly approved the disclosed cross-platform clarific
 existing contracts and requested that the implementation worker apply them. Their scope is OS-adapter
 boundaries and per-platform qualification; canonical bytes, authority and publication laws are not
 weakened. It is not a claim that all three adapters have been implemented or verified.
+
+## Owner-approved system Git compatibility correction (2026-11-19)
+
+SYSTEM-GIT-COMPAT-001 replaces exact system-Git version/hash gates with operation-specific
+compatibility admission. Writhelm is not an executable sandbox; ordinary compatible OS Git updates
+do not require owner repinning or a private bundled Git. Legacy recorded Git hashes remain immutable
+historical observations, not current execution permits. Node/native-harness pins are unchanged.
+
+Linux adapters select an explicit absolute executable without shell or inherited Git configuration.
+Bounded probes observe version, required commands and relevant options/configuration support.
+Filesystem identity changes invalidate disposable capability observations, not canonical commands or
+installation identities. This is not immutable executable attestation or proof of future Git behavior:
+actual operations still validate results and retain normal publication/uncertainty rules.
+The current store profile requires bare SHA-1 initialization/object IO/ref CAS and fsync configuration;
+project/worktree profiles additionally use their explicit preparation/merge/diff operations.
+
+Normal stop checks the known owned service, readiness, authenticated discovery and process identity,
+not Git compatibility. A missing/incompatible Git holds affected work with GIT_UNAVAILABLE or
+GIT_INCOMPATIBLE where non-effect is established; it must not prevent normal owned-service shutdown.
+Unknown publication/children/ownership remain held under RUN-02–05. No marker reset, broader
+execution permission, abnormal recovery, other-OS qualification or production-readiness claim follows.

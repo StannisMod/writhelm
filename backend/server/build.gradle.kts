@@ -17,7 +17,7 @@ application {
 val clientContractGroups = mapOf(
     "work-command3" to listOf("work/WorkCodec.kt", "work/WorkValues.kt", "work/WorkValueRegistry.kt", "work/WorkValueDecoders.kt", "work/WorkValueEncoders.kt", "codec/WorkProtocol.kt", "protocol/model-work-v1.json"),
     "work-execution-values" to listOf("work/ExecutionDescriptors.kt", "work/Model2Values.kt", "work/ResultDescriptors.kt"),
-    "knowledge-command1" to listOf("codec/CommandCodec.kt", "codec/CoreRecordCodec.kt", "codec/CoreSnapshotCodec.kt", "codec/KnowledgeProtocol.kt", "workflow/WorkflowRecords.kt", "workflow/ReviewPacket.kt"),
+    "knowledge-command1" to listOf("codec/CommandCodec.kt", "codec/ReviewSubmission.kt", "codec/CoreRecordCodec.kt", "codec/CoreSnapshotCodec.kt", "codec/KnowledgeProtocol.kt", "workflow/WorkflowRecords.kt", "workflow/ReviewPacket.kt"),
     "knowledge-read1" to listOf("app/H1LegacyReads.kt", "app/H1ProtectedReads.kt", "app/H1Navigation.kt", "codec/CoreRecordCodec.kt", "knowledge/References.kt"),
     "work-read2" to listOf("work/WorkCodec.kt", "work/WorkValues.kt", "work/WorkValueRegistry.kt", "work/WorkValueDecoders.kt", "work/WorkValueEncoders.kt", "codec/WorkProtocol.kt", "protocol/model-work-v1.json"),
     "wire-json" to listOf("codec/StrictJson.kt", "codec/WorkIdentityCodec.kt"),

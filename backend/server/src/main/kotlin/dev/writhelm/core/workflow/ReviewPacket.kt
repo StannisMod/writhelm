@@ -24,7 +24,9 @@ class ReviewPacket(
     dependencies: List<KnowledgeReference> = emptyList(),
     informationGaps: List<String> = emptyList(),
     val followup: ReviewFollowup? = null,
+    presentations: List<ReviewPresentation> = emptyList(),
 ) {
+    val presentations = frozenList(presentations)
     val items = frozenList(items)
     val consequences = frozenList(consequences)
     val alternatives = frozenList(alternatives)
@@ -42,13 +44,21 @@ class ReviewPacket(
         require(this.items.map { it.target.subject() }.distinct().size == this.items.size) { "Duplicate target subject" }
         require(this.contexts.distinct().size == this.contexts.size) { "Duplicate context" }
         require(this.dependencies.distinct().size == this.dependencies.size) { "Duplicate dependency" }
+        require(this.presentations.size <= 8)
+        require(this.presentations.map { it.language }.distinct().size == this.presentations.size)
+        var presentationBytes = 0L
+        this.presentations.forEach { presentation ->
+            require(presentation.items.map { it.itemId }.toSet() == this.items.map { it.id }.toSet())
+            presentation.items.forEach { presentationBytes += encodeUtf8(it.title).size + encodeUtf8(it.text).size }
+        }
+        require(presentationBytes <= 1024 * 1024)
     }
 
     internal val references = frozenList(
         (this.items.flatMap { listOfNotNull(it.before, it.target) } + this.contexts + this.dependencies).distinct()
     )
 
-    val digest: Digest = framedDigest(if(followup==null)"writhelm.review-packet.v1" else "writhelm.review-packet.v2") {
+    val digest: Digest = framedDigest(if(this.presentations.isNotEmpty())"writhelm.review-packet.v3" else if(followup==null)"writhelm.review-packet.v1" else "writhelm.review-packet.v2") {
         writeText(question)
         writeText(scope)
         writeText(rationale)
@@ -65,6 +75,7 @@ class ReviewPacket(
         }
         writeReferences(this@ReviewPacket.contexts)
         writeReferences(this@ReviewPacket.dependencies)
+        if(this@ReviewPacket.presentations.isNotEmpty())writeBoolean(followup!=null)
         followup?.let { previous ->
             writeUuid(previous.requestId);write(previous.requestDigest.bytes());write(previous.packetDigest.bytes())
             writeInt(previous.items.size)
@@ -74,6 +85,34 @@ class ReviewPacket(
                 writeText(item.disposition);writeText(item.explanation)
             }
         }
+        if(this@ReviewPacket.presentations.isNotEmpty()) {
+            writeInt(this@ReviewPacket.presentations.size)
+            this@ReviewPacket.presentations.forEach { presentation ->
+                writeText(presentation.language);writeText(presentation.sourceLanguage)
+                writeInt(presentation.items.size)
+                presentation.items.forEach { writeUuid(it.itemId);writeText(it.title);writeText(it.text) }
+            }
+        }
+    }
+}
+
+/** Mechanical identity binding, not proof of translation equivalence. */
+class ReviewPresentation(val language: String, val sourceLanguage: String, items: List<ReviewPresentationItem>) {
+    val items = frozenList(items)
+    init {
+        listOf(language, sourceLanguage).forEach {
+            require(Regex("^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-[A-Z]{2}|-[0-9]{3})?$").matches(it))
+        }
+        require(this.items.isNotEmpty())
+        require(this.items.map { it.itemId }.distinct().size == this.items.size)
+    }
+}
+data class ReviewPresentationItem(val itemId: UUID, val title: String, val text: String) {
+    init {
+        requireText(title);requireText(text)
+        require(title.codePointCount(0,title.length) <= 200)
+        encodeUtf8(title)
+        require(encodeUtf8(text).size <= 65536)
     }
 }
 

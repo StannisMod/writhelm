@@ -9,6 +9,7 @@ internal sealed interface CommandPayload {
     val operation: String
     class Propose(val revision: DocumentRevision): CommandPayload { override val operation="propose_revision" }
     class Request(val requestId: UUID,val packet: ReviewPacket): CommandPayload { override val operation="request_approval" }
+    class SubmitReview(val requestId: UUID,val draft: JsonValue): CommandPayload { override val operation="submit_review" }
     class Resolve(val requestId: UUID,val requestDigest: Digest,val packetDigest: Digest,val answer: StructuredAnswer): CommandPayload { override val operation="resolve_approval" }
     class Assess(val assessment: ConsistencyAssessment): CommandPayload { override val operation="record_assessment" }
     class Pin(val manifestId: UUID,val consumerId: UUID,clauses: List<ClauseReference>,contexts: List<ContextReference>,dependencies: List<KnowledgeReference>,val assessmentId: UUID): CommandPayload {
@@ -32,6 +33,7 @@ internal class CommandCodec(private val limits: JsonLimits=JsonLimits(bytes=8*10
                 val s=structure(q.getValue("structure")); if(s.clauses.size.toLong()+s.context.size>limits.collection)refuse(CodecProblem.ADMISSION_LIMIT)
                 CommandPayload.Propose(checked { DocumentRevision(k,b,s) }) }
             "request_approval" -> { val q=p.fields("requestId","packet"); CommandPayload.Request(uuid(q.getValue("requestId")),packet(q.getValue("packet"))) }
+            "submit_review" -> { val q=p.fields("requestId","draft"); CommandPayload.SubmitReview(uuid(q.getValue("requestId")),q.getValue("draft")) }
             "resolve_approval" -> { val q=p.fields("requestId","requestDigest","packetDigest","answer"); CommandPayload.Resolve(uuid(q.getValue("requestId")),digest(q.getValue("requestDigest")),digest(q.getValue("packetDigest")),answer(q.getValue("answer"))) }
             "record_assessment" -> { val q=p.fields("assessmentId","references","rationale","links","blocked"); CommandPayload.Assess(checked { ConsistencyAssessment(uuid(q.getValue("assessmentId")),project,q.getValue("references").list().map(::reference),q.getValue("rationale").string(),q.getValue("links").list().map(::link),q.getValue("blocked").list().map(::reference)) }) }
             "pin_consumer" -> { val q=p.fields("manifestId","consumerId","clauses","contexts","dependencies","assessmentId"); val c=q.getValue("clauses").list().map(::clause); val x=q.getValue("contexts").list().map(::context); val d=q.getValue("dependencies").list().map(::reference)
@@ -65,6 +67,7 @@ internal class CommandCodec(private val limits: JsonLimits=JsonLimits(bytes=8*10
     private fun payload(v: CommandPayload): JsonValue=when(v) {
         is CommandPayload.Propose -> obj("revisionKey" to revisionKey(v.revision.key),"body" to str(v.revision.content.text()),"structure" to structure(v.revision.structure))
         is CommandPayload.Request -> obj("requestId" to uuid(v.requestId),"packet" to packet(v.packet))
+        is CommandPayload.SubmitReview -> obj("requestId" to uuid(v.requestId),"draft" to v.draft)
         is CommandPayload.Resolve -> obj("requestId" to uuid(v.requestId),"requestDigest" to digest(v.requestDigest),"packetDigest" to digest(v.packetDigest),"answer" to answer(v.answer))
         is CommandPayload.Assess -> with(v.assessment) { obj("assessmentId" to uuid(id),"references" to array(references,::reference),"rationale" to str(rationale),"links" to array(links,::link),"blocked" to array(blocked,::reference)) }
         is CommandPayload.Pin -> obj("manifestId" to uuid(v.manifestId),"consumerId" to uuid(v.consumerId),"clauses" to array(v.clauses,::reference),"contexts" to array(v.contexts,::reference),"dependencies" to array(v.dependencies,::reference),"assessmentId" to uuid(v.assessmentId))

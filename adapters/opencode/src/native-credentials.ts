@@ -284,8 +284,28 @@ export class NativeCredentialRegistry implements NativeWorkCredentialResolver {
     if(!bound || bound.scope!=="controller")nativeUnavailable()
     const key=await this.verifiedCredential(actual.sessionID)
     await this.sourceIdentity(actual.sessionID,actual.signal)
+    // Controller lifetime is the exact chat, not the current host incarnation. Historical
+    // connection custody supplies ONLY original-command lookup namespaces, never current authority.
+    const raw=await this.#custody.read("session",actual.sessionID)
+    if(raw===undefined)nativeUnavailable()
+    const original=this.metadata(raw!,actual.sessionID)
+    if(original.scope!=="controller")nativeUnavailable()
+    const epochs=new Set([original.epoch])
+    for(const row of await this.#custody.scan("controller-connection")){
+      const v=closedObject(parse(row.raw),["formatVersion","sessionID","projectId","controllerId","principalId",
+        "credentialId","workRoot","hostId","epoch"])
+      if(!version(v.formatVersion)||typeof v.epoch!=="string"||!/^[a-f0-9]{64}$/.test(v.epoch)||
+        typeof v.sessionID!=="string"||createHash("sha256").update(`${v.sessionID}:${v.epoch}`).digest("hex")!==row.keyDigest)nativeUnavailable()
+      if(v.sessionID!==actual.sessionID)continue
+      if(v.projectId!==this.#service.projectId||v.controllerId!==this.#service.controllerId||
+        v.principalId!==original.principalId||v.credentialId!==original.credentialId||
+        v.workRoot!==original.workRoot||v.hostId!==original.hostId)nativeUnavailable()
+      epochs.add(v.epoch)
+    }
+    if(epochs.size>64)nativeUnavailable()
+    const bindings=[...epochs].map(epoch=>JSON.stringify([this.#service.storeId,this.#service.projectId,epoch,actual.sessionID,"primary-knowledge-v1"]))
     return {...boundedPlanningKnowledgeChannel(bound.projectID,this.#serviceOrigin,key.token,this.#requests,
-      JSON.stringify([this.#service.storeId,this.#service.projectId,this.#epoch,actual.sessionID,"primary-knowledge-v1"])),
+      JSON.stringify([this.#service.storeId,this.#service.projectId,this.#epoch,actual.sessionID,"primary-knowledge-v1"]),undefined,bindings),
       readBinding:bound.readBinding}
   }
   /** Internal current-controller observation, not a fabricated native ToolContext or model tool.

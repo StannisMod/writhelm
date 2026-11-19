@@ -59,6 +59,7 @@ internal class AuthorityView private constructor(val storeId: UUID,principals: S
             val c=credentials[token.credentialId] ?: return null
             if(c.storeId!=storeId || c.status!=CredentialStatus.ACTIVE || !token.verifies(c)) return null
             if(c.projectId!=projectId || !policy.allows(Actor(c.principalId),projectId,required)) return null
+            if(operation=="submit_review" && !policy.allows(Actor(c.principalId),projectId,Capability.READ))return null
             return AuthorizedRequest(Actor(c.principalId),c.id)
         }
     }
@@ -163,7 +164,7 @@ internal class AuthorityView private constructor(val storeId: UUID,principals: S
 internal fun requiredCapability(operation: String): Capability? = when(operation) {
     "read" -> Capability.READ
     "propose_revision" -> Capability.PROPOSE
-    "request_approval","record_assessment","pin_consumer" -> Capability.PLAN
+    "request_approval","submit_review","record_assessment","pin_consumer" -> Capability.PLAN
     "resolve_approval" -> Capability.APPROVE
     "revoke_access","replace_grants","revoke_credential","rotate_credential" -> Capability.MANAGE
     else -> null

@@ -32,7 +32,7 @@ internal data class PassiveRuntimeLayout(val repository:UUID,val worktreeParent:
             val agents=f.getValue("agents").fields("executor-v1","reviewer-v1")
             require(agents.values.all {it.string().isNotBlank()})
             val parent=Path.of(f.getValue("worktreeParent").string());val executable=Path.of(git.getValue("path").string())
-            require(parent.isAbsolute && parent.toRealPath()==parent && executable.isAbsolute && executable.toRealPath()==executable &&
+            require(parent.isAbsolute && parent.toRealPath()==parent && executable.isAbsolute &&
                 Files.isDirectory(parent,LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(parent) &&
                 Files.getAttribute(parent,"unix:uid")==Files.getAttribute(Path.of("/proc/self"),"unix:uid") &&
                 (Files.getAttribute(parent,"unix:mode") as Int) and 0x12==0)
@@ -42,7 +42,7 @@ internal data class PassiveRuntimeLayout(val repository:UUID,val worktreeParent:
 }
 
 /** Independent service-side observation of actual authenticated native configuration, deployed plugin
- * bytes, Git pin and storage identity. A catalogue cannot observe itself. This is not evidence that
+ * bytes, system-Git compatibility and storage identity. A catalogue cannot observe itself. This is not evidence that
  * permissions/accounting/compaction/durability BEHAVE correctly: the registered checks supply that.
  * Bodies may contain provider configuration; only their digest leaves this adapter, never raw JSON. */
 internal class LinuxNativeRuntimeEnvironment(private val nativeOrigin:String,private val registration:Path,
@@ -94,7 +94,7 @@ internal class LinuxNativeRuntimeEnvironment(private val nativeOrigin:String,pri
         require(System.getProperty("os.name")=="Linux" && sourceRoot.toRealPath()==sourceRoot)
         HttpProfile(nativeOrigin)
         val layout=PassiveRuntimeLayout.read(controllerRoot) ?: return null
-        require(hash(layout.git,64L*1024*1024)==layout.gitDigest)
+        val git=dev.writhelm.core.store.LinuxSystemGit.observe(layout.git,dev.writhelm.core.store.LinuxSystemGit.Profile.WORKTREE)
         require(listOf(privateRoot,sourceRoot).none {layout.worktreeParent.startsWith(it)||it.startsWith(layout.worktreeParent)})
         val f=(StrictJson.decode(protectedRuntimeBytes(registration.parent,registration,65536)) as JObject).entries
         require(f.getValue("url").string()==nativeOrigin)
@@ -119,7 +119,8 @@ internal class LinuxNativeRuntimeEnvironment(private val nativeOrigin:String,pri
         val observed=obj("formatVersion" to num(1),"configuration" to digest(Digest.of(config)),"agents" to digest(Digest.of(agents)),
             "projectChecks" to ((checks?:explicitChecks)?.let(::digest) ?: JNull),
             "deployment" to digest(Digest.of(layout.bytes)),"plugin" to currentPlugin,"repositoryId" to uuid(layout.repository),
-            "git" to digest(layout.gitDigest),"source" to str(sourceRoot.toString()),"sourceIdentity" to str(Files.readAttributes(gitRoot,java.nio.file.attribute.BasicFileAttributes::class.java).fileKey().toString()),
+            "git" to obj("path" to str(layout.git.toString()),"compatibility" to str(git.profile)),
+            "source" to str(sourceRoot.toString()),"sourceIdentity" to str(Files.readAttributes(gitRoot,java.nio.file.attribute.BasicFileAttributes::class.java).fileKey().toString()),
             "worktreeParent" to str(layout.worktreeParent.toString()),"worktreeIdentity" to str(Files.readAttributes(layout.worktreeParent,java.nio.file.attribute.BasicFileAttributes::class.java).fileKey().toString()),
             "storageName" to str(storage.name()),"storageType" to str(storage.type()))
         require(LinuxNativeProcessObserver.observe(pid,nativeOrigin,epoch,pin)!=null)

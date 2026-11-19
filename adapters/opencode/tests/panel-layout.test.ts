@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto"
 import { createRoot, createSignal } from "solid-js"
 import { parseHTML } from "linkedom"
 import type { IpcClient } from "@opencode/plugin/gui"
-import { Review, ReviewDrafts, reply, type Session } from "../src/contracts.js"
+import { Review, ReviewDrafts, reply, type Session, type Reply } from "../src/contracts.js"
 import { ReviewDraftStore } from "../src/review-drafts.js"
 import { createHash } from "node:crypto"
 import { nativePanel, type ExactLink } from "../src/panel.js"
@@ -19,21 +19,21 @@ const reference = (value = original): ExactLink => ({ project: value.request.pay
 const session: Session = { key: "sidecar\nlayout-A", id: "layout-A", server: "sidecar", directory: "/synthetic/project-A", projectRoot: "/synthetic/project-A" }
 const drain = async () => { for (let n = 0; n < 6; n++) await new Promise(r => setImmediate(r)) }
 
-function mount(bundleRaw = raw, width = 800, height = 699, drafts?:IpcClient<typeof ReviewDrafts.spec>) {
+function mount(bundleRaw = raw, width = 800, height = 699, drafts?:IpcClient<typeof ReviewDrafts.spec>,language?:()=>string,answerReply:Reply=reply(),statusFailures=0) {
   const { document, window } = parseHTML("<html><body><div id='host'></div></body></html>")
   Object.assign(globalThis, { document, window })
   const host = document.getElementById("host")! as HTMLElement
   // Reproduce the documented INPUT constraint, NOT fabricated computed geometry.
   Object.assign(host.style, { width: width + "px", height: height + "px", overflow: "hidden" })
-  const calls: { method: string; input: any }[] = [], bundles = new Map<string, string>(),handles:string[]=[]
+  const calls: { method: string; input: any }[] = [], bundles = new Map<string, string>(),handles:string[]=[],resolved:any[]=[]
   const value = JSON.parse(bundleRaw).data; bundles.set(value.request.key, bundleRaw)
   let setSession!: (s: Session) => void, setLink!: (link: ExactLink) => void, dispose!: () => void, root!: HTMLElement
   const bridge: IpcClient<typeof Review.spec> = {
     state: () => undefined, on: () => () => {},
-    status: async input => { calls.push({ method: "status", input }); return reply("OK", { pageJSON: JSON.stringify({ formatVersion: 1, kind: "read", basis: { algorithm: "sha1", hex: "a".repeat(40) }, operation: "list_projects", data: { complete: true, nextCursor: null, snapshotId: randomUUID(), items: [{ projectId: value.request.payload.projectId }] } }) }) },
+    status: async input => { calls.push({ method: "status", input });if(statusFailures-->0)return reply("UNAVAILABLE");return reply("OK", { pageJSON: JSON.stringify({ formatVersion: 1, kind: "read", basis: { algorithm: "sha1", hex: "a".repeat(40) }, operation: "list_projects", data: { complete: true, nextCursor: null, snapshotId: randomUUID(), items: [{ projectId: value.request.payload.projectId }] } }) }) },
     pending: async () => reply("OK", { pageJSON: JSON.stringify({ formatVersion: 1, kind: "read", basis: { algorithm: "sha1", hex: "a".repeat(40) }, operation: "list_requests", data: { complete: true, nextCursor: null, snapshotId: randomUUID(), items: [] } }) }),
     open: async input => { calls.push({ method: "open", input });const handle=randomUUID();handles.push(handle);return reply("OK", { handle, bundleJSON: bundles.get(input.requestId)! }) },
-    answer: async input => { calls.push({ method: "answer", input }); return reply() },
+    answer: async input => { calls.push({ method: "answer", input }); return answerReply },
     dismiss: async input => { calls.push({ method: "dismiss", input }); return reply() },
     connect: async () => reply(), setup: async () => reply(), reconcile: async () => reply(), rotate: async () => reply(),
     workList: async () => reply("UNCONFIGURED"),workOpen: async () => reply("UNCONFIGURED"),
@@ -43,12 +43,47 @@ function mount(bundleRaw = raw, width = 800, height = 699, drafts?:IpcClient<typ
     dispose = d
     const [current, changeSession] = createSignal(session), [link, changeLink] = createSignal(reference(value))
     setSession = changeSession; setLink = changeLink
-    root = nativePanel(current, bridge, link,undefined,drafts); host.append(root)
+    root = nativePanel(current, bridge, link,undefined,drafts,language,(bound,ref,message)=>{resolved.push({bound,ref,message})}); host.append(root)
   })
   const control = (label: string) => [...root.querySelectorAll("button")].find(b => b.textContent === label)!
   const pre = (label: string) => [...root.querySelectorAll("h3")].find(h => h.textContent === label)!.nextElementSibling as HTMLPreElement
-  return { document, window, host, root, calls, bundles,handles, setSession, setLink, dispose, control, pre }
+  return { document, window, host, root, calls, bundles,handles,resolved, setSession, setLink, dispose, control, pre }
 }
+
+test("decision transition: only confirmed success for this exact request closes; pending/refused replies retain the panel",async()=>{
+  const ref=reference(),receipt=(id=ref.requestId)=>JSON.stringify({
+    formatVersion:1,kind:"settled",authenticatedByCredentialId:randomUUID(),commandReplayed:false,fingerprint:"a".repeat(64),
+    identity:{operation:"resolve_approval",principalId:randomUUID(),projectId:ref.project,requestKey:randomUUID()},
+    outcome:{domainReplayed:false,kind:"success",operation:"resolve_approval",result:id},
+    publication:{algorithm:"sha1",hex:"a".repeat(40)},validatedAt:{algorithm:"sha1",hex:"b".repeat(40)}})
+  for(const [result,expected]of [
+    [reply("OK",{resultJSON:receipt()}),1],
+    [reply("UNAVAILABLE",{pending:true}),0],
+    [reply("DOMAIN_REJECTED"),0],
+    [reply("OK",{resultJSON:receipt(randomUUID())}),0]
+  ] as const){
+    const f=mount(raw,800,699,undefined,undefined,result)
+    try{
+      await drain();f.control("Утвердить").click();await drain()
+      assert.equal(f.calls.filter(c=>c.method==="answer").length,1)
+      assert.equal(f.resolved.length,expected)
+      if(expected){assert.deepEqual(f.resolved[0].ref,ref);assert.equal(f.resolved[0].message,"Контракт утверждён.")}
+    }finally{f.dispose()}
+  }
+})
+
+test("native reload: transient read availability retries only connection reads, never an owner decision",async()=>{
+  const f=mount(raw,800,699,undefined,undefined,reply(),2)
+  try{
+    const deadline=Date.now()+4000
+    while(f.root.querySelector("fieldset")!.disabled&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,10))
+    assert.equal(f.root.querySelector("fieldset")!.disabled,false)
+    assert.equal(f.calls.filter(c=>c.method==="status").length,3)
+    assert.equal(f.calls.filter(c=>c.method==="open").length,1)
+    assert.equal(f.calls.filter(c=>c.method==="answer").length,0)
+    assert.equal(f.root.textContent!.includes("Решение не подтверждено"),false)
+  }finally{f.dispose()}
+})
 
 test("draft component: close flushes exact comments, reopening restores, another revision starts empty without assent",async()=>{
   const rows=new Map<string,string>(),key=(kind:string,k:string)=>kind+":"+k
@@ -139,11 +174,53 @@ test("one selectable canonical document plane: explanations collapsed, no point 
   }finally{f.dispose()}
 })
 
+test("localized document: exact item mapping, source disclosure, inline context objection and no assent",async()=>{
+  const value=JSON.parse(raw),packet=value.data.request.payload.packet
+  packet.presentations=[{language:"ru",sourceLanguage:"en",items:packet.items.map((item:any,index:number)=>({
+    itemId:item.id,title:"Русский заголовок "+index,text:"Точная русская формулировка "+index+".\nВторая строка."
+  }))}]
+  const f=mount(JSON.stringify(value),800,699,undefined,()=>"ru-RU")
+  try{
+    await drain()
+    const points=[...f.root.querySelectorAll<HTMLElement>("[data-item-id]")]
+    assert.equal(points.length,packet.items.length)
+    for(const [index,point]of points.entries()){
+      assert.equal(point.dataset.itemId,packet.items[index].id)
+      assert.equal(point.querySelector("[data-canonical-text]")!.textContent,packet.presentations[0].items[index].text)
+      assert.ok(point.querySelector("h3")!.textContent!.includes("Русский заголовок "+index))
+      assert.equal(point.style.userSelect,"text")
+    }
+    const disclosure=[...f.root.querySelectorAll("details")].find(d=>d.querySelector("summary")?.textContent==="Английский оригинал · точная версия")!
+    assert.equal(disclosure.hasAttribute("open"),false)
+    for(const material of value.data.materials)for(const fragment of material.fragments)assert.ok(disclosure.textContent!.includes(fragment.text))
+    const point=points[0],area=point.querySelector("textarea")!
+    assert.equal(area.hidden,true)
+    point.querySelector("[data-canonical-text]")!.dispatchEvent(new f.window.Event("contextmenu",{bubbles:true,cancelable:true}))
+    const menu=f.root.querySelector<HTMLElement>('[role="menu"]')!
+    assert.equal(menu.hidden,false);assert.equal(menu.querySelectorAll('[role="menuitem"]').length,1)
+    ;(menu.querySelector("button") as HTMLButtonElement).click();await drain()
+    assert.equal(area.hidden,false);assert.equal(area.placeholder,"возражение")
+    assert.equal(area.closest("[data-item-id]")!.getAttribute("data-item-id"),packet.items[0].id)
+    assert.equal(f.calls.filter(c=>c.method==="answer").length,0)
+  }finally{f.dispose()}
+})
+
+test("missing user-language representation is explicit and cannot submit an English fallback",async()=>{
+  const f=mount(raw,800,699,undefined,()=>"ru")
+  try{
+    await drain()
+    assert.ok(f.root.textContent!.includes("Перевод этой версии отсутствует"))
+    assert.equal(f.root.querySelector("fieldset")!.disabled,true)
+    f.control("Утвердить").click();await drain()
+    assert.equal(f.calls.filter(c=>c.method==="answer").length,0)
+  }finally{f.dispose()}
+})
+
 test("review actions: collapsed full source, inline exact-item comments and mandatory rejection reason",async()=>{
   const f=mount()
   try{
     await drain()
-    const full=[...f.root.querySelectorAll("details")].find(d=>d.querySelector("summary")?.textContent==="Открыть полный документ")!
+    const full=[...f.root.querySelectorAll("details")].find(d=>d.querySelector("summary")?.textContent==="Английский оригинал · точная версия")!
     assert.ok(full);assert.equal(full.hasAttribute("open"),false)
     assert.equal(f.root.querySelectorAll('input[type="radio"]').length,0)
     f.control("Отклонить").click();await drain()

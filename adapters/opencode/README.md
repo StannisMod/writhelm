@@ -15,6 +15,40 @@ read references and clause IDs). The adapter prepares text, UTF-8 ranges, digest
 identities; it rereads the actual immutable service revision before returning its reference.
 Same-intent retries retain the original command; new meaning requires a new intent/revision.
 
+Review submission uses one `submit_review` command: protected local aliases are converted to exact
+immutable selectors without per-source HTTP reads. The service checks current access and resolves
+the complete packet and predecessor on validation state H, then atomically journals/publishes the
+request. Same-key retries reconcile the retained outcome; changed input conflicts. Existing retained
+`request_approval` originals keep their legacy recovery route and are never migrated or replaced.
+Native panel delivery remains a separate post-success read/delivery, not an owner decision.
+After Gradle `generateModelContracts`, regenerate the typed declaration with
+`generate-model-contracts.mjs`, the legacy service projections with
+`generate-review-submission-schemas.mjs`, and the pinned Ajv validators with `build-schemas.mjs`.
+
+### Explicit diagnostic-contract releases
+
+Normal startup never accepts changed source-description bundles implicitly. A trusted installer may
+select a content-addressed release using
+`node build/src/primary-bootstrap.js provision-contract-release < approved-release.json`.
+Input names the explicit protected `root`/`forbiddenAreas`, exact `expectedBootstrapDigest`,
+`previousBundleDigest`, `previousReleaseDigest` (null only for the original bundle), and full next
+`schemas` map. Do not derive approval from a startup mismatch. No credentials belong in this input.
+The original bootstrap and old release bytes remain unchanged. Sources/digests, namespace inventory,
+bootstrap/store binding and predecessor chain are checked; release retention precedes CAS selection.
+The loader uses only that exact selection and startup compares it with the packaged bundle.
+Retries reuse the identical input; missing/corrupt/stale state holds instead of selecting the newest
+record. This is a Linux protected-storage adapter, not other-OS or abnormal-recovery qualification.
+
+### System Git compatibility
+
+System Git is an ordinary external dependency, not a pinned sandbox binary. Linux Git witnesses
+recheck bounded command/merge capability observations when executable filesystem identity changes;
+they do not compare the binary with a legacy profile's `sha256`. That field remains well-formed
+historical metadata, and old profile bytes are preserved. Content/object/source digests, native/Node
+pins, exact operation custody and publication checks are unchanged. Capability checks are not an
+authorization grant or an assurance that a process still runs the same executable after an OS update.
+Actual failed/ambiguous operations retain their existing refusal/reconciliation behavior.
+
 Knowledge tools take typed operation/payload or operation/subject inputs. Work tools load one
 operation's exact schema with `writhelm_work_contract`; only that chat's next outgoing tool
 schema is specialized, avoiding an always-loaded catalogue of every work type. Int64 fields
@@ -197,6 +231,29 @@ the complete exact bundle and acknowledges loading separately from an explicit o
 Pending intents survive reopen and a cut before current-pointer publication; preparing another
 contract does not erase an earlier unrendered intent. Source text stays visible in full, with raw
 canonical detail and administrative controls in closed diagnostic sections.
+
+Review packets may carry explicitly authored `presentations`, bound by a distinct packet-v3 digest
+to every exact item ID. Typed authoring uses the item's existing `itemKey`; the adapter resolves IDs.
+English contract source remains immutable; the ordinary panel shows one document in the interface
+language, with permanent clause IDs and human titles. English source and packet explanations are
+collapsed disclosures, not a second main document/card plane. Missing language coverage is explicit
+and cannot submit a fallback-language decision. Old packets retain their v1/v2 bytes and digests.
+Localized request records require current source access, including metadata read paths.
+
+Text is selectable. Right-click a point offers only `возразить`; selecting it opens a textarea
+immediately below that point with native placeholder `возражение`. The menu uses the browser top
+layer to escape transformed/clipped Desktop panes. Exact loaded links are retained per native chat
+for reopening; they are UI pointers, not planner state or authorization. Current access is checked
+again on load. The installed Linux owner-case check exercised real mouse selection/right-click,
+the inline field and full Desktop reopen without submitting an owner decision.
+
+A confirmed `resolve_approval` receipt for the exact displayed project/request closes the native
+panel and clears only that chat's saved UI pointer. Pending, refused or mismatched responses do not
+close it; original-command reconciliation can complete the same transition without a new decision.
+The originating planner observes canonical resolutions and reacts once with the next plan/graph or
+genuine question, even while other retained requests remain pending. Decision notification is not
+permission to launch, an inference that older requests were superseded, or a retry of an unknown
+native admission.
 
 Model-free coverage includes the real JVM authorization/Git/HTTP service, controller command,
 built GUI/native-main code, protected per-chat files, exact panel, rendering acknowledgement and a

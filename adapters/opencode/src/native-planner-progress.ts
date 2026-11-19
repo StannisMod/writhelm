@@ -26,7 +26,7 @@ export class NativePlannerActivity {
     const tasks=c.operation==="create_task_revision"?[p.key]:
       c.operation==="set_task_head"?[p.draft,p.executable].filter(Boolean):[]
     for(const key of tasks)if(key?.projectId!==this.scope.projectId||!uuidPattern.test(key.taskId)||key.revision?.value===undefined)nativeUnavailable()
-    const requestId=c.operation==="request_approval"?p.requestId:null
+    const requestId=["request_approval","submit_review"].includes(c.operation)?p.requestId:null
     if(requestId!==null&&!uuidPattern.test(requestId))nativeUnavailable()
     const intent=contextJSON({formatVersion:1,scope:this.scope,operation:c.operation,requestKey:c.requestKey,
       commandDigest:sha(raw),tasks,requestId})
@@ -118,13 +118,14 @@ export class NativePlannerProgress {
     const original=await this.activity.snapshot(),proposal=await this.order.pending()
     if(!original.armed&&!proposal)return
     const canContinue=await this.registry.controllerPlanningAdmission(sessionID,signal)
-    const steps:any[]=[],pending:any[]=[]
+    const steps:any[]=[],pending:any[]=[],resolvedRequestIds:string[]=[]
     const add=(id:string,state:string,source:unknown|null=null,kind="event")=>{
       steps.push({id,state,blockers:source===null?[]:[source]})
       if(state==="blocked")pending.push({id,kind,source})
     }
     const bindingJSON=contextJSON(scope)
     const result=(done=false):PlannerRoleProgress=>({controllerId,bindingJSON,nativeReady:canContinue,outcomeComplete:done,
+      resolvedRequestIds,
       progressJSON:contextJSON({payload:{steps:steps.sort((a,b)=>a.id.localeCompare(b.id))}}),
       waitJSON:pending.length?contextJSON({payload:{pending,result:null,retrospective:null,notification:null}}):null})
     if(original.unknown){add("original-command","blocked",null,"effect");return result()}
@@ -142,7 +143,10 @@ export class NativePlannerProgress {
           approvalSources.set(contextJSON(ref),requestId)
         add("approval-"+requestId,"blocked",{kind:"approval-request",projectId,requestId},"decision")
       }
-      else if(r.kind!=="read")nativeUnavailable()
+      else {
+        if(r.kind!=="read"||r.data?.record?.family!=="resolutions"||r.data.record.key!==requestId)nativeUnavailable()
+        resolvedRequestIds.push(requestId)
+      }
     }
     if(proposal&&!proposal.selected)add("owner-order","blocked",{kind:"owner-order",proposalDigest:proposal.proposalDigest},"decision")
     const keys=new Map<string,any>(original.tasks.map(key=>[contextJSON(key),key]))

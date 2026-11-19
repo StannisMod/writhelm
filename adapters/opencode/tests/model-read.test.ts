@@ -40,6 +40,57 @@ function harness(){
 const ref=(r:{metadata?:Record<string,unknown>})=>r.metadata!.writhelmReadReference as string
 const fault=(code:string)=>(error:unknown)=>error instanceof ModelReadFault&&error.code===code
 
+test("review selectors are local exact custody, not source reads or cross-chat authorization",async()=>{
+  const f=harness(),material=fixture.data.materials[0]
+  const first=await f.reads.read("knowledge",f.channel,session,request("read_clause",material.reference),planningKnowledgeReads,signal)
+  const before=f.seen.length
+  const selected=await f.reads.reviewSelector(f.channel,session,ref(first),signal)
+  assert.equal(selected.operation,"read_clause")
+  assert.deepEqual(JSON.parse(contextJSON(selected.subject)),material.reference)
+  assert.equal(f.seen.length,before)
+  await assert.rejects(()=>f.reads.reviewSelector(f.channel,"ses_other",ref(first),signal),fault("READ_REFERENCE_SCOPE_MISMATCH"))
+  await assert.rejects(()=>f.reads.reviewSelector(f.channel,session,"wr1_"+"z".repeat(24),signal),fault("READ_REFERENCE_NOT_FOUND"))
+  const cancelled=new AbortController();cancelled.abort()
+  await assert.rejects(()=>f.reads.reviewSelector(f.channel,session,ref(first),cancelled.signal),fault("READ_CANCELLED"))
+  assert.equal(f.seen.length,before)
+})
+
+test("rate-limited exact reads wait within bounds and replay identical selectors under current authorization",async()=>{
+  const f=harness(),material=fixture.data.materials[0]
+  const first=await f.reads.read("knowledge",f.channel,session,request("read_clause",material.reference),planningKnowledgeReads,signal)
+  const attempts:string[]=[],waits:number[]=[],raw=envelope("read_clause",material)
+  const channel:ModelReadChannel={...f.channel,send:async(route,bytes)=>{
+    assert.equal(route,"reads");attempts.push(bytes)
+    return attempts.length<3?'{"kind":"error","code":"RATE_LIMIT"}':raw
+  }}
+  const reads=new ModelReads(f.storage,4*1024*1024,async milliseconds=>{waits.push(milliseconds)})
+  const result=await reads.read("knowledge",channel,session,{reference:ref(first),format:"canonical"},planningKnowledgeReads,signal)
+  assert.equal(result.content,raw)
+  assert.deepEqual(attempts,[f.seen[0],f.seen[0],f.seen[0]])
+  assert.deepEqual(waits,[1100,1100])
+})
+
+test("rate retry never refreshes denied sources, loops indefinitely or ignores cancellation",async()=>{
+  const material=fixture.data.materials[0]
+  for(const code of ["FORBIDDEN","UNAUTHENTICATED","RATE_LIMIT"]){
+    const f=harness(),attempts:string[]=[],waits:number[]=[]
+    const channel:ModelReadChannel={...f.channel,send:async(route,raw)=>{
+      assert.equal(route,"reads");attempts.push(raw);return JSON.stringify({kind:"error",code})
+    }}
+    const reads=new ModelReads(f.storage,4*1024*1024,async milliseconds=>{waits.push(milliseconds)})
+    const result=await reads.read("knowledge",channel,session,request("read_clause",material.reference),planningKnowledgeReads,signal)
+    assert.match(result.content,new RegExp(code))
+    assert.equal(attempts.length,code==="RATE_LIMIT"?3:1)
+    assert.equal(waits.length,code==="RATE_LIMIT"?2:0)
+    assert.equal(f.retained.size,0)
+  }
+  const f=harness(),cancel=new AbortController();let attempts=0
+  const reads=new ModelReads(f.storage,4*1024*1024,async()=>{cancel.abort()})
+  const channel:ModelReadChannel={...f.channel,send:async()=>{attempts++;return '{"kind":"error","code":"RATE_LIMIT"}'}}
+  await assert.rejects(()=>reads.read("knowledge",channel,session,request("read_clause",material.reference),planningKnowledgeReads,cancel.signal),fault("READ_CANCELLED"))
+  assert.equal(attempts,1);assert.equal(f.retained.size,0)
+})
+
 test("real protected reference files reopen without source cache or process-local token maps",async()=>{
   const base=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(base)
   const root=await mkdtemp(path.join(base,"read-reference-")),work=path.join(root,"work")

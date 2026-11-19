@@ -57,13 +57,22 @@ internal class AppReduction(private val binding: AppBinding) {
             }
         }
         val outcome=if(c.fingerprintVersion==1) {
-            val codec=CommandCodec(); val command=codec.decode(c.bytes()); coreCommand=command
-            verifyCommand(c,command.requestKey,command.projectId,command.payload.operation,codec.fingerprint(command),codec.encode(command))
+            val codec=CommandCodec(); val decoded=codec.decode(c.bytes())
+            verifyCommand(c,decoded.requestKey,decoded.projectId,decoded.payload.operation,codec.fingerprint(decoded),codec.encode(decoded))
+            if(decoded.payload is CommandPayload.SubmitReview && !base.authority.policy.allows(authenticated.actor,decoded.projectId,Capability.READ))fail(StoreProblem.DENIED)
+            val command=when(val prepared=decoded.resolveReview(base.core.snapshot(limits.coreRecords))) {
+                is WorkflowResult.Success -> prepared.value
+                is WorkflowResult.Failure -> {
+                    if(prepared.problem==WorkflowProblem.FORBIDDEN)fail(StoreProblem.DENIED)
+                    return AppPlan(h.oid,actor,c,base,Evaluation(LogicalOutcome.Rejected("core",prepared.problem.name),emptyList()))
+                }
+            };coreCommand=command
             affected(base.core.snapshot(limits.coreRecords),roots(command,base.core.snapshot(limits.coreRecords)))
             val a=authenticated.actor
             when(val p=command.payload) {
                 is CommandPayload.Propose -> coreResult(base.core.propose(a,p.revision),::revisionKey)
                 is CommandPayload.Request -> coreResult(base.core.request(a,command.projectId,p.requestId,p.packet)) { uuid(it.id) }
+                is CommandPayload.SubmitReview -> fail(StoreProblem.INTEGRITY)
                 is CommandPayload.Resolve -> coreResult(base.core.resolve(a,command.projectId,p.requestId,p.requestDigest,p.packetDigest,p.answer)) { uuid(it.requestId) }
                 is CommandPayload.Assess -> coreResult(base.core.assess(a,p.assessment)) { uuid(it.assessment.id) }
                 is CommandPayload.Pin -> coreResult(base.core.pin(a,command.projectId,p.manifestId,p.consumerId,p.clauses,p.contexts,p.dependencies,p.assessmentId)) { uuid(it.id) }

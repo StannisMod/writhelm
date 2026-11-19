@@ -135,6 +135,13 @@ internal class H1ProtectedReads {
                 .singleOrNull { it.family==family && it.id==id } ?: throw AppAccessFault(AppAccessProblem.FORBIDDEN)
             else ProtectedResource.LegacyRecord(project,family,id,Digest.parse("0".repeat(64)))
         permit(base,presented,operation,c,listOf(resource),proof)
+        // Localized wording has source sensitivity even on otherwise metadata-only record reads.
+        // Keep this in the shared record gate so predecessor projections cannot bypass it.
+        if(family==LegacyReadFamily.REQUEST) {
+            val packet=base.core.snapshot(8192).requests[id]?.packet
+            if(packet!=null && packet.presentations.isNotEmpty())
+                permit(base,presented,operation,c,packet.references.map { ProtectedResource.Knowledge(it) },proof)
+        }
     }
     private fun resources(facts: WorkRecordFacts): List<ProtectedResource> {
         if(facts.identity.family.mutable) {

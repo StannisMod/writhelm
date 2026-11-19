@@ -29,7 +29,8 @@ class NativeRuntimeEnvironmentTest {
         val executable=Path.of("/proc/self/exe").toRealPath();val binary=Digest.of(Files.readAllBytes(executable))
         write(bootstrap.resolve("passive-profile-${Digest.of("current".toByteArray()).hex}.json"),StrictJson.encode(obj(
             "formatVersion" to num(1),"repositoryId" to uuid(UUID.randomUUID()),"worktreeParent" to str(worktrees.toString()),
-            "git" to obj("path" to str(executable.toString()),"sha256" to digest(binary)),
+            // Deliberately stale legacy executable digest; native/JVM pin remains exact below.
+            "git" to obj("path" to str("/usr/bin/git"),"sha256" to digest(binary)),
             "agents" to obj("executor-v1" to str("synthetic executor"),"reviewer-v1" to str("synthetic reviewer")))))
         val server=HttpServer.create(InetSocketAddress("127.0.0.1",0),0)
         var config="[]";var agents="{\"data\":[]}";var status=200;var requests=0

@@ -14,6 +14,7 @@ const invalid = (): never => { throw new Error("invalid exact work JSON/origin")
 const exact = (raw: string) => exactJSON(raw, invalid)
 
 export interface WorkRequestCustody {
+  original?(bindingIdentity:string,requestKey:string):Promise<string|undefined>
   retain(bindingIdentity: string, requestKey: string, raw: string): Promise<string>
   retainWithStatus?(bindingIdentity:string,requestKey:string,raw:string):Promise<{raw:string;fresh:boolean}>
 }
@@ -25,6 +26,13 @@ export class LinuxWorkRequestCustody implements WorkRequestCustody {
     this.storage = new LinuxNativeCustody(root, forbiddenWorkAreas, 256)
   }
   async requireOutside(work: string): Promise<void> { await this.storage.requireOutside(work) }
+  async original(bindingIdentity:string,requestKey:string):Promise<string|undefined>{
+    if(!/^[0-9a-f-]{36}$/.test(requestKey))throw new Error("unqualified request custody")
+    await this.storage.initialize()
+    if((await fs.readdir(this.root)).some(name=>!/^work-request-[0-9a-f]{64}\.json$/.test(name)))
+      throw new Error("unrecognized or unresolved request custody layout")
+    return this.storage.read("work-request",JSON.stringify([bindingIdentity,requestKey]))
+  }
   async retain(bindingIdentity: string, requestKey: string, raw: string): Promise<string> {
     return (await this.retainWithStatus(bindingIdentity,requestKey,raw)).raw
   }
@@ -46,6 +54,7 @@ export class LinuxWorkRequestCustody implements WorkRequestCustody {
  * ToolContext+trusted host incarnation, never a model argument/session label or GUI-owner profile.
  * Only verified controller or registered assignment credentials may enter this interface. */
 export interface BoundWorkChannel {
+  originalReview?(requestKey:string):Promise<string|undefined>
   readonly projectID: string
   readonly scope: "controller" | "assignment"
   /** Nonsecret exact chat/assignment binding, produced by the verified registry, not tool input. */
@@ -64,15 +73,16 @@ export function boundedWorkChannel(projectID: string, scope: "controller" | "ass
   return boundedChannel(projectID,scope,origin,token,maxReplyBytes,custody,bindingIdentity,connectedCommands,connectedReads,"3",fetcher)
 }
 
-export const planningKnowledgeCommands = new Set(["propose_revision", "request_approval", "record_assessment", "pin_consumer"])
+export const planningKnowledgeCommands = new Set(["propose_revision", "request_approval", "submit_review", "record_assessment", "pin_consumer"])
 export const planningKnowledgeReads = new Set(["list_projects", "list_documents", "list_revisions", "list_requests", "list_manifests",
   "read_revision", "read_clause", "read_context", "read_approval_trace", "read_request", "read_resolution", "read_manifest", "read_review_bundle"])
-/** Same protected controller identity, existing knowledge v1 operations ONLY. Neither resolve_approval
+/** Same protected controller identity, closed knowledge v1 planning operations ONLY. Neither resolve_approval
  * nor credential/grant administration can pass this channel, even if the model names them. */
 export function boundedPlanningKnowledgeChannel(projectID: string, origin: string, token: string,
-  custody: WorkRequestCustody,bindingIdentity: string,fetcher: typeof fetch=fetch): BoundWorkChannel {
+  custody: WorkRequestCustody,bindingIdentity: string,fetcher: typeof fetch=fetch,
+  previousBindings:readonly string[]=[]): BoundWorkChannel {
   return boundedChannel(projectID,"controller",origin,token,4*1024*1024,custody,bindingIdentity,
-    planningKnowledgeCommands,planningKnowledgeReads,"1",fetcher)
+    planningKnowledgeCommands,planningKnowledgeReads,"1",fetcher,previousBindings)
 }
 
 /** Trusted preparation orchestration only, never registered as a generic model auth tool. This
@@ -97,11 +107,28 @@ export function boundedDispatchMaterializationChannel(projectID:string,origin:st
 
 function boundedChannel(projectID: string, scope: "controller" | "assignment", origin: string, token: string,
   maxReplyBytes: number, custody: WorkRequestCustody, bindingIdentity: string, commands: ReadonlySet<string>,reads: ReadonlySet<string>,
-  commandVersion: string,fetcher: typeof fetch): BoundWorkChannel {
+  commandVersion: string,fetcher: typeof fetch,previousBindings:readonly string[]=[]): BoundWorkChannel {
   exactLoopback(origin, invalid)
   if (!["controller", "assignment"].includes(scope) || !token.startsWith("wh1.") || maxReplyBytes < 1024 || maxReplyBytes > 4 * 1024 * 1024)
     throw new Error("unqualified bounded work channel")
-  return Object.freeze({ projectID, scope, async send(route: "commands" | "reads", rawJSON: string, signal: AbortSignal,beforeDispatch?:(raw:string,fresh:boolean)=>Promise<void>) {
+  return Object.freeze({ projectID, scope,
+    ...(commands.has("submit_review")?{originalReview:async(requestKey:string)=>{
+      if(!custody.original)throw new Error("original review custody lookup unavailable")
+      if(previousBindings.length>64||previousBindings.some(value=>typeof value!=="string"||value.length>4096))
+        throw new Error("unqualified original review bindings")
+      let original:string|undefined
+      for(const binding of new Set([bindingIdentity,...previousBindings])){
+        for(const operation of ["request_approval","submit_review"]){
+          const found=await custody.original(binding+":"+operation,requestKey)
+          if(found!==undefined){
+            if(original!==undefined&&original!==found)throw new Error("conflicting original review routes")
+            original=found
+          }
+        }
+      }
+      return original
+    }}:{}),
+    async send(route: "commands" | "reads", rawJSON: string, signal: AbortSignal,beforeDispatch?:(raw:string,fresh:boolean)=>Promise<void>) {
     if (signal.aborted) throw new Error("work request cancelled before dispatch")
     const parsed = exact(rawJSON)
     const scopedProjects=route==="reads"&&commandVersion==="1"&&parsed.operation==="list_projects"&&parsed.projectId===null

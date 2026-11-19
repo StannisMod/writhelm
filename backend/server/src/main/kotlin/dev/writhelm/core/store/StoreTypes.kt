@@ -8,7 +8,7 @@ import java.security.MessageDigest
 import java.util.Collections
 import java.util.UUID
 
-internal enum class StoreProblem { INTEGRITY, UNSUPPORTED, UNAVAILABLE, ADMISSION, RECOVERY_REQUIRED, DENIED }
+internal enum class StoreProblem { INTEGRITY, UNSUPPORTED, UNAVAILABLE, ADMISSION, RECOVERY_REQUIRED, DENIED, GIT_UNAVAILABLE, GIT_INCOMPATIBLE }
 internal class StoreFault(val problem: StoreProblem): RuntimeException(problem.name)
 internal fun fail(p: StoreProblem): Nothing=throw StoreFault(p)
 internal fun integrity(ok: Boolean) { if(!ok)fail(StoreProblem.INTEGRITY) }
@@ -19,7 +19,7 @@ internal data class GitOid(val algorithm: String,val hex: String) {
     fun json()=obj("algorithm" to str(algorithm),"hex" to str(hex))
     companion object { fun parse(v: JsonValue): GitOid { val f=v.fields("algorithm","hex"); return GitOid(f.getValue("algorithm").string(),f.getValue("hex").string()) } }
 }
-internal val coreOperations=setOf("propose_revision","request_approval","resolve_approval","record_assessment","pin_consumer","revoke_access")
+internal val coreOperations=setOf("propose_revision","request_approval","submit_review","resolve_approval","record_assessment","pin_consumer","revoke_access")
 internal val authOperations=setOf("replace_grants","revoke_credential","rotate_credential")
 
 /** Canonical admitted input is frozen once; retries never replace targets or credentials. */
@@ -191,8 +191,8 @@ internal class Receipt(val storeId: UUID,val identity: CommandIdentity,val finge
                 required(key("core","revisions",o.result),true); required(key("core","proposals",o.result),true)
                 families("core" to "revisions","core" to "proposals","core" to "bodies"); integrity(writes.size in 2..3)
             }
-            "request_approval","pin_consumer" -> {
-                required(key("core",if(o.operation=="request_approval")"requests" else "manifests",o.result),true); integrity(writes.size==1)
+            "request_approval","submit_review","pin_consumer" -> {
+                required(key("core",if(o.operation!="pin_consumer")"requests" else "manifests",o.result),true); integrity(writes.size==1)
             }
             "resolve_approval" -> { required(key("core","resolutions",o.result),true); families("core" to "resolutions","core" to "approvals","core" to "heads","core" to "generations") }
             "record_assessment" -> { required(key("core","assessments",o.result),true); families("core" to "assessments","core" to "continuity","core" to "blocked") }

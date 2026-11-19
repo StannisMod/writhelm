@@ -4,9 +4,11 @@ import path from "node:path"
 import { createHash } from "node:crypto"
 import { execFile } from "node:child_process"
 import { nativeUnavailable, uuidPattern } from "./native-runtime-client.js"
+import {observeSystemGit} from "./linux-system-git.js"
 
 export type GitObject = Readonly<{algorithm:"sha1"|"sha256";hex:string}>
 export type GitSnapshot = Readonly<{repositoryId:string;commit:GitObject;tree:GitObject;dirtyContentDigest:null;retainedLocatorId:string}>
+/** sha256 is legacy historical metadata, not an executable compatibility/authorization pin. */
 export type GitExecutable = Readonly<{path:string;sha256:string}>
 export type GitDiffObservation = Readonly<{base:GitSnapshot;result:GitSnapshot;sha256:string;byteLength:number;bytes:Buffer}>
 export type CandidateMergeInput = Readonly<{base:GitSnapshot;result:GitSnapshot}>
@@ -19,14 +21,9 @@ export class LinuxGitWitness {
   constructor(executable:GitExecutable){this.executable=Object.freeze({...executable})}
   private async run(directory:string,args:readonly string[],signal:AbortSignal,dates?:Readonly<{time:string}>):Promise<Buffer>{
     if(process.platform!=="linux"||!path.isAbsolute(this.executable.path)||!/^[0-9a-f]{64}$/.test(this.executable.sha256))nativeUnavailable()
-    const file=await fs.open(this.executable.path,"r")
-    try{
-      const stat=await file.stat();if(!stat.isFile()||stat.size>128*1024*1024)nativeUnavailable()
-      const hash=createHash("sha256"),buffer=Buffer.alloc(65536);let size=0
-      for(;;){const next=await file.read(buffer,0,buffer.length,null);if(!next.bytesRead)break;size+=next.bytesRead;if(size>stat.size)nativeUnavailable();hash.update(buffer.subarray(0,next.bytesRead))}
-      const after=await file.stat()
-      if(size!==stat.size||stat.size!==after.size||stat.dev!==after.dev||stat.ino!==after.ino||hash.digest("hex")!==this.executable.sha256)nativeUnavailable()
-    }finally{await file.close()}
+    // sha256 remains well-formed historical deployment metadata. System Git compatibility is not
+    // binary identity; an ordinary compatible package update does not invalidate this binding.
+    await observeSystemGit(this.executable.path,signal)
     return new Promise((resolve,reject)=>{
       execFile(this.executable.path,["-c","core.hooksPath=/dev/null","-c","core.fsmonitor=false","-C",directory,...args],
          {encoding:"buffer",maxBuffer:8*1024*1024,timeout:10000,signal,env:{PATH:"/usr/bin:/bin",LC_ALL:"C",GIT_CONFIG_NOSYSTEM:"1",GIT_CONFIG_GLOBAL:"/dev/null",GIT_TERMINAL_PROMPT:"0",GIT_OPTIONAL_LOCKS:"0",

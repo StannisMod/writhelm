@@ -2,7 +2,7 @@
 // Model-free native lifecycle/authoritative role-progress doubles. No semantic/live role claim.
 import test from "node:test"
 import assert from "node:assert/strict"
-import { NativeRoleContinuation, type RoleProgress } from "../src/native-role-continuation.js"
+import { NativeRoleContinuation, type RoleProgress, type PlannerRoleProgress } from "../src/native-role-continuation.js"
 import { contextJSON } from "../src/native-context-codec.js"
 import { createHash } from "node:crypto"
 import * as fs from "node:fs/promises"
@@ -38,6 +38,30 @@ function fixture(){
     lose:()=>{unknown=true},flip:()=>{flip=true}}
 }
 const idle={sessionID,background:[]}
+test("decision reactions preserve admission, effect and uncertain original-send guards",async()=>{
+  const f=fixture()
+  const controllerId=initial().assignmentId
+  let frame:PlannerRoleProgress={controllerId,bindingJSON:"bound-chat",nativeReady:false,outcomeComplete:false,
+    resolvedRequestIds:[controllerId],
+    progressJSON:contextJSON({payload:{steps:[{id:"old-request",state:"blocked",blockers:[{requestId:"old"}]}]}}),
+    waitJSON:contextJSON({payload:{pending:[{id:"old",kind:"decision",source:{requestId:"old"}}],
+      result:null,retrospective:null,notification:null}})}
+  let sends=0
+  const make=()=>new NativeRoleContinuation({
+    read:async(kind,key)=>f.values.get(kind+":"+key),
+    retain:async(kind,key,raw)=>{const k=kind+":"+key;if(f.values.has(k))return false;f.values.set(k,raw);return true},
+    replace:async(kind,key,_expected,raw)=>{f.values.set(kind+":"+key,raw);return true}
+  },async()=>frame,async()=>{sends++;throw Error("lost original reply")})
+  assert.equal(await make().idle(idle),"admission-held")
+  frame={...frame,nativeReady:true}
+  const decisionWait=frame.waitJSON
+  frame={...frame,waitJSON:contextJSON({payload:{pending:[{id:"unknown",kind:"effect",source:null}]}})}
+  assert.equal(await make().idle(idle),"unknown-effect-held");assert.equal(sends,0)
+  frame={...frame,waitJSON:decisionWait}
+  assert.equal(await make().idle(idle),"dispatch-unknown");assert.equal(sends,1)
+  frame={...frame,resolvedRequestIds:[controllerId,"00000000-0000-0000-0000-000000000002"]}
+  assert.equal(await make().idle(idle),"dispatch-unknown");assert.equal(sends,1)
+})
 test("premature idle gets one retained native continuation, then stalls rather than looping or minting IDs",async()=>{
   const f=fixture(),roles=f.make()
   assert.equal(await roles.idle(idle),"continued");assert.equal(f.sends(),1)

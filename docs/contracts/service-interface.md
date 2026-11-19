@@ -11,6 +11,32 @@ Existing domain laws, command bytes/fingerprints and atomicity remain unchanged.
 
 ### Owner-approved typed model boundary
 
+Owner-approved review-submission extension (2026-11-19): `submit_review` is one bounded command,
+not a general batch endpoint. Its retained input contains exact immutable source selectors and
+authored decision material. The service resolves the complete source/predecessor closure against
+validation state H, checks current READ and PLAN plus source disclosure, builds the exact packet
+and publishes the request through the normal atomic command journal. An inaccessible, invalid or
+oversized source must never produce a partial request. No implicit latest lookup is permitted.
+Same-key/same-input retry reconciles the original journaled outcome; it must not rebuild a settled
+packet against newer state. Different input under that identity conflicts.
+
+Adapter read aliases remain protected, chat-bound local custody, not service authority. The adapter
+verifies alias integrity/scope and sends exact selectors without per-source HTTP reads. Historical
+`request_approval` commands, bytes, fingerprints and original-operation recovery remain unchanged.
+No existing review is migrated/resubmitted. Publication/request creation and native delivery are
+not human approval. Implementation/test evidence is tracked separately from this accepted design.
+
+Owner-approved installation-description extension (2026-11-19): source-description bundles may be
+updated only by explicit trusted installation selection, not by accepting a startup package mismatch.
+The original bootstrap bytes/proof and old descriptions remain immutable. Each retained release binds
+the exact bootstrap digest, store, previous bundle/release and complete next bundle; content/source
+digests and the bounded predecessor chain are verified. Retain the release before CAS-publishing its
+selection. Lost acknowledgement reconciles the same release; unselected prepared records are not
+automatically promoted. Startup requires an exact selected/package match and unchanged non-schema
+configuration. Missing/corrupt/mismatched selection refuses without fallback or automatic downgrade.
+This operational installation state is neither a canonical authority grant nor shared planner state.
+Current per-chat/credential/disclosure checks and original command identities remain authoritative.
+
 Ordinary model clients consume typed operation inputs and bounded operation/definition help, not
 whole implementation-source bundles or unrestricted JSON strings. Structural declarations generate
 model-facing schemas and guard service structural admission; typed domain construction, exact wire

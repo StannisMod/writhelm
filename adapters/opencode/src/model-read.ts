@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { createHash } from "node:crypto"
+import {setTimeout as pause} from "node:timers/promises"
 import { isLosslessNumber } from "lossless-json"
 import { exactJSON } from "./strict-json.js"
 import { contextJSON } from "./native-context-codec.js"
@@ -76,10 +77,31 @@ function readScope(channel:ModelReadChannel,sessionID:string):string{
  * source bodies, credentials, cached authorization, approvals or another canonical work database. */
 export class ModelReads {
   constructor(private readonly custody:Pick<LinuxNativeCustody,"initialize"|"retain"|"read">,
-    private readonly maximum=4*1024*1024){
+    private readonly maximum=4*1024*1024,
+    private readonly retryWait:(milliseconds:number,signal:AbortSignal)=>Promise<void> =
+      (milliseconds,signal)=>pause(milliseconds,undefined,{signal})){
     requireRead(Number.isInteger(maximum)&&maximum>0&&maximum<=4*1024*1024,"INVALID_READ_LIMIT")
   }
   initialize(){return this.custody.initialize()}
+  /** Local custody/integrity only, never authorization or cached source content. Used exclusively
+   * to convey an immutable knowledge selector to the service's atomic review operation. */
+  async reviewSelector(channel:ModelReadChannel,sessionID:string,reference:string,signal:AbortSignal):Promise<any>{
+    readInput({reference,format:"canonical"})
+    requireRead(!signal.aborted,"READ_CANCELLED")
+    const raw=await this.custody.read("model-read",reference)
+    requireRead(raw!==undefined,"READ_REFERENCE_NOT_FOUND")
+    requireRead(token(raw!)===reference,"READ_REFERENCE_INTEGRITY")
+    const retained=fields(exactJSON(raw!,()=>fail()),["formatVersion","binding","domain","requestJSON","meaning","guard","page"])
+    requireRead(retained.formatVersion?.value==="1"&&retained.binding===readScope(channel,sessionID)&&
+      retained.domain==="knowledge","READ_REFERENCE_SCOPE_MISMATCH")
+    requireRead(retained.meaning==="exact"&&retained.page===null&&
+      (retained.guard===null||digest(retained.guard)),"READ_REFERENCE_INTEGRITY")
+    requireRead(typeof retained.requestJSON==="string"&&Buffer.byteLength(retained.requestJSON)<=16384,"INVALID_READ_INPUT")
+    const request=exactJSON(retained.requestJSON,()=>fail("INVALID_READ_INPUT"))
+    selector(request,"knowledge",channel.projectID,new Set(["read_revision","read_clause","read_context","read_approval_trace"]))
+    requireRead(!signal.aborted,"READ_CANCELLED")
+    return request
+  }
   async read(domain:ReadDomain,channel:ModelReadChannel,sessionID:string,input:unknown,
     allowed:ReadonlySet<string>,signal:AbortSignal):Promise<{content:string;metadata?:Record<string,unknown>}>{
     const v=readInput(input),binding=readScope(channel,sessionID)
@@ -101,8 +123,16 @@ export class ModelReads {
     selector(request,domain,channel.projectID,allowed)
     // Every resolution goes back through the current scoped service channel. No cached content,
     // current-title lookup, cursor reset or latest-generation fallback after a refusal.
-    const raw=await channel.send("reads",requestJSON!,signal)
-    const result=exactJSON(raw,()=>fail())
+    let raw=await channel.send("reads",requestJSON!,signal)
+    let result=exactJSON(raw,()=>fail())
+    // Exact READ selectors only. A large review's source closure can exceed the shared service
+    // admission window; do not relax that window, cache authorization, or retry any command.
+    for(let retry=0;result?.kind==="error"&&result.code==="RATE_LIMIT"&&retry<2;retry++){
+      try{await this.retryWait(1100,signal)}catch(error){if(signal.aborted)fail("READ_CANCELLED");throw error}
+      requireRead(!signal.aborted,"READ_CANCELLED")
+      raw=await channel.send("reads",requestJSON!,signal)
+      result=exactJSON(raw,()=>fail())
+    }
     if(result?.kind==="error"){
       requireRead(typeof result.code==="string"&&/^[A-Z][A-Z0-9_]{0,63}$/.test(result.code))
       return {content:v.format==="canonical"?raw:`Writhelm read held: ${result.code}\nNo source content returned. The original reference was not refreshed or retargeted.`,

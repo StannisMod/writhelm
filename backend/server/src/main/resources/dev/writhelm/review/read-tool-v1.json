@@ -27,7 +27,7 @@
     "generation": {
       "type": "integer",
       "minimum": 0,
-      "maximum": 9223372036854775807
+      "maximum": 9223372036854776000
     },
     "text": {
       "type": "string",
@@ -279,12 +279,77 @@
       }
     },
     "reviewFollowup": {
-      "type":"object","additionalProperties":false,"required":["requestId","requestDigest","packetDigest","items"],
-      "properties":{"requestId":{"$ref":"#/$defs/uuid"},"requestDigest":{"$ref":"#/$defs/digest"},"packetDigest":{"$ref":"#/$defs/digest"},
-        "items":{"type":"array","minItems":1,"maxItems":256,"items":{"type":"object","additionalProperties":false,
-          "required":["previousItemId","itemId","disposition","explanation"],
-          "properties":{"previousItemId":{"oneOf":[{"$ref":"#/$defs/uuid"},{"type":"null"}]},"itemId":{"oneOf":[{"$ref":"#/$defs/uuid"},{"type":"null"}]},
-            "disposition":{"enum":["revised","unchanged","removed","retained","added"]},"explanation":{"type":"string","minLength":1,"maxLength":4096,"pattern":"\\S"}}}}}
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "requestDigest",
+        "packetDigest",
+        "items"
+      ],
+      "properties": {
+        "requestId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "requestDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "packetDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "previousItemId",
+              "itemId",
+              "disposition",
+              "explanation"
+            ],
+            "properties": {
+              "previousItemId": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "itemId": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "disposition": {
+                "enum": [
+                  "revised",
+                  "unchanged",
+                  "removed",
+                  "retained",
+                  "added"
+                ]
+              },
+              "explanation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096,
+                "pattern": "\\S"
+              }
+            }
+          }
+        }
+      }
     },
     "packet": {
       "type": "object",
@@ -347,7 +412,60 @@
         "dependencies": {
           "$ref": "#/$defs/references"
         },
-        "followup":{"$ref":"#/$defs/reviewFollowup"},
+        "followup": {
+          "$ref": "#/$defs/reviewFollowup"
+        },
+        "presentations": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "language",
+              "sourceLanguage",
+              "items"
+            ],
+            "properties": {
+              "language": {
+                "type": "string",
+                "pattern": "^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-[A-Z]{2}|-[0-9]{3})?$"
+              },
+              "sourceLanguage": {
+                "type": "string",
+                "pattern": "^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-[A-Z]{2}|-[0-9]{3})?$"
+              },
+              "items": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "itemId",
+                    "title",
+                    "text"
+                  ],
+                  "properties": {
+                    "itemId": {
+                      "$ref": "#/$defs/uuid"
+                    },
+                    "title": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "pattern": "\\S"
+                    },
+                    "text": {
+                      "type": "string",
+                      "maxLength": 65536,
+                      "pattern": "\\S"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         "informationGaps": {
           "$ref": "#/$defs/texts"
         }
@@ -372,11 +490,22 @@
     "answer": {
       "oneOf": [
         {
-          "type": "object", "additionalProperties": false,
-          "required": ["kind", "reason"],
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "reason"
+          ],
           "properties": {
-            "kind": {"const": "reject-with-reason"},
-            "reason": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "\\S"}
+            "kind": {
+              "const": "reject-with-reason"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
           }
         },
         {
@@ -1163,6 +1292,16 @@
               "$ref": "#/$defs/revokePayload"
             }
           }
+        },
+        {
+          "properties": {
+            "operation": {
+              "const": "submit_review"
+            },
+            "payload": {
+              "$ref": "#/$defs/submitReviewPayload"
+            }
+          }
         }
       ]
     },
@@ -1339,7 +1478,8 @@
         "resolve_approval",
         "record_assessment",
         "pin_consumer",
-        "revoke_access"
+        "revoke_access",
+        "submit_review"
       ]
     },
     "authOperation": {
@@ -1640,7 +1780,8 @@
                 "pin_consumer",
                 "revoke_access",
                 "replace_grants",
-                "revoke_credential"
+                "revoke_credential",
+                "submit_review"
               ]
             },
             "result": {
@@ -2011,6 +2152,16 @@
             },
             "payload": {
               "$ref": "#/$defs/pinPayload"
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation": {
+              "const": "submit_review"
+            },
+            "payload": {
+              "$ref": "#/$defs/submitReviewPayload"
             }
           }
         }
@@ -2615,7 +2766,10 @@
             }
           ]
         },
-        "followupJSON":{"type":"string","maxLength":4194304},
+        "followupJSON": {
+          "type": "string",
+          "maxLength": 4194304
+        },
         "materials": {
           "type": "array",
           "items": {
@@ -2769,7 +2923,9 @@
         "IDENTITY_CONFLICT",
         "INTEGRITY",
         "PUBLICATION_UNKNOWN",
-        "INCOMPLETE_PACKET"
+        "INCOMPLETE_PACKET",
+        "GIT_UNAVAILABLE",
+        "GIT_INCOMPATIBLE"
       ]
     },
     "result": {
@@ -3244,6 +3400,433 @@
           ]
         }
       ]
+    },
+    "submission_reviewDraft": {
+      "additionalProperties": false,
+      "properties": {
+        "alternatives": {
+          "items": {
+            "maxLength": 4096,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
+        "consequences": {
+          "items": {
+            "maxLength": 4096,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
+        "contexts": {
+          "items": {
+            "$ref": "#/$defs/submission_reviewSource"
+          },
+          "maxItems": 256,
+          "minItems": 0,
+          "type": "array"
+        },
+        "dependencies": {
+          "items": {
+            "$ref": "#/$defs/submission_reviewSource"
+          },
+          "maxItems": 256,
+          "minItems": 0,
+          "type": "array"
+        },
+        "followup": {
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "items": {
+                "$ref": "#/$defs/submission_followupItem"
+              },
+              "maxItems": 256,
+              "minItems": 1,
+              "type": "array"
+            },
+            "requestId": {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "requestId",
+            "items"
+          ],
+          "type": "object"
+        },
+        "informationGaps": {
+          "items": {
+            "maxLength": 4096,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 0,
+          "type": "array"
+        },
+        "items": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "before": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/submission_reviewSource"
+                  },
+                  {
+                    "const": null
+                  }
+                ]
+              },
+              "id": {
+                "maxLength": 36,
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "target": {
+                "$ref": "#/$defs/submission_reviewSource"
+              }
+            },
+            "required": [
+              "id",
+              "target",
+              "before"
+            ],
+            "type": "object"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "type": "array"
+        },
+        "presentations": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "items": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "itemId": {
+                      "maxLength": 36,
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "text": {
+                      "maxLength": 65536,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "title": {
+                      "maxLength": 200,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "itemId",
+                    "title",
+                    "text"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 4096,
+                "minItems": 1,
+                "type": "array"
+              },
+              "language": {
+                "maxLength": 12,
+                "pattern": "^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-[A-Z]{2}|-[0-9]{3})?$",
+                "type": "string"
+              },
+              "sourceLanguage": {
+                "maxLength": 12,
+                "pattern": "^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-[A-Z]{2}|-[0-9]{3})?$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "language",
+              "sourceLanguage",
+              "items"
+            ],
+            "type": "object"
+          },
+          "maxItems": 8,
+          "minItems": 0,
+          "type": "array"
+        },
+        "question": {
+          "maxLength": 4096,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "rationale": {
+          "maxLength": 8192,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "scope": {
+          "maxLength": 8192,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "uncertainties": {
+          "items": {
+            "maxLength": 4096,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 0,
+          "type": "array"
+        }
+      },
+      "required": [
+        "items",
+        "question",
+        "scope",
+        "rationale",
+        "consequences",
+        "alternatives",
+        "uncertainties",
+        "contexts",
+        "dependencies",
+        "informationGaps"
+      ],
+      "type": "object"
+    },
+    "submission_reviewSource": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/submission_reference"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "clauseId": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "const": null
+                }
+              ]
+            },
+            "kind": {
+              "const": "revision"
+            },
+            "revisionDigest": {
+              "maxLength": 64,
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "revisionKey": {
+              "$ref": "#/$defs/submission_revisionKey"
+            }
+          },
+          "required": [
+            "kind",
+            "revisionKey",
+            "revisionDigest",
+            "clauseId"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "submission_reference": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/submission_clause"
+        },
+        {
+          "$ref": "#/$defs/submission_context"
+        }
+      ]
+    },
+    "submission_clause": {
+      "additionalProperties": false,
+      "properties": {
+        "clauseId": {
+          "maxLength": 1048576,
+          "type": "string"
+        },
+        "contentDigest": {
+          "maxLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "clause"
+        },
+        "revision": {
+          "$ref": "#/$defs/submission_revisionKey"
+        },
+        "revisionDigest": {
+          "maxLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "revision",
+        "revisionDigest",
+        "clauseId",
+        "contentDigest"
+      ],
+      "type": "object"
+    },
+    "submission_revisionKey": {
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "$ref": "#/$defs/submission_documentKey"
+        },
+        "revisionId": {
+          "maxLength": 36,
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document",
+        "revisionId"
+      ],
+      "type": "object"
+    },
+    "submission_documentKey": {
+      "additionalProperties": false,
+      "properties": {
+        "documentId": {
+          "maxLength": 36,
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "projectId": {
+          "maxLength": 36,
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "projectId",
+        "documentId"
+      ],
+      "type": "object"
+    },
+    "submission_context": {
+      "additionalProperties": false,
+      "properties": {
+        "contextDigest": {
+          "maxLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "context"
+        },
+        "revision": {
+          "$ref": "#/$defs/submission_revisionKey"
+        },
+        "revisionDigest": {
+          "maxLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "revision",
+        "revisionDigest",
+        "contextDigest"
+      ],
+      "type": "object"
+    },
+    "submission_followupItem": {
+      "additionalProperties": false,
+      "properties": {
+        "disposition": {
+          "anyOf": [
+            {
+              "const": "revised"
+            },
+            {
+              "const": "unchanged"
+            },
+            {
+              "const": "added"
+            },
+            {
+              "const": "removed"
+            },
+            {
+              "const": "retained"
+            }
+          ]
+        },
+        "explanation": {
+          "maxLength": 4096,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "itemId": {
+          "anyOf": [
+            {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            {
+              "const": null
+            }
+          ]
+        },
+        "previousItemId": {
+          "anyOf": [
+            {
+              "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            {
+              "const": null
+            }
+          ]
+        }
+      },
+      "required": [
+        "previousItemId",
+        "itemId",
+        "disposition",
+        "explanation"
+      ],
+      "type": "object"
+    },
+    "submitReviewPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "draft": {
+          "$ref": "#/$defs/submission_reviewDraft"
+        },
+        "requestId": {
+          "maxLength": 36,
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "requestId",
+        "draft"
+      ],
+      "type": "object"
     }
   }
 }

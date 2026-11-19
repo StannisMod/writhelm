@@ -14,7 +14,7 @@ import { LinuxNativeCustody } from "../src/native-runtime-custody.js"
 import { boundedPlanningKnowledgeChannel } from "../src/connected-tools.js"
 import primaryServer from "../src/primary-server.js"
 import { installFreshPrimaryPolicy, primaryPermissionRules, primaryPolicyStatements, requirePrimaryPolicy } from "../src/primary-policy.js"
-import { AutomaticEnrollmentClient, provisionAutomaticPrimary, provisionExecutionDeployment, provisionHarnessExecutionDeployment } from "../src/primary-bootstrap.js"
+import { AutomaticEnrollmentClient, provisionAutomaticPrimary, provisionAutomaticContractRelease, provisionExecutionDeployment, provisionHarnessExecutionDeployment } from "../src/primary-bootstrap.js"
 import { contextJSON } from "../src/native-context-codec.js"
 import { decodeNativeExecutionDeployment } from "../src/native-initial.js"
 import { NativeContextExtraction } from "../src/native-context-extraction.js"
@@ -23,6 +23,15 @@ import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { NativeSessionToolRouter } from "../src/native-runtime.js"
 import { registerAutomaticClientUI } from "../src/primary-tui.js"
+import {prepareKnowledgeDocument} from "../src/knowledge-preparation.js"
+import {contractBundleDigest,selectedContractSchemas} from "../src/contract-release.js"
+
+test("planner instructions preserve the original product across bounded qualification operations",()=>{
+  assert.match(primaryInstructions,/originating owner's project objective/)
+  assert.match(primaryInstructions,/diagnostic, authoring and harness-repair instructions are subordinate/)
+  assert.match(primaryInstructions,/Do not ask the owner to choose between their product and its review\/tooling interface/)
+  assert.match(primaryInstructions,/do not erase the parent objective or grant execution authority/)
+})
 import { ApprovalDelivery } from "../src/approval-delivery.js"
 
 const id="00000000-0000-0000-0000-000000000001"
@@ -404,6 +413,43 @@ test("read-contract addition preserves original bootstrap and refuses replacemen
   await assert.rejects(provisionAutomaticPrimary({...config,schemas:{...config.schemas,"unknown-new-contract":"not approved"}}))
   assert.equal(await custody.read("automatic-bootstrap","current"),original)
 })
+test("protected explicit API release permits only selected package and retains immutable bootstrap through reopen",async()=>{
+  const f=await executionInstallation()
+  const contract=(source:string)=>contextJSON({formatVersion:1,kind:"canonical-codec-source-v1",namespace:"knowledge-command1",
+    notice:"Synthetic exact source, not authority.",files:[{path:"codec/Synthetic.kt",source,sha256:createHash("sha256").update(source).digest("hex")}]})
+  const config={root:path.join(f.area,"explicit-contract-release"),forbiddenAreas:[f.work],storeId:id,
+    serviceOrigin:"http://127.0.0.1:18671",nativeOrigin:"http://127.0.0.1:18672",
+    nativeRegistrationFile:path.join(f.area,"registration.json"),clientPolicyFile:path.join(f.area,"profile/opencode.json"),
+    plugin:path.join(f.area,"plugin"),schemas:{"knowledge-command1":contract("original")}}
+  await provisionAutomaticPrimary(config)
+  const storage=new LinuxNativeCustody(path.join(config.root,"bootstrap"),[f.work]);await storage.initialize()
+  const original=(await storage.read("automatic-bootstrap","current"))!
+  const next={...config,schemas:{"knowledge-command1":contract("new exact source")}}
+  await assert.rejects(provisionAutomaticPrimary(next)) // no implicit package acceptance
+  const approval={root:config.root,forbiddenAreas:[f.work],
+    expectedBootstrapDigest:createHash("sha256").update(original).digest("hex"),previousBundleDigest:contractBundleDigest(config.schemas),
+    previousReleaseDigest:null,schemas:next.schemas}
+  const approved=await provisionAutomaticContractRelease(approval)
+  assert.match(approved.releaseDigest,/^[a-f0-9]{64}$/)
+  await provisionAutomaticPrimary(next)
+  await assert.rejects(provisionAutomaticPrimary(config)) // no silent downgrade
+  await assert.rejects(provisionAutomaticPrimary({...next,serviceOrigin:"http://127.0.0.1:18673"}))
+  const reopened=new LinuxNativeCustody(path.join(config.root,"bootstrap"),[f.work]);await reopened.initialize()
+  assert.equal(await reopened.read("automatic-bootstrap","current"),original)
+  assert.deepEqual(await selectedContractSchemas(reopened,original),next.schemas)
+  const run=(input:unknown)=>new Promise<{code:number|null;out:string;error:string}>((resolve,reject)=>{
+    const child=spawn(process.execPath,[fileURLToPath(new URL("../src/primary-bootstrap.js",import.meta.url)),"provision-contract-release"],
+      {env:{},stdio:["pipe","pipe","pipe"]})
+    let out="",error=""
+    child.stdout.on("data",chunk=>{out+=chunk});child.stderr.on("data",chunk=>{error+=chunk})
+    child.on("error",reject);child.on("close",code=>resolve({code,out,error}));child.stdin.end(JSON.stringify(input))
+  })
+  const retried=await run(approval)
+  assert.equal(retried.code,0,retried.error);assert.deepEqual(JSON.parse(retried.out),approved)
+  assert.equal(retried.out.includes("new exact source"),false)
+  const bad=await run({...approval,expectedBootstrapDigest:"0".repeat(64)})
+  assert.equal(bad.code,2);assert.equal(bad.out,"");assert.match(bad.error,/contract release held/)
+})
 test("Linux native identity uses OS hostname while retaining PID, origin and executable pins",async()=>{
   const origin="http://127.0.0.1:18671"
   const info={version:"2.2.5",pid:process.pid,hostname:hostname(),urls:[origin],paths:{tmp:"/synthetic"}}
@@ -578,6 +624,7 @@ async function fixture(withApproval=false) {
   }
   let knowledgeReply=contextJSON({formatVersion:1,kind:"read",operation:"list_documents",basis:{algorithm:"sha1",hex:"a".repeat(40)},
     data:{snapshotId:id,nextCursor:null,complete:true,items:[]}})
+  let responder:((route:string,raw:string)=>string)|undefined
   const registry={scopeKind:(id:string)=>bound.has(id)?scope:undefined,bound:(id:string)=>bound.has(id),
     restore:async()=>false,
     bind:async(sessionID:string)=>{binds++;bound.add(sessionID)},inspect:async()=>({scope,credentialId:id}),
@@ -585,7 +632,7 @@ async function fixture(withApproval=false) {
     planningKnowledgeChannel:async(actual:any)=>({scope,projectID:id,readBinding:contextJSON({
       storeId:id,projectId:id,controllerId:id,sessionID:actual.sessionID,principalId:id,scope,
       delegationId:null,assignmentId:null,executionGeneration:null,bindingJSON:null}),
-      send:async()=>{knowledgeReads++;return knowledgeReply}})} as unknown as NativeCredentialRegistry
+       send:async(route:string,raw:string)=>{knowledgeReads++;return responder?responder(route,raw):knowledgeReply}})} as unknown as NativeCredentialRegistry
   const ctx={app:{version:"2.2.5"},location:{directory:work},
     session:{get:async({sessionID}:{sessionID:string})=>sessions.get(sessionID),context:async()=>[],
       update:async({sessionID,permissions}:{sessionID:string;permissions:unknown})=>{sessions.get(sessionID).permissions=permissions},hook:hook("session")},
@@ -597,8 +644,41 @@ async function fixture(withApproval=false) {
     {workRoot:work,controllerId:id,controllerCredentialId:id,projectId:id,schemas:{"work-command3":"synthetic schema fixture"},
       ...(withApproval?{approvalDelivery:delivery}:{})})
   const invoke=(name:string,event:any)=>hooks.get(name)!(event)
-  return {root,work,hooks,tools,sessions,governor,invoke,delivery,reply:(raw:string)=>{knowledgeReply=raw},binds:()=>binds,knowledgeReads:()=>knowledgeReads,revoke:()=>{readable=false},assignment:()=>{scope="assignment"}}
+  return {root,work,hooks,tools,sessions,governor,invoke,delivery,reply:(raw:string)=>{knowledgeReply=raw},
+    respond:(callback:(route:string,raw:string)=>string)=>{responder=callback},
+    binds:()=>binds,knowledgeReads:()=>knowledgeReads,revoke:()=>{readable=false},assignment:()=>{scope="assignment"}}
 }
+
+test("typed review uses a single submit command and delivers the exact native panel without per-source reads",async()=>{
+  const f=await fixture(true)
+  try{
+    await f.invoke("session:prompt",{sessionID:"ses_primary",messageID:"msg_review",prompt:{text:"Prepare proposal"}})
+    const actual={sessionID:"ses_primary",signal:new AbortController().signal}
+    const revision=prepareKnowledgeDocument(id,id,id,[{id:"TECH-01",title:"Proposal",text:"Exact text."}],"")
+    f.reply(contextJSON({formatVersion:1,kind:"read",operation:"read_revision",basis:{algorithm:"sha1",hex:"a".repeat(40)},
+      data:{...revision,bodyDigest:createHash("sha256").update(revision.body).digest("hex"),proposedBy:id}}))
+    const observed=await f.tools.get("writhelm_knowledge_read").execute({operation:"read_revision",subject:{
+      revisionKey:revision.revisionKey,revisionDigest:revision.revisionDigest},format:"canonical"},actual)
+    let commands=0,reads=0,requestId=""
+    f.respond((route,raw)=>{
+      const value=JSON.parse(raw)
+      if(route==="commands"){
+        commands++;assert.equal(value.operation,"submit_review");requestId=value.payload.requestId
+        return contextJSON({kind:"settled",outcome:{kind:"success",operation:"submit_review",result:requestId}})
+      }
+      reads++;assert.equal(value.operation,"read_request");assert.equal(value.subject.id,requestId)
+      return contextJSON({kind:"read",operation:"read_request",data:{record:{family:"requests",key:requestId,payload:{
+        projectId:id,requestDigest:"a".repeat(64),packetDigest:"b".repeat(64)}}}})
+    })
+    const result=await f.tools.get("writhelm_request_review").execute({intentId:"atomic-native-review",
+      items:[{key:"TECH-01",target:{reference:observed.metadata.writhelmReadReference,clauseId:"TECH-01"},before:null}],
+      question:"Review?",scope:"Proposal only.",rationale:"Exact synthetic input.",consequences:["Named point."],
+      alternatives:["Request changes."],uncertainties:[],contexts:[],dependencies:[],informationGaps:[]},actual)
+    assert.equal(commands,1);assert.equal(reads,1) // only post-success delivery, no source preparation calls
+    assert.match(result.content,/Native approval panel: requested/)
+    assert.equal((await f.delivery.current("ses_primary",id))?.requestId,requestId)
+  }finally{await f.governor.close()}
+})
 
 test("approval tool resolves exact digests itself, retains originating chat and rechecks current access",async()=>{
   const f=await fixture(true)

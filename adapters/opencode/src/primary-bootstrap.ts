@@ -15,6 +15,7 @@ import { decodeNativeContextPolicy } from "./native-context-policy.js"
 import { pathToFileURL } from "node:url"
 import type { OpenCodeClient } from "@opencode/client"
 import { assertNativeContextPolicy } from "./native-context-policy.js"
+import {selectedContractSchemas,selectContractRelease,type ContractReleaseInput} from "./contract-release.js"
 
 /** Native registry is the source of execution settings and credentials remain native-owned.
  * Canonical task/profile identity is still authoritative: inheritance cannot rewrite it. */
@@ -168,9 +169,15 @@ export async function provisionAutomaticPrimary(config:Readonly<{root:string;for
     // Add the two previously omitted read contracts without rewriting a retained bootstrap or
     // changing any existing contract bytes. Other installation conflicts still hold.
     if(!original.schemas||typeof original.schemas!=="object"||Array.isArray(original.schemas)||
-      Object.entries(original.schemas).some(([key,value])=>config.schemas[key]!==value)||
-      Object.keys(config.schemas).some(key=>!Object.hasOwn(original.schemas,key)&&!["knowledge-read1","work-read2"].includes(key))||
       contextJSON(original)!==contextJSON({...descriptor,schemas:original.schemas}))nativeUnavailable()
+    const selected=await selectedContractSchemas(bootstrap,previous)
+    const hasSelection=await bootstrap.read("contract-selection","current")!==undefined
+    if(hasSelection){
+      if(contextJSON(selected,2*1024*1024)!==contextJSON(config.schemas,2*1024*1024))nativeUnavailable()
+      return
+    }
+    if(Object.entries(original.schemas).some(([key,value])=>config.schemas[key]!==value)||
+      Object.keys(config.schemas).some(key=>!Object.hasOwn(original.schemas,key)&&!["knowledge-read1","work-read2"].includes(key)))nativeUnavailable()
     for(const name of ["knowledge-read1","work-read2"])
       if(config.schemas[name]!==undefined&&!Object.hasOwn(original.schemas,name))
         await bootstrap.retain("read-contract",name,config.schemas[name]!)
@@ -179,6 +186,17 @@ export async function provisionAutomaticPrimary(config:Readonly<{root:string;for
   const proof=randomBytes(32)
   try{await bootstrap.retain("automatic-bootstrap","current",contextJSON({...descriptor,enrollmentProof:proof.toString("base64url")}))}
   finally{proof.fill(0)}
+}
+
+/** Explicit trusted installation action, never automatic startup, a model tool or owner-key use. */
+export async function provisionAutomaticContractRelease(config:ContractReleaseInput&Readonly<{root:string;forbiddenAreas:readonly string[]}>){
+  if(process.platform!=="linux"||!path.isAbsolute(config.root)||
+    !Array.isArray(config.forbiddenAreas)||!config.forbiddenAreas.length||
+    config.forbiddenAreas.some(value=>typeof value!=="string"||!path.isAbsolute(value)))nativeUnavailable()
+  const storage=new LinuxNativeCustody(path.join(config.root,"bootstrap"),config.forbiddenAreas);await storage.initialize()
+  const original=await storage.read("automatic-bootstrap","current")
+  if(original===undefined)nativeUnavailable()
+  return selectContractRelease(storage,original!,config)
 }
 
 export type PrimaryBootstrap = Readonly<{
@@ -299,22 +317,29 @@ export class AutomaticEnrollmentClient {
 /** Operator/installer entrypoint. Configuration arrives on stdin, never model tool arguments.
  * Existing imports have no CLI side effects; no service/native discovery or model API is used. */
 async function executionProvisioningCLI(){
-  if(process.argv.length!==3||process.argv[2]!=="provision-execution")nativeUnavailable()
+  const operation=process.argv[2]
+  if(process.argv.length!==3||!["provision-execution","provision-contract-release"].includes(operation!))nativeUnavailable()
   const parts:Buffer[]=[];let size=0
   for await(const chunk of process.stdin){
     const bytes=Buffer.from(chunk);size+=bytes.length
-    if(size>1024*1024)nativeUnavailable()
+    if(size>(operation==="provision-contract-release"?2*1024*1024:1024*1024))nativeUnavailable()
     parts.push(bytes)
   }
   const config=closedObject(exactJSON(new TextDecoder("utf-8",{fatal:true}).decode(Buffer.concat(parts)),nativeUnavailable),
-    ["root","projectId","forbiddenAreas","profileRecordJSON","executionJSON","contextPolicyJSON"])
+    operation==="provision-contract-release"?
+      ["root","forbiddenAreas","expectedBootstrapDigest","previousBundleDigest","previousReleaseDigest","schemas"]:
+      ["root","projectId","forbiddenAreas","profileRecordJSON","executionJSON","contextPolicyJSON"])
   if(!Array.isArray(config.forbiddenAreas)||config.forbiddenAreas.length<1||config.forbiddenAreas.length>256||
     config.forbiddenAreas.some(value=>typeof value!=="string"||!path.isAbsolute(value)))nativeUnavailable()
-  const result=await provisionExecutionDeployment(config as Parameters<typeof provisionExecutionDeployment>[0])
+  const result=operation==="provision-contract-release"?
+    await provisionAutomaticContractRelease(config as Parameters<typeof provisionAutomaticContractRelease>[0]):
+    await provisionExecutionDeployment(config as Parameters<typeof provisionExecutionDeployment>[0])
   process.stdout.write(JSON.stringify(result)+"\n")
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href)
   void executionProvisioningCLI().catch(()=>{
-    process.stderr.write("Writhelm execution deployment held; no model or native host was started.\n")
+    process.stderr.write(process.argv[2]==="provision-contract-release"?
+      "Writhelm contract release held; no bootstrap replacement, model or native host was started.\n":
+      "Writhelm execution deployment held; no model or native host was started.\n")
     process.exitCode=2
   })

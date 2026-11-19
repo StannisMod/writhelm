@@ -93,8 +93,9 @@ packet uses the v2 packet-digest domain and includes the full correspondence in 
 source and presentation in the user's interface language (Russian in the current case). A
 localized review is an explicitly authored, version-bound representation of each exact decision
 item, not unrelated packet prose, an inferred correspondence or a second set of obligations.
-This is an approved requirement; the per-language packet implementation is outstanding at this
-source checkpoint, not an implemented/qualified localization claim.
+The additive packet/codec, typed preparation, current-source read gate and single-document renderer
+are implemented. Focused checks and installed Linux Desktop evidence cover the current Russian
+case; this is not semantic translation certification, other-platform or complete H1 qualification.
 Each supplied language covers every item exactly once with a human title and text; source/item
 identity remains unchanged. The request/packet digest binds the complete representation actually
 offered for review. Full exact English source remains retrievable behind a disclosure.

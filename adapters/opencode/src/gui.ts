@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { Command, LinkHandler, Panel, Plugin, type PanelTab } from "@opencode/plugin/gui"
+import { Command, LinkHandler, Panel, Plugin, Store, type PanelTab } from "@opencode/plugin/gui"
+import { Schema } from "effect"
 import { createEffect, createSignal, onCleanup } from "solid-js"
 import { Review, ReviewDrafts, ApprovalPresentation, OwnerOrderPresentation, type Session } from "./contracts.js"
 import { ownerOrderPanel } from "./owner-order-panel.js"
@@ -8,7 +9,9 @@ import { workPanel } from "./work-panel.js"
 import { approvalReference, exactLink, ownsReviewReference, type ExactLink } from "./link.js"
 import { main } from "./main.js"
 
-export default Plugin.define({ main, setup(ctx) {
+export default Plugin.define({ main, stores:{
+  reviewLink:Store.session(Schema.Struct({reference:Schema.String}),{reference:""})
+},setup(ctx) {
   if (ctx.app.platform !== "desktop" || ctx.app.version !== "2.2.5") return
   const [links, setLinks] = createSignal<Record<string, ExactLink>>({})
   createEffect(()=>{
@@ -66,8 +69,24 @@ export default Plugin.define({ main, setup(ctx) {
       }
       return label
     }}
-  ctx.add(Panel, { id: "review", region: "side", wide: true, list: input => input.open.includes("review") ? [tab] : [], render: props => nativePanel((): Session => ({ key: props.session.key, id: props.session.id, server: props.session.server.id, directory: props.session.directory, projectRoot: props.session.project?.worktree ?? props.session.directory }), ctx.main(Review), () => links()[props.session.key],
-    async(session,ref)=>{const result=await ctx.main(ApprovalPresentation).shown({session,requestId:ref.requestId,requestDigest:ref.requestDigest,packetDigest:ref.packetDigest});if(!result.ok)throw Error("approval rendering acknowledgement held")},ctx.main(ReviewDrafts)) })
+  ctx.add(Panel, { id: "review", region: "side", wide: true, list: input => input.open.includes("review") ? [tab] : [], render: props => nativePanel((): Session => ({ key: props.session.key, id: props.session.id, server: props.session.server.id, directory: props.session.directory, projectRoot: props.session.project?.worktree ?? props.session.directory }), ctx.main(Review), () => {
+    // A session-scoped UI pointer restores only the exact previously loaded packet. The native
+    // controller still reauthorizes its source and digests; this is neither a planner nor assent.
+    return links()[props.session.key]??exactLink(ctx.stores?.reviewLink(props.session).value?.reference??"")
+  },
+    async(session,ref)=>{
+      ctx.stores?.reviewLink(props.session).set({reference:approvalReference(ref)})
+      const result=await ctx.main(ApprovalPresentation).shown({session,requestId:ref.requestId,requestDigest:ref.requestDigest,packetDigest:ref.packetDigest});if(!result.ok)throw Error("approval rendering acknowledgement held")
+    },ctx.main(ReviewDrafts),()=>ctx.locale?.locale()??"",async(session,ref,message)=>{
+      const mounted=props.session
+      if(mounted.key!==session.key||mounted.id!==session.id)return
+      ctx.layout.close(`${ctx.id}:review`,mounted)
+      if(links()[session.key]&&approvalReference(links()[session.key])===approvalReference(ref))
+        setLinks(before=>Object.fromEntries(Object.entries(before).filter(([key])=>key!==session.key)))
+      const stored=ctx.stores?.reviewLink(mounted)
+      if(stored?.value?.reference===approvalReference(ref))stored.set({reference:""})
+      ctx.toast.show({title:message,description:"Результат сохранён. Дальнейший шаг — в чате.",variant:"success"})
+    }) })
   ctx.add(Command, () => ({ id: "review", title: "Контракт · Writhelm", enabled: !!ctx.sessions.current(), run: () => { const s = ctx.sessions.current(); if (s) ctx.layout.toggle(`${ctx.id}:review`, s) } }))
   ctx.add(Panel,{id:"owner-order",region:"side",wide:true,
     list:input=>input.open.includes("owner-order")?[{id:"owner-order",title:"Порядок запуска Writhelm",closable:"compact",fallback:true}]:[],

@@ -304,14 +304,15 @@ internal class LinuxTestClientEnrollment(private val app:H1Application,private v
     }
 }
 
-/** Explicit Linux project preparation; executable identity is selected by trusted client startup.
+/** Explicit Linux project preparation; system Git path is selected by trusted client startup.
  * No staging/reset/checkout/clean, inherited Git environment, hooks or user-configured templates.
  * Existing repository roots are reused, including when a subdirectory is opened. */
 internal class LinuxTestClientRepository(private val executable:Path,private val executableDigest:Digest) {
     init {require(System.getProperty("os.name")=="Linux" && executable.isAbsolute)}
     private data class Reply(val code:Int,val text:String)
     private fun git(directory:Path,vararg args:String,input:ByteArray=byteArrayOf()):Reply {
-        require(Files.isRegularFile(executable) && Files.isExecutable(executable) && Digest.of(Files.readAllBytes(executable))==executableDigest)
+        // executableDigest is retained legacy installation evidence, not a compatibility permit.
+        dev.writhelm.core.store.LinuxSystemGit.observe(executable,dev.writhelm.core.store.LinuxSystemGit.Profile.PROJECT)
         val process=ProcessBuilder(executable.toString(),"-c","core.hooksPath=/dev/null","-c","commit.gpgSign=false",
             "-c","core.fsmonitor=false","-c","core.quotePath=false","-C",directory.toString(),*args).redirectError(ProcessBuilder.Redirect.DISCARD)
         process.environment().clear()

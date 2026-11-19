@@ -129,7 +129,8 @@ object AutomaticTestClient {
             LinuxAutomaticClientService.ensure(profile)
             check(checkNotNull(LinuxAutomaticTestClient.openExistingUI(profile,directory)).waitFor()==0){"Native UI refused"}
         }catch(error:Exception){
-            System.err.println("Writhelm test-client startup held; no unmanaged fallback was launched")
+            val code=(error as? dev.writhelm.core.store.StoreFault)?.problem?.name?.takeIf {it.startsWith("GIT_")}
+            System.err.println("Writhelm test-client startup held${code?.let {": $it"}?:""}; no unmanaged fallback was launched")
             // Fixed code locations only. Exception messages/causes can contain credential-bearing
             // transport payloads and are deliberately not printed into the terminal.
             error.stackTrace.filter {it.className.startsWith("dev.writhelm.")}.take(3).forEach {
@@ -233,7 +234,10 @@ internal class LinuxAutomaticTestClient private constructor(private val profile:
                 require((Files.getAttribute(profile.root,"unix:uid",LinkOption.NOFOLLOW_LINKS) as Number).toLong()==uid &&
                     (Files.getAttribute(profile.root,"unix:mode",LinkOption.NOFOLLOW_LINKS) as Number).toInt() and 0x3f==0)
             }
-            pinned(profile.node,profile.nodeDigest);pinned(profile.cli,profile.cliDigest);pinned(profile.git,profile.gitDigest)
+            pinned(profile.node,profile.nodeDigest);pinned(profile.cli,profile.cliDigest)
+            require(profile.git.isAbsolute)
+            // Git is an updatable system dependency. Its old recorded digest is historical only;
+            // actual operations perform profile-specific capability checks, not executable repinning.
             require(profile.cliDigest==Digest.parse("8d060e1d2fbb9bb44cf09ae6ed1f3f6a7cff070b5227e2f90970132b23a92050"))
             require(profile.plugin.isAbsolute && profile.plugin.toRealPath()==profile.plugin && profile.schemas.isNotEmpty())
             installedModule(profile,".");installedModule(profile,"./tui");installedModule(profile,"./bootstrap")

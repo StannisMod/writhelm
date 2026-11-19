@@ -18,6 +18,7 @@ import { ClientAdmission } from "./primary-rpc.js"
 import { NativeSessionCreation, userSessionID } from "./native-session-creation.js"
 import { ApprovalDelivery } from "./approval-delivery.js"
 import { NativePlannerActivity } from "./native-planner-progress.js"
+import {selectedContractSchemas} from "./contract-release.js"
 
 /** Automatic-mode entrypoint shared with model-free boundary tests. Activation resolves only after
  * the real native runtime, tools and service connect handshake, not after credential issuance. */
@@ -27,16 +28,9 @@ export async function startAutomaticPrimaryServer(ctx:Plugin.Context,root:string
     typeof cfg.nativeRegistrationFile!=="string"||!path.isAbsolute(cfg.nativeRegistrationFile)||typeof cfg.clientPolicyFile!=="string"||!path.isAbsolute(cfg.clientPolicyFile)||
     typeof cfg.enrollmentProof!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(cfg.enrollmentProof)||
     !cfg.schemas||typeof cfg.schemas!=="object"||!Object.keys(cfg.schemas).length||Object.values(cfg.schemas).some(value=>typeof value!=="string"||Buffer.byteLength(value)>512*1024))nativeUnavailable()
+  cfg.schemas=await selectedContractSchemas(bootstrap,raw)
   const proof=Buffer.from(cfg.enrollmentProof,"base64url")
   const enrollment=new AutomaticEnrollmentClient(cfg.serviceOrigin,proof,cfg.storeId);proof.fill(0)
-  for(const name of ["knowledge-read1","work-read2"]){
-    const supplemental=await bootstrap.read("read-contract",name)
-    if(supplemental===undefined)continue
-    const contract=exactJSON(supplemental,nativeUnavailable)
-    if(contract.kind!=="canonical-codec-source-v1"||contract.namespace!==name||
-      Object.hasOwn(cfg.schemas,name)&&cfg.schemas[name]!==supplemental)nativeUnavailable()
-    cfg.schemas={...cfg.schemas,[name]:supplemental}
-  }
   const endpoint=await Service.discover({file:cfg.nativeRegistrationFile,version:"2.2.5"})
   if(!endpoint||endpoint.url!==cfg.nativeOrigin)nativeUnavailable()
   const native=OpenCode.make({baseUrl:endpoint.url,headers:Service.headers(endpoint)})

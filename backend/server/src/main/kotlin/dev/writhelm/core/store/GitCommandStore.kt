@@ -465,7 +465,7 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
         }
         val family=when(outcome.operation) {
             "propose_revision" -> "revisions"
-            "request_approval" -> "requests"
+            "request_approval","submit_review" -> "requests"
             "resolve_approval" -> "resolutions"
             "record_assessment" -> "assessments"
             "pin_consumer" -> "manifests"
@@ -494,7 +494,7 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
         }
         val expected=when(c.operation) {
             "propose_revision" -> payload.getValue("revisionKey")
-            "request_approval","resolve_approval" -> payload.getValue("requestId")
+            "request_approval","submit_review","resolve_approval" -> payload.getValue("requestId")
             "record_assessment" -> payload.getValue("assessmentId")
             "pin_consumer" -> payload.getValue("manifestId")
             "revoke_access","replace_grants" -> payload.getValue("principalId")
@@ -557,7 +557,7 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
             "revoke_delegated_credential" -> requireChange("auth","credentials",p.getValue("credentialId"))
             "rotate_delegated_credential" -> { requireChange("auth","credentials",p.getValue("credentialId")); requireChange("auth","credentials",p.getValue("newCredentialId"),true) }
             "propose_revision" -> { requireChange("core","revisions",p.getValue("revisionKey"),true); requireChange("core","proposals",p.getValue("revisionKey"),true) }
-            "request_approval" -> requireChange("core","requests",p.getValue("requestId"),true)
+            "request_approval","submit_review" -> requireChange("core","requests",p.getValue("requestId"),true)
             "resolve_approval" -> requireChange("core","resolutions",p.getValue("requestId"),true)
             "record_assessment" -> requireChange("core","assessments",p.getValue("assessmentId"),true)
             "pin_consumer" -> requireChange("core","manifests",p.getValue("manifestId"),true)
@@ -582,7 +582,7 @@ internal class GitCommandStore private constructor(private val owner: RuntimeOwn
         fun targetGrant()=obj("principalId" to p.getValue("principalId"),"projectId" to uuid(c.projectId))
         when(c.operation) {
             "propose_revision" -> { val k=p.getValue("revisionKey"); core("revisions",k); core("proposals",k); core("bodies",digest(Utf8Content.fromText(p.getValue("body").string()).digest)) }
-            "request_approval" -> core("requests",p.getValue("requestId"))
+            "request_approval","submit_review" -> core("requests",p.getValue("requestId"))
             "resolve_approval" -> {
                 val k=p.getValue("requestId"); core("resolutions",k)
                 val b=h.file(RecordKey("core","requests",k).path)

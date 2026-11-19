@@ -12,7 +12,7 @@ export type RoleProgress=Readonly<{
 }>
 export type PlannerRoleProgress=Readonly<{
   controllerId:string;bindingJSON:string;nativeReady:boolean;outcomeComplete:boolean;
-  progressJSON:string;waitJSON:string|null
+  progressJSON:string;waitJSON:string|null;resolvedRequestIds?:readonly string[]
 }>
 type Progress=RoleProgress|PlannerRoleProgress
 const planner=(p:Progress):p is PlannerRoleProgress=>"controllerId" in p
@@ -65,19 +65,36 @@ export class NativeRoleContinuation {
       if(!Array.isArray(pending)||pending.length>256||pending.some((p:any)=>typeof p.id!=="string"||
         !["effect","event","decision","obligation","delivery"].includes(p.kind)))nativeUnavailable()
       if(pending.some((p:any)=>p.kind==="effect"))return this.set(sessionID,"unknown-effect-held")
+      const resolutions=planner(frame)?frame.resolvedRequestIds??[]:[]
+      if(!Array.isArray(resolutions)||resolutions.length>256||resolutions.some(id=>
+        typeof id!=="string"||!/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(id))||
+        new Set(resolutions).size!==resolutions.length)nativeUnavailable()
+      const reactionKey=resolutions.length?hash(contextJSON([sessionID,actor(frame),frame.bindingJSON,[...resolutions].sort()])):null
+      const reacted=reactionKey?await this.custody.read("role-continuation-resolution",reactionKey):undefined
+      if(reacted!==undefined){
+        const retained=parse(reacted),retainedKey=retained.metadata?.frontier
+        if(retained.sessionID!==sessionID||typeof retainedKey!=="string"||!/^[a-f0-9]{64}$/.test(retainedKey)||
+          await this.custody.read("role-continuation-original",retainedKey)!==reacted||
+          await this.custody.read("role-continuation-dispatched",retainedKey)!==reacted)nativeUnavailable()
+        if(await this.custody.read("role-continuation-ack",retainedKey)!==reacted)return this.set(sessionID,"dispatch-unknown")
+      }
       const unfinished=steps.filter((s:any)=>s.state!=="complete")
       const blocked=unfinished.length>0&&unfinished.every((s:any)=>s.state==="blocked"&&Array.isArray(s.blockers)&&s.blockers.length>0)
-      if(blocked&&pending.length>0&&pending.every((p:any)=>["decision","event"].includes(p.kind)&&p.source!=null))
+      if((!reactionKey||reacted!==undefined)&&blocked&&pending.length>0&&pending.every((p:any)=>["decision","event"].includes(p.kind)&&p.source!=null))
         return this.set(sessionID,"external-wait")
       // Exclude global Git basis, plan generation, rewritten explanations and fresh checkpoint IDs:
       // unrelated publication or cosmetic churn must not mint unlimited "progress" continuations.
       const frontier=contextJSON({sessionID,actor:actor(frame),
-        bindingJSON:frame.bindingJSON,steps:steps.map((s:any)=>({id:s.id,state:s.state})).sort((a:any,b:any)=>a.id.localeCompare(b.id)),
+        bindingJSON:frame.bindingJSON,...(resolutions.length?{resolutions:[...resolutions].sort()}:{}),steps:steps.map((s:any)=>({id:s.id,state:s.state})).sort((a:any,b:any)=>a.id.localeCompare(b.id)),
         pending:pending.map((p:any)=>({id:p.id,kind:p.kind,source:p.source})).sort((a:any,b:any)=>a.id.localeCompare(b.id)),
         handoff:cp?{result:cp.result!==null,retrospective:cp.retrospective!==null,notification:cp.notification!==null}:null})
       const key=hash(frontier),id="msg_writhelm_role_"+key.slice(0,32)
       const text=planner(frame)?
-        "Your chat-bound planner outcome remains unfinished. Continue the known authorized planning/coordination steps without an owner nudge. "+
+        "Your chat-bound planner outcome remains unfinished. "+
+        (resolutions.length?"Observe the exact canonical resolutions for requests "+[...resolutions].sort().join(", ")+
+           ". Acknowledge the owner's actual decision and show a concise next plan/dependency graph or ask the genuine remaining question. "+
+           "Keep all other unresolved requests visibly pending; approval is not launch authorization. ":"")+
+        "Continue the known authorized planning/coordination steps without an owner nudge. "+
         "Complete necessary exact tasks/contracts and required approvals; show the concise graph and obtain the owner's native launch-order choice before launch. "+
         "Reconcile actual reports, evidence, independent review and exact acceptance within authorized scope. Do not take another chat's task frontier, "+
         "invent authority, approve as the owner, retry an unknown effect with new IDs or use Goal UI. A component pass or announcing next work is not completion. "+
@@ -115,9 +132,11 @@ export class NativeRoleContinuation {
       const fresh=await this.observe(sessionID)
       if(this.closed||!fresh||!fresh.nativeReady||complete(fresh)||
         contextJSON(actor(fresh))!==contextJSON(actor(frame))||
-        fresh.bindingJSON!==frame.bindingJSON||progress(fresh)!==progress(frame)||checkpoint(fresh)!==checkpoint(frame))
+        fresh.bindingJSON!==frame.bindingJSON||progress(fresh)!==progress(frame)||checkpoint(fresh)!==checkpoint(frame)||
+        contextJSON(planner(fresh)?fresh.resolvedRequestIds??[]:[])!==contextJSON(resolutions))
         return this.set(sessionID,"admission-held")
       if(!await this.custody.retain("role-continuation-dispatched",key,original))return this.set(sessionID,"dispatch-unknown")
+      if(reactionKey&&reacted===undefined)await this.custody.retain("role-continuation-resolution",reactionKey,original)
       if(this.closed)return this.set(sessionID,"dispatch-unknown")
       try{
         const reply=await this.send({sessionID,id,text,metadata,delivery:"queue",resume:true})

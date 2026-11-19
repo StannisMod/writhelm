@@ -52,11 +52,11 @@ internal object LinuxAutomaticClientService {
         }
         FileChannel.open(file.parent,StandardOpenOption.READ).use {it.force(true)}
     }
-    private fun witness(profile:LinuxAutomaticClientProfile):Pair<ProcessHandle,ByteArray>{
+    private fun witness(profile:LinuxAutomaticClientProfile,profileFile:Path=Path.of(requireNotNull(System.getenv("WRITHELM_TEST_CLIENT_PROFILE")))):Pair<ProcessHandle,ByteArray>{
         val bytes=metadata(marker(profile))
         val f=StrictJson.decode(bytes).fields("formatVersion","pid","started","profile")
         require(f.getValue("formatVersion").long()==1L && f.getValue("profile").string()==
-            Path.of(requireNotNull(System.getenv("WRITHELM_TEST_CLIENT_PROFILE"))).toRealPath().toString())
+            profileFile.toRealPath().toString())
         val pid=f.getValue("pid").long();require(pid>0 && pid!=ProcessHandle.current().pid())
         val process=ProcessHandle.of(pid).orElseThrow()
         require(process.isAlive && process.info().startInstant().orElseThrow()==Instant.parse(f.getValue("started").string()))
@@ -65,9 +65,9 @@ internal object LinuxAutomaticClientService {
         require("dev.writhelm.service.AutomaticTestClientService" in args)
         return process to bytes
     }
-    private fun readyForViews(profile:LinuxAutomaticClientProfile):Boolean {
+    private fun readyForViews(profile:LinuxAutomaticClientProfile,profileFile:Path=Path.of(requireNotNull(System.getenv("WRITHELM_TEST_CLIENT_PROFILE")))):Boolean {
         if(!Files.exists(ready(profile),LinkOption.NOFOLLOW_LINKS))return false
-        return metadata(ready(profile)).contentEquals(witness(profile).second)
+        return metadata(ready(profile)).contentEquals(witness(profile,profileFile).second)
     }
     fun ensure(profile:LinuxAutomaticClientProfile){
         val marker=marker(profile)
@@ -101,11 +101,13 @@ internal object LinuxAutomaticClientService {
         }
         error("Background service readiness held")
     }
-    fun stop(profile:LinuxAutomaticClientProfile){
+    fun stop(profile:LinuxAutomaticClientProfile,
+        profileFile:Path=Path.of(requireNotNull(System.getenv("WRITHELM_TEST_CLIENT_PROFILE"))),
+        discover:()->Boolean={LinuxAutomaticTestClient.discover(profile)}){
         // Only an authenticated READY service can enter normal stop. Unknown startup/crash state
         // is not repaired by guessing at a PID or deleting a marker/native registration.
-        check(readyForViews(profile)&&LinuxAutomaticTestClient.discover(profile)){"Service is not ready for normal stop"}
-        val (process,bytes)=witness(profile)
+        check(readyForViews(profile,profileFile)&&discover()){"Service is not ready for normal stop"}
+        val (process,bytes)=witness(profile,profileFile)
         check(Files.readAllBytes(marker(profile)).contentEquals(bytes))
         check(process.destroy()){ "Normal service stop refused" }
         process.onExit().get(30,TimeUnit.SECONDS)
@@ -143,6 +145,10 @@ internal object LinuxAutomaticClientService {
 object AutomaticTestClientService {
     @JvmStatic fun main(args:Array<String>){
         try{require(args.isEmpty());LinuxAutomaticClientService.run(automaticClientProfile())}
-        catch(_:Exception){System.err.println("Writhelm background service held; no store reset or unmanaged fallback");kotlin.system.exitProcess(2)}
+        catch(e:Exception){
+            val code=(e as? dev.writhelm.core.store.StoreFault)?.problem?.name?.takeIf {it.startsWith("GIT_")}
+            System.err.println("Writhelm background service held${code?.let {": $it"}?:""}; no store reset or unmanaged fallback")
+            kotlin.system.exitProcess(2)
+        }
     }
 }

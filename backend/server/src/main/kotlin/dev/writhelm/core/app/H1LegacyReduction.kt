@@ -45,11 +45,28 @@ internal class H1LegacyReduction(private val limits: AppLimits=AppLimits()) {
         }
         var typed: CoreCommand?=null
         val outcome=if(command.fingerprintVersion==2)applyAuth(base.authority.executeLegacy(presented,AuthCommandCodec().decode(command.bytes()))) else {
-            val v=CommandCodec().decode(command.bytes());typed=v
+            val decoded=CommandCodec().decode(command.bytes())
+            if(decoded.payload is CommandPayload.SubmitReview && !base.authority.policy.allows(actor,decoded.projectId,Capability.READ))fail(StoreProblem.DENIED)
+            val v=when(val prepared=decoded.resolveReview(base.core.snapshot(limits.coreRecords))) {
+                is WorkflowResult.Success -> prepared.value
+                is WorkflowResult.Failure -> {
+                    if(prepared.problem==WorkflowProblem.FORBIDDEN)fail(StoreProblem.DENIED)
+                    return H1JointCandidate(base,base.core,base.authority,base.work,
+                        Evaluation(LogicalOutcome.Rejected("core",prepared.problem.name),emptyList()))
+                }
+            };typed=v
+            if(decoded.payload is CommandPayload.SubmitReview) {
+                val packet=(v.payload as CommandPayload.Request).packet
+                H1ProtectedReads().authorizeResources(base,presented,v.projectId,"read_clause",
+                    packet.references.map { ProtectedResource.Knowledge(it) })
+                packet.followup?.let { H1ProtectedReads().authorizeLegacyRecord(base,presented,v.projectId,
+                    "read_request",LegacyReadFamily.REQUEST,it.requestId) }
+            }
             affected(base.core.snapshot(limits.coreRecords),roots(v,base.core.snapshot(limits.coreRecords)))
             when(val p=v.payload) {
                 is CommandPayload.Propose -> effect(core.propose(actor,p.revision),::revisionKey)
                 is CommandPayload.Request -> effect(core.request(actor,v.projectId,p.requestId,p.packet)) { uuid(it.id) }
+                is CommandPayload.SubmitReview -> fail(StoreProblem.INTEGRITY) // resolved above, never a second publisher
                 is CommandPayload.Resolve -> effect(core.resolve(actor,v.projectId,p.requestId,p.requestDigest,p.packetDigest,p.answer)) { uuid(it.requestId) }
                 is CommandPayload.Assess -> effect(core.assess(actor,p.assessment)) { uuid(it.assessment.id) }
                 is CommandPayload.Pin -> effect(core.pin(actor,v.projectId,p.manifestId,p.consumerId,p.clauses,p.contexts,p.dependencies,p.assessmentId)) { uuid(it.id) }

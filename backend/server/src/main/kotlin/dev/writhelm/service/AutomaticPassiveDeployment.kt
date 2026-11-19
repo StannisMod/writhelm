@@ -16,8 +16,8 @@ internal class AutomaticPassiveDeployment(private val worktrees:Path,private val
     private val git:Path,private val gitDigest:Digest) {
     @Synchronized fun provision(project:UUID,controller:UUID,source:Path,controllerRoot:Path) {
         require(System.getProperty("os.name")=="Linux" && source.isAbsolute && source.toRealPath()==source &&
-            git.isAbsolute && git.toRealPath()==git && Files.isRegularFile(git,LinkOption.NOFOLLOW_LINKS) &&
-            Digest.of(Files.readAllBytes(git))==gitDigest)
+            git.isAbsolute)
+        dev.writhelm.core.store.LinuxSystemGit.observe(git,dev.writhelm.core.store.LinuxSystemGit.Profile.WORKTREE)
         require(Files.isDirectory(source.resolve(".git"),LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(source.resolve(".git")))
         require(listOf(source,privateRoot).none {worktrees.startsWith(it)||it.startsWith(worktrees)})
         LinuxConnectedCustody(worktrees)
@@ -32,7 +32,16 @@ internal class AutomaticPassiveDeployment(private val worktrees:Path,private val
             "agents" to obj("executor-v1" to str("build"),"reviewer-v1" to str("plan"))))
         val file=bootstrap.resolve("passive-profile-${Digest.of("current".toByteArray()).hex}.json")
         if(Files.exists(file,LinkOption.NOFOLLOW_LINKS)) {
-            require(protectedRuntimeBytes(bootstrap,file,65536).contentEquals(bytes)){"Existing passive deployment differs; explicit migration required"}
+            val old=StrictJson.decode(protectedRuntimeBytes(bootstrap,file,65536)) as JObject
+            val next=StrictJson.decode(bytes) as JObject
+            // Preserve old bytes/digest as historical evidence. Only the obsolete binary digest
+            // may differ; roots, repository, agent choices and executable path must still match.
+            val previousGit=old.entries.getValue("git").fields("path","sha256")
+            digest(previousGit.getValue("sha256"))
+            require(StrictJson.encode(JObject(old.entries+("git" to obj("path" to previousGit.getValue("path"))))).contentEquals(
+                StrictJson.encode(JObject(next.entries+("git" to obj("path" to str(git.toString()))))))){
+                "Existing passive deployment differs; explicit migration required"
+            }
         } else {
             // Original intent is never overwritten/replayed after partial or unknown publication.
             FileChannel.open(file,setOf(StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE),

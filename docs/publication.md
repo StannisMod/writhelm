@@ -1,5 +1,38 @@
 # Publication policy
 
+## P40 — Owner-requested local implementation checkpoint
+
+The owner's 2026-11-19 instruction to commit the current state authorizes a local source checkpoint
+of the accumulated localized review/delivery, typed review submission, explicit diagnostic-contract
+release and system-Git compatibility changes. It does not authorize push, publication of private
+project/task/session/stand data, or UI usability/production acceptance. The owner has reported a new
+fresh-project failure: oversized decision points, unresponsive context-menu objections and an
+unhelpful detached rationale/scope section. This checkpoint preserves that incomplete state; it is
+not a claim that those defects are fixed.
+
+Previously allowed implementation/test/contract/build paths remain in scope. These exact additional
+paths are Writhelm-owned AGPL-3.0-only source, generation tooling and synthetic tests:
+
+```text
+adapters/opencode/generate-review-submission-schemas.mjs
+adapters/opencode/src/contract-release.ts
+adapters/opencode/src/linux-system-git.ts
+adapters/opencode/tests/contract-release.test.ts
+adapters/opencode/tests/linux-system-git.test.ts
+adapters/opencode/tests/model-knowledge.test.ts
+backend/server/src/main/kotlin/dev/writhelm/core/codec/ReviewSubmission.kt
+backend/server/src/main/kotlin/dev/writhelm/core/store/LinuxSystemGit.kt
+backend/server/src/test/kotlin/dev/writhelm/core/app/ReviewSubmissionTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/store/SystemGitCompatibilityTest.kt
+backend/server/src/test/kotlin/dev/writhelm/core/workflow/ReviewPresentationTest.kt
+backend/server/src/test/kotlin/dev/writhelm/service/SystemGitLegacyProfileTest.kt
+backend/server/src/test/kotlin/dev/writhelm/service/SystemGitLifecycleTest.kt
+```
+
+Use explicit file staging and inspect the complete staged diff, including generated descriptions.
+Private tasks/plans, actual application clauses, retained evidence, installation state, credentials,
+dependencies/toolchains and build outputs remain excluded. Preserve upstream notices.
+
 ## P39 — Owner-requested source checkpoint and push
 
 The owner's 2026-11-18 push instruction authorizes this scoped public checkpoint of the accumulated

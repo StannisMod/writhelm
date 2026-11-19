@@ -21,6 +21,7 @@ export const primaryTools = new Set(["question", "read", "writhelm_request_launc
 primaryTools.add("writhelm_work_contract")
 export const primaryInstructions = `You are the Writhelm primary PLANNER, not a coding executor.
 The owner's ordinary message is the objective, not an executable implementation contract. First read applicable canonical knowledge and existing tasks. Clarify consequential missing requirements, intended users, scope, constraints and acceptance; do not invent a stack or prototype merely to start coding. Ask only questions that materially affect the work.
+Preserve the originating owner's project objective. Bounded diagnostic, authoring and harness-repair instructions are subordinate operations, not replacement product goals. Do not ask the owner to choose between their product and its review/tooling interface unless they explicitly changed the objective. Operation-specific limits do not erase the parent objective or grant execution authority.
 New product/design meaning requires an exact canonical proposal and structured owner approval through the Writhelm native review panel. Explain the decision and surface its exact review reference. Chat assent, model output, a ready flag or a passing test is NOT that approval. Do not ask the owner to approve every ordinary technical step or delegation.
 Successful request_approval automatically requests the exact native panel. For an existing request use writhelm_open_approval with its requestId; the adapter resolves exact digests, not you. A requested delivery is not a rendered panel, user review or approval. Report its actual status, not a claim the contract was shown. A raw exact reference is only a fallback when native delivery is held. Wait for the canonical owner resolution, not a chat acknowledgement.
 Author contracts with writhelm_propose_document: explicit permanent document-prefixed clause IDs, human titles and exact text, not a monolithic specification. The adapter deterministically prepares canonical text, UTF-8 spans, revision IDs and digests; never calculate these manually or read Kotlin sources to discover ordinary input fields. Use a stable intentId for each logical operation; retry the SAME intentId and identical input after uncertainty, never a new identity. Use the returned revisionReference plus clauseId with writhelm_request_review. Never renumber/reuse an existing anchor, infer canonical points by visually splitting prose, or rewrite a retained request. Changed meaning requires a new exact revision/request. Unchanged unapproved clauses do not acquire approval by omission. A rejection reason or item comment is canonical input to the next planning step, not an invitation to ask the owner to repeat it in chat.
@@ -135,7 +136,7 @@ export async function registerPrimaryGovernor(ctx: Plugin.Context, registry: Nat
       original=retained;await activity.before(retained)
     }:undefined)
     if(activity)await activity.after(original,result)
-    if(command.operation==="request_approval"&&config.approvalDelivery){
+    if(["request_approval","submit_review"].includes(command.operation)&&config.approvalDelivery){
       const outcome=exactJSON(result,nativeUnavailable)
       if(outcome.kind==="settled"&&outcome.outcome?.kind==="success"){
         try{const presentation=await openApproval(command.payload.requestId,actual)
@@ -232,13 +233,32 @@ export async function registerPrimaryGovernor(ctx: Plugin.Context, registry: Nat
         editor.add({name,description:operation==="propose_document"
           ?"Propose a document from explicit stable clause IDs, human titles and exact text. Adapter prepares canonical bytes, UTF-8 spans, hashes and identities. Stable intentId reconciles the SAME operation after uncertainty. Returns revisionReference for review; not approval."
           :"Request native human review of exact sources: target/reference wr1_ + clauseId from propose_document. Adapter resolves current-authorized exact refs and predecessor digests. before is the approved head, not an unapproved draft. Stable intentId; never approves.",
-          input:operationSchema("authoring",operation),execute:async(input,actual)=>{
-            if(await selected(actual.sessionID)!=="controller")nativeUnavailable()
-            const channel=await registry.planningKnowledgeChannel(actual)
-            return operation==="propose_document"
-              ?modelKnowledge.propose(input,channel,actual.sessionID,actual.signal,raw=>sendKnowledge(raw,actual))
-              :modelKnowledge.review(input,channel,actual.sessionID,actual.signal,raw=>sendKnowledge(raw,actual))
-          },options:{codemode:false}})
+           input:operationSchema("authoring",operation),execute:async(input,actual)=>{
+             let phase="controller-selection"
+             try{
+               if(await selected(actual.sessionID)!=="controller")nativeUnavailable()
+               phase="knowledge-channel"
+               const channel=await registry.planningKnowledgeChannel(actual)
+               phase="authoring-preparation"
+               const send=async(raw:string)=>{phase="command-admission";return sendKnowledge(raw,actual)}
+               return await (operation==="propose_document"
+                 ?modelKnowledge.propose(input,channel,actual.sessionID,actual.signal,send)
+                 :modelKnowledge.review(input,channel,actual.sessionID,actual.signal,send))
+             }catch(error){
+               // Do not dump authored input, source material, credentials or raw requests. The
+               // previous generic hold hid which boundary failed even before command custody.
+               if(error&&typeof error==="object"&&"message" in error&&error.message==="native runtime unavailable or forbidden"){
+                 const stack="stack" in error&&typeof error.stack==="string"?error.stack:""
+                 // Bounded own-code locations only: no absolute installation paths or source/input
+                 // text. Native tool errors may omit nested causes and do not retain console logs.
+                 const locations=[...stack.matchAll(/\/(model-knowledge|knowledge-preparation|model-read|native-context-codec)\.js:(\d+):\d+/g)]
+                   .slice(0,4).map(match=>match[1]+":"+match[2]).join(",")||"native-admission"
+                 const state=phase==="command-admission"?"Command outcome requires original-operation reconciliation.":"Preparation refused before canonical command submission."
+                 throw new Error(`Writhelm ${operation} held at ${phase} [${locations}]. ${state} Original intent preserved; do not create a replacement identity.`,{cause:error})
+               }
+               throw error
+             }
+           },options:{codemode:false}})
       if(config.approvalDelivery)editor.add({name:"writhelm_open_approval",
         description:"Open an existing exact approval in this chat's native panel. Supply only requestId; the adapter resolves and checks immutable request/packet digests. No owner decision is submitted. requested is not rendered/approved.",
         input:{type:"object",additionalProperties:false,required:["requestId"],properties:{requestId:{type:"string",maxLength:36}}},

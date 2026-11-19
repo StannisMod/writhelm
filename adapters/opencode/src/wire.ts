@@ -29,6 +29,13 @@ export function completeBundle(raw: string, id: string, requestDigest: string, p
   const b = result.data, r = b.request
   requireThat(b.complete === true && r.family === "requests" && r.key === id && r.payload.projectId === project && r.payload.requestDigest === requestDigest && r.payload.packetDigest === packetDigest, "INCOMPLETE")
   const p = r.payload.packet
+  if(p.presentations){
+    requireThat(new Set(p.presentations.map((v:Json)=>v.language)).size===p.presentations.length,"INTEGRITY")
+    const ids=p.items.map((v:Json)=>v.id).sort().join(",")
+    for(const presentation of p.presentations)requireThat(
+      presentation.items.map((v:Json)=>v.itemId).sort().join(",")===ids&&
+      new Set(presentation.items.map((v:Json)=>v.itemId)).size===p.items.length,"INTEGRITY")
+  }
   requireThat(p.informationGaps.length === 0, "INCOMPLETE")
   const declared = [...p.items.flatMap((i: Json) => [i.before, i.target].filter(Boolean)), ...p.contexts, ...p.dependencies]
   for (const ref of declared) requireThat(b.materials.some((m: Json) => referenceKey(m.reference) === referenceKey(ref)), "INCOMPLETE")

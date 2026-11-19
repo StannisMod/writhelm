@@ -11,7 +11,13 @@ import {prepareKnowledgeDocument,knowledgeIntentIdentity} from "./knowledge-prep
 type Source={reference:string;clauseId?:string}
 type Send=(raw:string)=>Promise<string>
 const plain=(v:unknown)=>JSON.parse(contextJSON(v,4*1024*1024))
-/** Friendly authoring is only deterministic preparation of the EXISTING scoped service commands.
+/** Preserve a source-read refusal instead of misreporting it as runtime/command uncertainty. */
+export class ReviewSourceReadHold extends Error{
+  constructor(readonly reference:string,readonly code:string){
+    super(`Review preparation source ${reference} returned ${code}. No canonical command was submitted by this attempt. Preserve the original intentId; do not create a replacement request.`)
+  }
+}
+/** Friendly authoring prepares scoped service commands; source-closure resolution belongs to submit_review.
  * It has no owner credential, direct canonical writer, approval shortcut or implicit latest lookup. */
 export class ModelKnowledge {
   constructor(private readonly reads:ModelReads){}
@@ -45,12 +51,61 @@ export class ModelKnowledge {
     validateModelContract(operationSchema("authoring","request_review"),input)
     if(new Set(input.items.map((item:any)=>item.key)).size!==input.items.length)nativeUnavailable()
     const identity=(purpose:string)=>knowledgeIntentIdentity(channel.readBinding!,input.intentId,purpose)
+    const original=await channel.originalReview?.(identity("review-command"))
+    if(original!==undefined){
+      const command=exactJSON(original,nativeUnavailable)
+      if(command.projectId!==channel.projectID||command.requestKey!==identity("review-command")||
+        command.payload?.requestId!==identity("approval-request")||
+        !["request_approval","submit_review"].includes(command.operation))nativeUnavailable()
+      // Old operations stay on their byte-identical legacy preparation/recovery route.
+      if(command.operation==="request_approval")return this.legacyReview(input,channel,sessionID,signal,send)
+    }
+    const selectors=new Map<string,Promise<any>>()
+    const resolve=async(source:Source)=>{
+      if(!selectors.has(source.reference))selectors.set(source.reference,this.reads.reviewSelector(channel,sessionID,source.reference,signal))
+      const request=await selectors.get(source.reference)!
+      if(request.operation==="read_revision")return {kind:"revision",...request.subject,clauseId:source.clauseId??null}
+      const ref=request.subject
+      if(source.clauseId!==undefined&&ref.clauseId!==source.clauseId)nativeUnavailable()
+      return ref
+    }
+    const items=[]
+    for(const item of input.items)items.push({id:identity("item:"+item.key),target:await resolve(item.target),
+      before:item.before===null?null:await resolve(item.before)})
+    const draft:any={items,question:input.question,scope:input.scope,rationale:input.rationale,
+      consequences:input.consequences,alternatives:input.alternatives,uncertainties:input.uncertainties,
+      contexts:await Promise.all(input.contexts.map(resolve)),dependencies:await Promise.all(input.dependencies.map(resolve)),
+      informationGaps:input.informationGaps}
+    if(input.presentations?.length)draft.presentations=input.presentations.map((presentation:any)=>({
+      language:presentation.language,sourceLanguage:presentation.sourceLanguage,items:presentation.items.map((item:any)=>{
+        if(!input.items.some((candidate:any)=>candidate.key===item.itemKey))nativeUnavailable()
+        return {itemId:identity("item:"+item.itemKey),title:item.title,text:item.text}
+      })
+    }))
+    if(input.followup)draft.followup={requestId:input.followup.requestId,items:input.followup.items.map((change:any)=>{
+      if(change.itemKey!==null&&!input.items.some((item:any)=>item.key===change.itemKey))nativeUnavailable()
+      return {previousItemId:change.previousItemId,itemId:change.itemKey===null?null:identity("item:"+change.itemKey),
+        disposition:change.disposition,explanation:change.explanation}
+    })}
+    const requestId=identity("approval-request")
+    const command=contextJSON({formatVersion:1,projectId:channel.projectID,requestKey:identity("review-command"),
+      operation:"submit_review",payload:{requestId,draft}},2*1024*1024)
+    if(original!==undefined&&original!==command)throw new Error("Original review input conflict; preserve the original command and intent.")
+    return {content:await send(command),metadata:{writhelmRequestId:requestId}}
+  }
+  private async legacyReview(input:any,channel:BoundWorkChannel,sessionID:string,signal:AbortSignal,send:Send){
+    validateModelContract(operationSchema("authoring","request_review"),input)
+    if(new Set(input.items.map((item:any)=>item.key)).size!==input.items.length)nativeUnavailable()
+    const identity=(purpose:string)=>knowledgeIntentIdentity(channel.readBinding!,input.intentId,purpose)
     const sources=new Map<string,Promise<any>>()
     const resolve=async(source:Source)=>{
       if(!sources.has(source.reference))sources.set(source.reference,this.reads.read("knowledge",channel,sessionID,
         {reference:source.reference,format:"canonical"},planningKnowledgeReads,signal).then(result=>exactJSON(result.content,nativeUnavailable)))
       const read=await sources.get(source.reference)!
-      if(read.kind!=="read")nativeUnavailable()
+      if(read.kind!=="read"){
+        const code=typeof read.code==="string"&&/^[A-Z][A-Z0-9_]{0,63}$/.test(read.code)?read.code:"INVALID_READ_RESPONSE"
+        throw new ReviewSourceReadHold(source.reference,code)
+      }
       if(read.operation==="read_revision"){
         const candidates=revisionSources(read.data).map(s=>s.reference)
         const ref=candidates.find((r:any)=>source.clauseId===undefined?r.kind==="context":r.kind==="clause"&&r.clauseId===source.clauseId)
@@ -73,6 +128,13 @@ export class ModelKnowledge {
     for(const source of input.dependencies)dependencies.push(await resolve(source))
     const packet:any={items,question:input.question,scope:input.scope,rationale:input.rationale,consequences:input.consequences,
       alternatives:input.alternatives,uncertainties:input.uncertainties,contexts,dependencies,informationGaps:input.informationGaps}
+    if(input.presentations?.length)packet.presentations=input.presentations.map((presentation:any)=>({
+      language:presentation.language,sourceLanguage:presentation.sourceLanguage,
+      items:presentation.items.map((item:any)=>{
+        if(!input.items.some((candidate:any)=>candidate.key===item.itemKey))nativeUnavailable()
+        return {itemId:identity("item:"+item.itemKey),title:item.title,text:item.text}
+      })
+    }))
     if(input.followup){
       const previous=exactJSON(await channel.send("reads",contextJSON({formatVersion:1,projectId:channel.projectID,
         operation:"read_request",subject:{id:input.followup.requestId}}),signal),nativeUnavailable)

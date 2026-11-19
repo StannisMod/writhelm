@@ -103,14 +103,15 @@ internal class Auth2Policy(private val state: Auth2State, private val work: Auth
     private fun admission(c: ScopedCredential, call: WorkInvocation, mode: AdmissionMode, b: DelegationBinding?) =
         WorkAdmission(CommandIdentity(c.credential.principalId,call.projectId,call.operation.tag,call.requestKey),c.credential.id,c.scope,mode,b)
 
-    /** Only P/C knowledge writes; MCP has the original four-op closed allowlist. */
+    /** Only P/C knowledge writes; MCP has a closed planning allowlist, never owner decisions. */
     fun authorizeLegacyCommand(presented: PresentedCredential, project: UUID, operation: String, mcp: Boolean=false): ScopedCredential? {
         val c=state.authenticate(presented,project) ?: return null
         if(c.scope is CredentialScope.Assignment) return null
-        if(mcp && operation !in setOf("propose_revision","request_approval","record_assessment","pin_consumer")) return null
+        if(mcp && operation !in setOf("propose_revision","request_approval","submit_review","record_assessment","pin_consumer")) return null
         val required=requiredCapability(operation) ?: return null
         if(operation=="read") return null // No broad READ-snapshot admission escape.
         if(!state.allows(c,project,required)) return null
+        if(operation=="submit_review" && !state.allows(c,project,Capability.READ))return null
         if(required in setOf(Capability.MANAGE,Capability.APPROVE) && state.projects[project]?.ownerPrincipalId!=c.credential.principalId) return null
         return c
     }

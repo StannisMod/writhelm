@@ -89,6 +89,30 @@ function fixture(){
     arm:async()=>{const raw=command();await activity.before(raw);await activity.after(raw,receipt(raw))}}
 }
 const idle={sessionID:scope.sessionID,background:[]}
+test("exact B resolution reacts once despite older pending A, survives reopen, then observes A",async()=>{
+  const f=fixture()
+  for(const n of [81,82]){
+    const raw=command("request_approval",id(n+10),{requestId:id(n),packet:{}})
+    await f.activity.before(raw);await f.activity.after(raw,receipt(raw));f.pendingRequests.add(id(n))
+  }
+  assert.equal(await f.roles.idle(idle),"external-wait");assert.equal(f.sends(),0)
+  f.pendingRequests.delete(id(82))
+  assert.equal(await f.roles.idle(idle),"continued");assert.equal(f.sends(),1)
+  const p=await f.progress.observe(new AbortController().signal)
+  assert.deepEqual(p!.resolvedRequestIds,[id(82)])
+  assert.ok(p!.waitJSON!.includes(id(81)),"old request remains pending")
+  assert.equal(await f.roles.idle(idle),"external-wait");assert.equal(f.sends(),1)
+  let reopenedSends=0
+  const reopened=new NativeRoleContinuation(f.store,()=>f.progress.observe(new AbortController().signal),async input=>{
+    reopenedSends++
+    assert.match(input.text,/Acknowledge the owner's actual decision/)
+    return {type:"synthetic",sessionID:input.sessionID,id:input.id,payload:{text:input.text,metadata:input.metadata}}
+  })
+  assert.equal(await reopened.idle(idle),"external-wait");assert.equal(reopenedSends,0)
+  f.pendingRequests.delete(id(81))
+  assert.equal(await reopened.idle(idle),"continued");assert.equal(reopenedSends,1)
+  assert.equal(await reopened.idle(idle),"stalled");assert.equal(reopenedSends,1)
+})
 test("planner activity retains only selector/receipt identity; unknown originals hold through reopen",async()=>{
   const f=fixture(),raw=command()
   await f.activity.before(raw)

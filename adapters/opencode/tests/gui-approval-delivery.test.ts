@@ -20,7 +20,7 @@ const require=createRequire(import.meta.url)
 const raw=readFileSync(new URL("../../tests/fixtures/bundle.json",import.meta.url),"utf8"),record=JSON.parse(raw).data.request
 const ref={project:record.payload.projectId,requestId:record.key,requestDigest:record.payload.requestDigest,packetDigest:record.payload.packetDigest}
 const tick=async()=>{for(let n=0;n<12;n++)await new Promise(resolve=>setImmediate(resolve))}
-function fixture(delayed=false,journal?:ApprovalDelivery){
+function fixture(delayed=false,journal?:ApprovalDelivery,retained=new Map<string,{reference:string}>()){
   const {document,window}=parseHTML("<html><body></body></html>")
   Object.assign(globalThis,{document,window})
   const original={key:"sidecar\nses_gui_a",id:"ses_gui_a",server:{id:"sidecar"},directory:"/synthetic/project",project:{worktree:"/synthetic/project"}}
@@ -56,6 +56,10 @@ function fixture(delayed=false,journal?:ApprovalDelivery){
   createRoot(d=>{
     dispose=d;const [current,set]=createSignal(original);change=set
     definition.setup({app:{platform:"desktop",version:"2.2.5"},id:"writhelm-opencode",
+      stores:{reviewLink:(session:any)=>({
+        get value(){return retained.get(session.key)??{reference:""}},
+        set(value:{reference:string}){retained.set(session.key,value)}
+      })},
       sessions:{current},add:(token:any,item:any)=>contributions.push({token,item}),main:()=>bridge,
       layout:{open:(key:any,session:any)=>opens.push({key,session}),
         close:(key:any,session:any)=>closes.push({key,session}),toggle:(key:any,session:any)=>toggles.push({key,session})},toast:{show:()=>({dismiss(){}})}})
@@ -123,14 +127,15 @@ test("rendering selected B never automatically opens retained pending A",async()
   const journal=new ApprovalDelivery(custody),sessionID="ses_gui_a"
   const older={...ref,requestId:"00000000-0000-0000-0000-000000000778"}
   await journal.request(sessionID,older);await journal.request(sessionID,ref)
-  const f=fixture(false,journal)
+  const retained=new Map<string,{reference:string}>(),f=fixture(false,journal,retained)
   try{
-    for(let n=0;n<100&&!f.opens.length;n++)await tick()
+    const deadline=Date.now()+5000
+    while(!f.opens.length&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,5))
     assert.equal(f.opens.length,1);assert.equal(f.acks.length,0)
     assert.equal(await journal.shown(sessionID,ref),false,"no shown receipt before load")
     f.render();await tick()
     assert.equal(f.acks.length,1)
-    for(let n=0;n<100&&!await journal.shown(sessionID,ref);n++)await tick()
+    while(!await journal.shown(sessionID,ref)&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,5))
     assert.equal(await journal.shown(sessionID,ref),true)
     for(let n=0;n<3;n++){for(const timer of f.timers)timer();await tick()}
     assert.equal(f.opens.length,1,"backlog must not steal the selected panel")
@@ -139,4 +144,15 @@ test("rendering selected B never automatically opens retained pending A",async()
     assert.deepEqual(await journal.current(sessionID,ref.project),older)
     assert.equal(f.answers(),0)
   }finally{f.close()}
+  const reopened=fixture(false,journal,retained)
+  try{
+    await tick()
+    assert.equal(reopened.opens.length,0,"a restored exact view does not auto-focus the backlog")
+    reopened.render()
+    const deadline=Date.now()+5000
+    while(!reopened.reads.length&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,5))
+    assert.equal(reopened.reads.length,1)
+    assert.equal(reopened.reads[0].requestId,ref.requestId,"the session's already-shown exact packet survives window recreation")
+    assert.equal(reopened.answers(),0)
+  }finally{reopened.close()}
 })
