@@ -49,6 +49,35 @@ pins, exact operation custody and publication checks are unchanged. Capability c
 authorization grant or an assurance that a process still runs the same executable after an OS update.
 Actual failed/ambiguous operations retain their existing refusal/reconciliation behavior.
 
+### Fresh review preparation and feedback
+
+Author one independently discussable norm per permanent clause, not a topic section; canonical
+source titles/text are English. `context` is normative revision context, not introductory prose.
+Initial unapproved context must be both declared and selected as a decision item. General framing
+belongs in question/scope. New friendly reviews require `reviewLanguage` plus a matching complete
+presentation declaring `sourceLanguage: "en"`; retained original commands keep their exact route.
+This checks declared coverage, not semantic language/translation correctness.
+
+Alternatives/consequences describe substantive product choices/effects; empty arrays honestly
+declare none identified. Do not fill them with approve/reject buttons or workflow narration.
+Optional presentation-item `explanation` binds a rule-specific reason to that item, distinct from
+normative text (packet-v4 only when present; historical v1/v2/v3 preserved).
+Service `approvalBlockers` reports packet readiness independently of caller approval authority;
+`feedbackAllowed` controls exact negative feedback/drafts. Unapproved context holds approval, not
+comments in a prepared user-language view. Current authorization, complete source, unresolved request and pending
+original-command barriers still apply. Legacy servers retain conservative behavior.
+Creation/delivery and readiness are separately reported; neither proves semantic adequacy or approval.
+
+User-language display is mandatory before native delivery, contract rendering or shown acknowledgement.
+The GUI records its actual language as exact-chat UI preference; new preparation must match it.
+No raw-source/other-language fallback or "translation absent" user decision is offered.
+An exact same-language legacy source needs no duplicate translation, but its language must be explicitly
+bound to the immutable request. The trusted stdin installer command
+`provision-review-source-language` takes root/forbiddenAreas, expectedBootstrapDigest, language and
+scope (storeId/projectId/sessionID/requestId/requestDigest/packetDigest). It retains only protected,
+immutable metadata, not source text, a translation, an owner answer or a modified request.
+Every view reauthorizes its sources. Wrong/missing/stale declaration never enables fallback.
+
 Knowledge tools take typed operation/payload or operation/subject inputs. Work tools load one
 operation's exact schema with `writhelm_work_contract`; only that chat's next outgoing tool
 schema is specialized, avoiding an always-loaded catalogue of every work type. Int64 fields
@@ -236,8 +265,10 @@ Review packets may carry explicitly authored `presentations`, bound by a distinc
 to every exact item ID. Typed authoring uses the item's existing `itemKey`; the adapter resolves IDs.
 English contract source remains immutable; the ordinary panel shows one document in the interface
 language, with permanent clause IDs and human titles. English source and packet explanations are
-collapsed disclosures, not a second main document/card plane. Missing language coverage is explicit
-and cannot submit a fallback-language decision. Old packets retain their v1/v2 bytes and digests.
+collapsed disclosures, not a second main document/card plane. Language preparation is mandatory
+before owner display/delivery; an unprepared contract is never shown as a source-language fallback.
+Explicitly declared exact same-language legacy source needs no duplicate translation.
+Old packets retain their v1/v2 bytes and digests.
 Localized request records require current source access, including metadata read paths.
 
 Text is selectable. Right-click a point offers only `возразить`; selecting it opens a textarea

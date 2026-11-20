@@ -4,7 +4,7 @@ import path from "node:path"
 import { randomUUID } from "node:crypto"
 import { Schema } from "effect"
 import type { Plugin } from "@opencode/plugin/gui"
-import { Review, ReviewDrafts, DraftInputs, ApprovalPresentation, OwnerOrderPresentation, OwnerOrderInputs, Inputs, reply, Fault, requireThat, type Session, type Reply, type Input } from "./contracts.js"
+import { Review, ReviewDrafts, DraftInputs, ApprovalPresentation, PresentationRequest, PresentationShown, OwnerOrderPresentation, OwnerOrderInputs, Inputs, reply, Fault, requireThat, type Session, type Reply, type Input } from "./contracts.js"
 import { Controller } from "./controller.js"
 import { openProtected } from "./protected.js"
 import { prepareSetup, PublicSetupRunner, type JavaRuntime } from "./helper.js"
@@ -15,6 +15,8 @@ import { NativeOwnerOrder } from "./native-owner-order.js"
 import { exactJSON } from "./strict-json.js"
 import { contextJSON } from "./native-context-codec.js"
 import { ReviewDraftStore } from "./review-drafts.js"
+import { ReviewDisplayCustody } from "./review-display-custody.js"
+import {selectReviewDisplay,ReviewDisplayPending} from "./review-display.js"
 
 export const main: Plugin.MainSetup = async ctx => {
   requireThat(ctx.app.platform === "desktop" && ctx.app.version === "2.2.5", "UNAVAILABLE")
@@ -30,6 +32,11 @@ export const main: Plugin.MainSetup = async ctx => {
   const automaticRoot=process.env.WRITHELM_PRIMARY_ROOT
   if(automaticRoot!==undefined)requireThat(path.isAbsolute(automaticRoot),"PROTECTION_FAILED")
   const automatic=automaticRoot?new AutomaticApprovalClients(automaticRoot,{verify},projects):undefined
+  const display=async(s:Session)=>{
+    requireThat(automaticRoot,"UNCONFIGURED")
+    const custody=new LinuxNativeCustody(path.join(automaticRoot,"review-display"),await projects(s))
+    await custody.initialize();return new ReviewDisplayCustody(custody)
+  }
   const delivery=async(s:Session)=>{
     requireThat(automaticRoot,"UNCONFIGURED")
     const custody=new LinuxNativeCustody(path.join(automaticRoot,"approval-delivery"),await projects(s))
@@ -112,20 +119,41 @@ export const main: Plugin.MainSetup = async ctx => {
     await verify(input.session,caller.window)
     const target=automatic?(await automatic.get(input.session,caller.window)).controller:controller
     if(!automatic)await ensure(input.session)
-    return target.dispatch(name,input,caller)
+    const result=await target.dispatch(name,input,caller)
+    if(name==="open"&&result.ok&&automatic){
+      const client=await automatic.get(input.session,caller.window),i=input as Input<"open">
+      const raw=await (await display(i.session)).sourceLanguage({storeId:client.storeId,projectId:client.projectId,
+        sessionID:i.session.id,requestId:i.requestId,requestDigest:i.requestDigest,packetDigest:i.packetDigest})
+      return {...result,pageJSON:raw??""}
+    }
+    return result
   })
   ctx.provide(ApprovalPresentation,{
     requested:(i,c)=>safe(async()=>{
-      Schema.decodeUnknownSync(Inputs.status)(i);await verify(i.session,c.window)
+      Schema.decodeUnknownSync(PresentationRequest)(i);await verify(i.session,c.window)
       requireThat(automatic,"UNCONFIGURED")
       const client=await automatic.get(i.session,c.window),journal=await delivery(i.session)
+      if(i.language)await (await display(i.session)).rememberInterface(client.storeId,client.projectId,i.session.id,i.language)
       const ref=await journal.selected(i.session.id,client.projectId)
+      if(ref&&!await journal.shown(i.session.id,ref)&&i.language){
+        const bundle=await client.controller.authorizeDisplay({session:i.session,requestId:ref.requestId,
+          requestDigest:ref.requestDigest,packetDigest:ref.packetDigest},c)
+        const source=await (await display(i.session)).sourceLanguage({storeId:client.storeId,projectId:client.projectId,
+          sessionID:i.session.id,requestId:ref.requestId,requestDigest:ref.requestDigest,packetDigest:ref.packetDigest})
+        try{selectReviewDisplay(bundle.request.payload.packet,i.language,source?JSON.parse(source).language:undefined)}
+        catch(error){if(error instanceof ReviewDisplayPending)return reply("OK",{pageJSON:""});throw error}
+      }
       return reply("OK",{pageJSON:ref&&!await journal.shown(i.session.id,ref)?JSON.stringify(ref):""})
     }),
     shown:(i,c)=>safe(async()=>{
-      Schema.decodeUnknownSync(Inputs.open)(i);await verify(i.session,c.window)
+      Schema.decodeUnknownSync(PresentationShown)(i);await verify(i.session,c.window)
       requireThat(automatic,"UNCONFIGURED")
       const client=await automatic.get(i.session,c.window),journal=await delivery(i.session)
+      const bundle=await client.controller.authorizeDisplay({session:i.session,requestId:i.requestId,
+        requestDigest:i.requestDigest,packetDigest:i.packetDigest},c)
+      const source=await (await display(i.session)).sourceLanguage({storeId:client.storeId,projectId:client.projectId,
+        sessionID:i.session.id,requestId:i.requestId,requestDigest:i.requestDigest,packetDigest:i.packetDigest})
+      selectReviewDisplay(bundle.request.payload.packet,i.language,source?JSON.parse(source).language:undefined)
       await journal.acknowledge(i.session.id,{project:client.projectId,requestId:i.requestId,requestDigest:i.requestDigest,packetDigest:i.packetDigest})
       return reply()
     }),

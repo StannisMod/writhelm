@@ -11,6 +11,16 @@ Existing domain laws, command bytes/fingerprints and atomicity remain unchanged.
 
 ### Owner-approved typed model boundary
 
+Fresh-review correction approved 2026-11-19: complete authorized review bundles may additionally
+return `feedbackAllowed` (current exact negative-answer admission) and `approvalBlockers` (packet
+approval readiness independent of caller APPROVE rights). `actionable` retains its historical
+caller-approval meaning. Neither field grants authority or changes final command admission.
+Old projections lacking these fields are handled conservatively, not guessed permissively.
+Native feedback and draft writes use feedback eligibility; language/approval-only holds do not
+silently disable objections. The native review tool separately reports exact post-submission
+readiness; inspection failure leaves a settled command settled and reports readiness unknown.
+No per-source preparation HTTP fan-out or automatic original-command replacement is introduced.
+
 Owner-approved review-submission extension (2026-11-19): `submit_review` is one bounded command,
 not a general batch endpoint. Its retained input contains exact immutable source selectors and
 authored decision material. The service resolves the complete source/predecessor closure against

@@ -19,6 +19,9 @@ export function profileResult(raw: string): Json {
   requireThat(profile(value), "PROTECTION_FAILED"); return value
 }
 export const versionOne = (v: Json) => isLosslessNumber(v) && v.value === "1"
+/** Only for a complete, currently authorized bundle. Old servers retain conservative eligibility. */
+export const feedbackAllowed = (bundle:Json):boolean =>
+  bundle.complete===true&&!bundle.resolution&&(bundle.feedbackAllowed??bundle.actionable)===true
 export function referenceKey(ref: Json): string {
   const sort = (v: Json): Json => Array.isArray(v) ? v.map(sort) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map(k => [k, sort(v[k])])) : v
   return JSON.stringify(sort(ref))

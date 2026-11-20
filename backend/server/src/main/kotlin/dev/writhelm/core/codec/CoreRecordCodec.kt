@@ -105,7 +105,8 @@ internal fun packet(v: ReviewPacket): JsonValue {
     val linked=v.followup?.let {JObject(base.entries+("followup" to followup(it)))} ?: base
     return if(v.presentations.isEmpty())linked else JObject(linked.entries+("presentations" to array(v.presentations) { p ->
         obj("language" to str(p.language),"sourceLanguage" to str(p.sourceLanguage),"items" to array(p.items) {
-            obj("itemId" to uuid(it.itemId),"title" to str(it.title),"text" to str(it.text))
+            val base=obj("itemId" to uuid(it.itemId),"title" to str(it.title),"text" to str(it.text))
+            it.explanation?.let {text->JObject(base.entries+("explanation" to str(text)))} ?: base
         })
     }))
 }
@@ -116,7 +117,8 @@ internal fun packet(v: JsonValue): ReviewPacket {
     return checked { ReviewPacket(f.getValue("items").list().map { val i=it.fields("id","target","before"); ReviewItem(uuid(i.getValue("id")),reference(i.getValue("target")),i.getValue("before").let { before -> if(before==JNull) null else reference(before) }) },f.getValue("question").string(),f.getValue("scope").string(),f.getValue("rationale").string(),texts("consequences"),texts("alternatives"),texts("uncertainties"),f.getValue("contexts").list().map(::context),f.getValue("dependencies").list().map(::reference),texts("informationGaps"),f["followup"]?.let(::followup),
         f["presentations"]?.list()?.map { p -> val a=p.fields("language","sourceLanguage","items")
             ReviewPresentation(a.getValue("language").string(),a.getValue("sourceLanguage").string(),a.getValue("items").list().map {
-                val i=it.fields("itemId","title","text");ReviewPresentationItem(uuid(i.getValue("itemId")),i.getValue("title").string(),i.getValue("text").string())
+                val extra=if((it as? JObject)?.entries?.containsKey("explanation")==true)arrayOf("explanation") else emptyArray()
+                val i=it.fields("itemId","title","text",*extra);ReviewPresentationItem(uuid(i.getValue("itemId")),i.getValue("title").string(),i.getValue("text").string(),i["explanation"]?.string())
             })
         } ?: emptyList()) }
 }

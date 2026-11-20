@@ -16,6 +16,12 @@ const rewrite=value=>{
 }
 for(const name of files){
   const file=resources+name,original=await readFile(file,"utf8"),doc=JSON.parse(original),defs=doc.$defs
+  // Additive read observations, not retained canonical records or new approval authority.
+  defs.bundle.properties.feedbackAllowed={type:"boolean"}
+  defs.bundle.properties.approvalBlockers={type:"array",items:{type:"string"}}
+  for(const key of ["consequences","alternatives"])defs.packet.properties[key]={$ref:"#/$defs/texts"}
+  const presentationItem=defs.packet.properties.presentations.items.properties.items.items
+  presentationItem.properties.explanation={type:"string",maxLength:4096,pattern:"\\S"}
   for(const code of ["GIT_UNAVAILABLE","GIT_INCOMPATIBLE"])
     if(!defs.errorCode.enum.includes(code))defs.errorCode.enum.push(code)
   const needed=new Set()

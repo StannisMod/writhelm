@@ -234,7 +234,11 @@ internal class WrithelmService private constructor(val app: MechanismApp?,val li
             is WorkflowResult.Failure -> blockers.add(probe.problem.name)
             is WorkflowResult.Success -> Unit
         }
+        val feedback=id !in s.resolutions && v.workflow.resolve(Actor(v.access.principalId),r.projectId,id,
+            r.digest,r.packet.digest,StructuredAnswer.Reject) is WorkflowResult.Success
         val result=obj("request" to record(s,r.projectId,"requests",id),"resolution" to (if(id in s.resolutions)record(s,r.projectId,"resolutions",id) else JNull),
+            "feedbackAllowed" to JBoolean(feedback),
+            "approvalBlockers" to JArray(listOfNotNull(v.workflow.approvalProblem(id)?.name).map(::str)),
             "materials" to JArray(materials),"actionable" to JBoolean(blockers.isEmpty()),"blockers" to JArray(blockers.map(::str)),"complete" to JBoolean(true))
         val previous=reviewFollowupProjection(r.packet,s,{family,previousId->record(s,r.projectId,family,previousId)},{ref->material(v,s,ref)})
         return previous?.let {JObject(result.entries+("followupJSON" to str(StrictJson.encode(it).decodeToString())))} ?: result

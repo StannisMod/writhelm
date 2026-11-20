@@ -19,6 +19,7 @@ import { NativeSessionCreation, userSessionID } from "./native-session-creation.
 import { ApprovalDelivery } from "./approval-delivery.js"
 import { NativePlannerActivity } from "./native-planner-progress.js"
 import {selectedContractSchemas} from "./contract-release.js"
+import {ReviewDisplayCustody} from "./review-display-custody.js"
 
 /** Automatic-mode entrypoint shared with model-free boundary tests. Activation resolves only after
  * the real native runtime, tools and service connect handshake, not after credential issuance. */
@@ -38,6 +39,9 @@ export async function startAutomaticPrimaryServer(ctx:Plugin.Context,root:string
   const deliveryCustody=new LinuxNativeCustody(path.join(root,"approval-delivery"),[ctx.location.directory])
   await deliveryCustody.initialize()
   const approvalDelivery=new ApprovalDelivery(deliveryCustody)
+  const displayStorage=new LinuxNativeCustody(path.join(root,"review-display"),[ctx.location.directory])
+  await displayStorage.initialize()
+  const reviewDisplay={storeId:cfg.storeId as string,custody:new ReviewDisplayCustody(displayStorage)}
   const governor=await registerAutomaticPrimaryGovernor(ctx,bootstrap,enrollment,async binding=>{
     // Diagnostics are not authority or immutable recovery intent. Keep one bounded cursor per
     // session OUTSIDE bootstrap inventory, and never make progress logging a condition of admission.
@@ -92,7 +96,7 @@ export async function startAutomaticPrimaryServer(ctx:Plugin.Context,root:string
     try {
       primary=await registerPrimaryGovernor(scoped,registry,deployment,{workRoot:binding.workRoot,controllerId:binding.controllerId,
         controllerCredentialId:binding.credentialId,projectId:binding.projectId,schemas:cfg.schemas,clientPolicyFile:cfg.clientPolicyFile,admissionHooks:false,activationStage:stage,approvalDelivery,
-        plannerActivity:()=>plannerActivity},async sessionID=>{
+         plannerActivity:()=>plannerActivity,reviewDisplay},async sessionID=>{
         await stage("native-runtime-requested")
         runtime=await startProtectedNativeRuntime(scoped,native,{root:selected.root,nativeOrigin:cfg.nativeOrigin,serviceOrigin:cfg.serviceOrigin,transportOrigin:selected.transportOrigin,
           storeId:cfg.storeId,projectId:binding.projectId,controllerId:binding.controllerId,hostId:selected.hostId,controllerSessionID:sessionID,ownerOrderRoot:root,

@@ -2,7 +2,8 @@
 import { createEffect, onCleanup } from "solid-js"
 import type { IpcClient } from "@opencode/plugin/gui"
 import { Review, ReviewDrafts, reply, type Session, type Reply } from "./contracts.js"
-import { serviceResult, completeBundle, referenceKey, type Json } from "./wire.js"
+import { serviceResult, completeBundle, feedbackAllowed, referenceKey, type Json } from "./wire.js"
+import {selectReviewDisplay,displaySourceLanguage} from "./review-display.js"
 
 import type { ExactLink } from "./link.js"
 export { exactLink, type ExactLink } from "./link.js"
@@ -122,29 +123,46 @@ export function nativePanel(session: () => Session, bridge: IpcClient<typeof Rev
     const r = await bridge.open({ session: bound, requestId: ref.requestId, requestDigest: ref.requestDigest, packetDigest: ref.packetDigest })
     if (mine !== epoch) return; outcome(r); if (!r.ok) return
     const b = completeBundle(r.bundleJSON, ref.requestId, ref.requestDigest, ref.packetDigest, ref.project)
-    bundle = b; handle = r.handle;activeRef=ref
-    dismiss.textContent = "Закрыть без решения"
     const p = b.request.payload.packet
     const requestedLanguage=language?.()
-    const presentations=p.presentations??[]
-    const presentation=requestedLanguage?presentations.find((v:Json)=>v.language===requestedLanguage)??
-      presentations.find((v:Json)=>v.language===requestedLanguage.split("-")[0]):undefined
-    const languageMissing=!!requestedLanguage&&!presentation
-    if(languageMissing)paragraph("Перевод этой версии отсутствует",
-      "Для языка "+requestedLanguage+" нет привязанного к пунктам перевода. Ниже английский оригинал; решение недоступно до подготовки соответствующего представления.",content,true)
+    let presentation:Json
+    try{
+        if(!requestedLanguage)throw new Error("Interface language pending")
+        const sourceLanguage=displaySourceLanguage(r.pageJSON,{projectId:ref.project,sessionID:bound.id,
+          requestId:ref.requestId,requestDigest:ref.requestDigest,packetDigest:ref.packetDigest})
+        const display=selectReviewDisplay(p,requestedLanguage,sourceLanguage)
+        presentation=display.kind==="presentation"?display.presentation:undefined
+    }catch{
+        // Preparation is internal: never publish a fallback contract or acknowledge it as shown.
+      choices.hidden=true;status.textContent="Подготавливаю документ для просмотра…"
+      await bridge.dismiss({session:bound,handle:r.handle}).catch(()=>undefined)
+      return
+    }
+    choices.hidden=false;bundle = b; handle = r.handle;activeRef=ref
+    dismiss.textContent = "Закрыть без решения"
+    if(!b.actionable&&!b.resolution){
+      const labels:Record<string,string>={
+        UNAPPROVED_INPUT:"В запросе есть неутверждённая зависимость. Планировщик должен включить её в предмет решения либо сослаться на уже утверждённую версию.",
+        STALE_SUBJECT:"Предмет утверждения изменился. Требуется новый точный запрос.",
+        BLOCKED_INPUT:"Один из источников заблокирован.",
+        FORBIDDEN:"Нет полномочий на утверждение этого запроса."
+      }
+      paragraph("Утверждение пока недоступно",(b.blockers??[]).map((code:string)=>labels[code]??"Проверка запроса: "+code).join("\n")+
+        (feedbackAllowed(b)?" Замечания и отклонение доступны; они ничего не утверждают.":" Обратная связь недоступна для этого состояния запроса."),content,true)
+    }
     const context=document.createElement("details"),contextTitle=document.createElement("summary")
-    contextTitle.textContent="Обоснование и рамки решения";context.append(contextTitle);content.append(context)
+    contextTitle.textContent="О решении";context.append(contextTitle);content.append(context)
     Object.assign(contextTitle.style,{textAlign:"right",cursor:"pointer"})
     if(b.followup){
       const answer=b.followup.resolution.payload.answer
       if(answer.kind==="reject-with-reason")paragraph("Причина предыдущего отклонения",answer.reason,content,true)
       paragraph("Повторное согласование","Открыты изменённые и новые пункты. Неизменённые пункты, всё ещё требующие решения, доступны ниже и входят в это согласование.",content,true)
     }
-    for (const [title, value] of [["Что предлагается утвердить", p.question], ["Требования и границы", p.scope], ["Зачем нужно решение", p.rationale], ["Предлагаемые правила и последствия", p.consequences.join("\n")], ["Другие варианты", p.alternatives.join("\n")], ["Что ещё не определено", p.uncertainties.join("\n")]]) {
+    for (const [title, value] of [["Вопрос", p.question], ["Область решения", p.scope], ["Причины предложения", p.rationale], ["Последствия для продукта", p.consequences.join("\n")||"Дополнительные последствия не заявлены."], ["Содержательные альтернативы", p.alternatives.join("\n")||"Содержательные альтернативы не заявлены."], ["Что ещё не определено", p.uncertainties.join("\n")]]) {
       if(value)paragraph(title,value,context,true)
     }
     const fullDocument=document.createElement("details"),fullTitle=document.createElement("summary")
-    fullTitle.textContent="Английский оригинал · точная версия";fullDocument.append(fullTitle)
+    fullTitle.textContent="Исходный текст · точная версия";fullDocument.append(fullTitle)
     Object.assign(fullTitle.style,{textAlign:"right",cursor:"pointer",fontWeight:"600",padding:"10px"})
     content.prepend(fullDocument)
     for (const material of b.materials) {
@@ -240,6 +258,11 @@ export function nativePanel(session: () => Session, bridge: IpcClient<typeof Rev
         Object.assign(text.style,{whiteSpace:"pre-wrap",overflowWrap:"anywhere",userSelect:"text",marginBottom:"12px"})
         point.append(text)
       }
+      if(translated?.explanation){
+        const explanation=document.createElement("details"),summary=document.createElement("summary")
+        summary.textContent="Пояснение к пункту · не формулировка требования";explanation.append(summary)
+        paragraph("Почему предложено это правило",translated.explanation,explanation,true);point.append(explanation)
+      }
       if(oldRef&&change?.disposition!=="unchanged"){
         const previous=document.createElement("details"),title=document.createElement("summary")
         title.textContent="Предыдущая формулировка пункта";previous.append(title)
@@ -254,7 +277,7 @@ export function nativePanel(session: () => Session, bridge: IpcClient<typeof Rev
       fit(area); Object.assign(area.style, { display: "block", width: "100%", resize: "vertical",font:"inherit",padding:"10px",minHeight:"72px" })
       area.oninput=()=>{updateActions();queueChange()}
       const showMenu=(x:number,y:number)=>{
-        if(area.disabled)return
+        if(area.disabled){status.textContent="Замечания сейчас недоступны: проверь состояние запроса и загрузку черновика.";return}
         closePointMenu();menuArea=area;pointMenu.hidden=false
         // Desktop panes establish transformed containing blocks. The top layer keeps the menu
         // in viewport coordinates instead of clipping/squeezing it at the pane's right edge.
@@ -290,15 +313,17 @@ export function nativePanel(session: () => Session, bridge: IpcClient<typeof Rev
       }
       content.append(outside)
     }
-    const sourceActionable=!!b.actionable&&!r.pending&&!languageMissing
+    const sourceActionable=!!b.actionable&&!r.pending
+    const canFeedback=feedbackAllowed(b)&&!r.pending
     const setEditable=()=>{
       if(mine!==epoch)return
-      choices.disabled=!sourceActionable||!draftReady||draftFailed||submitting
-      reason.disabled=!sourceActionable||!draftReady||submitting
-      for(const area of comments.values())area.disabled=!sourceActionable||!draftReady||submitting
+      choices.disabled=!canFeedback||!draftReady||draftFailed||submitting
+      approve.disabled=!sourceActionable
+      reason.disabled=!canFeedback||!draftReady||submitting
+      for(const area of comments.values())area.disabled=!canFeedback||!draftReady||submitting
     }
     const send=async(choice:"approve"|"reject"|"changes-required")=>{
-      if (!handle || !sourceActionable || r.pending||!draftReady||draftFailed||submitting) return
+      if (!handle || !(choice==="approve"?sourceActionable:canFeedback) || r.pending||!draftReady||draftFailed||submitting) return
       const anchored = [...comments].filter(([, a]) => a.value.trim()).map(([itemId, a]) => ({ itemId, text: a.value }))
       if(choice!=="changes-required"&&anchored.length)return
       if (choice === "changes-required" && !anchored.length) { status.textContent = "Add a nonblank item-anchored comment."; return }
@@ -347,11 +372,11 @@ export function nativePanel(session: () => Session, bridge: IpcClient<typeof Rev
       }
       flushDraft=()=>{
         if(timer){clearTimeout(timer);timer=undefined}
-        if(!draftReady||!sourceActionable)return queue
+        if(!draftReady||!canFeedback)return queue
         return persist()
       }
       queueChange=()=>{
-        if(!draftReady||!sourceActionable)return
+        if(!draftReady||!canFeedback)return
         note.textContent="Сохраняю черновик…"
         if(timer)clearTimeout(timer)
         timer=setTimeout(()=>{timer=undefined;void persist()},300)

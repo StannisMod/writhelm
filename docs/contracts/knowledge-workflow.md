@@ -111,8 +111,50 @@ after current authorization for its referenced exact source material, including 
 that would otherwise expose that text. No cached authorization or broader grant follows.
 The renderer presents one ordered localized document with permanent point IDs; objections anchor
 to those exact items. Do not show a translated summary and separate English cards as though they
-were two corresponding canonical structures. Missing requested-language coverage is explicit,
-not a silently invented translation or unrelated-language decision view.
+were two corresponding canonical structures. Requested-language coverage is mandatory before
+contract publication/delivery to the owner; missing preparation is an internal producer hold, never
+a raw-language fallback or a "translation absent" user choice.
+
+### WF-11 — Fresh-review preparation and independent feedback eligibility
+
+Owner accepted this correction on 2026-11-19 (H1-FRESH-REVIEW-REPAIR-001).
+One independently discussable norm has one permanent clause anchor; thematic sections must not
+collapse independently disputable obligations into one comment target. This is a semantic authoring
+obligation, not a theorem derived from a character bound. Source titles/text are English; new friendly
+reviews explicitly declare reviewLanguage and cover every item in a matching sourceLanguage=en
+presentation. Historical original command recovery remains byte-identical.
+
+The authoring context field is normative revision context, not an introduction or process/status
+note. An initial unapproved context must itself be a decision target as well as declared context;
+otherwise approval remains held. Question/scope carry general framing. Read projections may expose
+approvalBlockers independently of caller APPROVE rights, only after exact source authorization.
+This observation grants no authority. Legacy actionable remains current caller approval eligibility.
+feedbackAllowed independently observes negative-answer eligibility. Unapproved dependencies,
+approval-only staleness/blockers and missing user-language presentation do not themselves prohibit
+exact-source objections, drafts or negative feedback. Missing access/material, resolved requests,
+unknown original outcomes and actual authority remain hard guards. Final commands reauthorize.
+
+Alternatives are substantive product/design alternatives, not response buttons; consequences describe
+product behavior, cost or risk, not the approval workflow. Empty arrays honestly declare none were
+identified; do not fabricate filler. Optional per-presentation-item explanation is separate from the
+normative wording, covers only that exact item, and participates in packet-v4 identity. Absent
+explanations preserve packet-v1/v2/v3 bytes/digests. Known material qualifications must still be visible.
+Readiness, delivery, source coverage, semantic adequacy and owner approval remain distinct.
+
+**WF-12 — Display preparation is mandatory.** Owner correction on 2026-11-19 supersedes WF-11's
+raw-source review fallback when the interface-language representation was not prepared.
+Native delivery and renderer publication use the same complete item-language selection law.
+The actual exact-chat interface preference is native UI state, not authority or planner memory.
+New authoring must cover that language before delivery. No source/language guessing, automatic
+model call, fallback summary or contract-shown acknowledgement for an unprepared view.
+
+An explicitly declared exact same-language source is itself a full representation; translating
+Russian into Russian is not required. For legacy records without packet language metadata, a trusted
+operator may retain an immutable protected source-language declaration bound to store, project,
+chat, request ID and both digests. It contains no source body/approval, changes no packet and grants
+no access. Every open reauthorizes the original sources; the unchanged packet already binds all
+displayed source bytes. Conflicting declarations refuse. Missing/stale/cross-chat metadata cannot
+enable fallback. English-source preparation remains required for new contracts.
 
 ## Finite case obligations
 

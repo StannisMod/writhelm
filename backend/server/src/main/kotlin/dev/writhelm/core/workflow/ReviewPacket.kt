@@ -39,7 +39,6 @@ class ReviewPacket(
         listOf(question, scope, rationale).forEach { requireText(it) }
         (this.consequences + this.alternatives + this.uncertainties + this.informationGaps).forEach { requireText(it) }
         require(this.items.isNotEmpty()) { "No decision items" }
-        require(this.consequences.isNotEmpty() && this.alternatives.isNotEmpty()) { "Missing decision material" }
         require(this.items.map { it.id }.distinct().size == this.items.size) { "Duplicate review item" }
         require(this.items.map { it.target.subject() }.distinct().size == this.items.size) { "Duplicate target subject" }
         require(this.contexts.distinct().size == this.contexts.size) { "Duplicate context" }
@@ -49,7 +48,7 @@ class ReviewPacket(
         var presentationBytes = 0L
         this.presentations.forEach { presentation ->
             require(presentation.items.map { it.itemId }.toSet() == this.items.map { it.id }.toSet())
-            presentation.items.forEach { presentationBytes += encodeUtf8(it.title).size + encodeUtf8(it.text).size }
+            presentation.items.forEach { presentationBytes += encodeUtf8(it.title).size + encodeUtf8(it.text).size + (it.explanation?.let(::encodeUtf8)?.size ?: 0) }
         }
         require(presentationBytes <= 1024 * 1024)
     }
@@ -58,7 +57,8 @@ class ReviewPacket(
         (this.items.flatMap { listOfNotNull(it.before, it.target) } + this.contexts + this.dependencies).distinct()
     )
 
-    val digest: Digest = framedDigest(if(this.presentations.isNotEmpty())"writhelm.review-packet.v3" else if(followup==null)"writhelm.review-packet.v1" else "writhelm.review-packet.v2") {
+    private val explained=this.presentations.any {p->p.items.any {it.explanation!=null}}
+    val digest: Digest = framedDigest(if(explained)"writhelm.review-packet.v4" else if(this.presentations.isNotEmpty())"writhelm.review-packet.v3" else if(followup==null)"writhelm.review-packet.v1" else "writhelm.review-packet.v2") {
         writeText(question)
         writeText(scope)
         writeText(rationale)
@@ -90,7 +90,10 @@ class ReviewPacket(
             this@ReviewPacket.presentations.forEach { presentation ->
                 writeText(presentation.language);writeText(presentation.sourceLanguage)
                 writeInt(presentation.items.size)
-                presentation.items.forEach { writeUuid(it.itemId);writeText(it.title);writeText(it.text) }
+                presentation.items.forEach {
+                    writeUuid(it.itemId);writeText(it.title);writeText(it.text)
+                    if(explained){writeBoolean(it.explanation!=null);it.explanation?.let {text->writeText(text)}}
+                }
             }
         }
     }
@@ -107,12 +110,13 @@ class ReviewPresentation(val language: String, val sourceLanguage: String, items
         require(this.items.map { it.itemId }.distinct().size == this.items.size)
     }
 }
-data class ReviewPresentationItem(val itemId: UUID, val title: String, val text: String) {
+data class ReviewPresentationItem(val itemId: UUID, val title: String, val text: String, val explanation: String? = null) {
     init {
         requireText(title);requireText(text)
         require(title.codePointCount(0,title.length) <= 200)
         encodeUtf8(title)
         require(encodeUtf8(text).size <= 65536)
+        explanation?.let {requireText(it);require(encodeUtf8(it).size<=4096)}
     }
 }
 

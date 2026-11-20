@@ -22,7 +22,7 @@ const request=JSON.parse(fixtureRaw).data.request
 const id=(n:number)=>`00000000-0000-0000-0000-${String(n).padStart(12,"0")}`
 const ref:ExactLink={project:request.payload.projectId,requestId:request.key,requestDigest:request.payload.requestDigest,packetDigest:request.payload.packetDigest}
 const caller={window:1,signal:new AbortController().signal}
-async function fixture(){
+async function fixture(bundleRaw=fixtureRaw){
   const base=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(base)
   const area=await fs.mkdtemp(path.join(base,"approval-")),root=path.join(area,"private"),work=path.join(area,"project")
   await fs.mkdir(work);await fs.mkdir(root,{mode:0o700})
@@ -47,7 +47,7 @@ async function fixture(){
   const fetcher:typeof fetch=async(_url,input)=>{
     if(String(_url).endsWith("/reads")){
       const operation=JSON.parse(String(input?.body)).operation
-      if(operation==="read_review_bundle")return new Response(fixtureRaw)
+      if(operation==="read_review_bundle")return new Response(bundleRaw)
       return new Response(JSON.stringify({formatVersion:1,kind:"read",basis:{algorithm:"sha1",hex:"a".repeat(40)},operation,
         data:{complete:true,nextCursor:null,snapshotId:randomUUID(),items:[{projectId:ref.project}]}}))
     }
@@ -67,6 +67,33 @@ async function fixture(){
   return {root,work,a,b,other,clients,custody,delivery:new ApprovalDelivery(custody),sends:()=>sends,reply:()=>{lost=false}}
 }
 const open=(session:Session)=>({session,requestId:ref.requestId,requestDigest:ref.requestDigest,packetDigest:ref.packetDigest})
+
+test("approval-only context hold permits exact draft writes and negative feedback, not approval",async()=>{
+  const value=JSON.parse(fixtureRaw);value.data.actionable=false;value.data.blockers=["UNAPPROVED_INPUT"]
+  value.data.feedbackAllowed=true;value.data.approvalBlockers=["UNAPPROVED_INPUT"]
+  const f=await fixture(JSON.stringify(value)),clients=f.clients()
+  try{
+    const client=await clients.get(f.a,1),controller=client.controller
+    const view=await controller.dispatch("open",open(f.a),caller)
+    assert.equal(view.ok,true)
+    assert.ok((await controller.authorizeDraft(open(f.a),caller,true)).has(request.payload.packet.items[0].id))
+    const approve=await controller.dispatch("answer",{session:f.a,handle:view.handle,choice:"approve",comments:[]},caller)
+    assert.equal(approve.ok,false);assert.equal(f.sends(),0)
+    f.reply()
+    const answer=await controller.dispatch("answer",{session:f.a,handle:view.handle,choice:"changes-required",
+      comments:[{itemId:request.payload.packet.items[0].id,text:"Include this context in the decision."}]},caller)
+    assert.equal(answer.ok,true);assert.equal(f.sends(),1)
+  }finally{await clients.close()}
+  value.data.feedbackAllowed=false
+  const denied=await fixture(JSON.stringify(value)),other=denied.clients()
+  try{
+    const c=(await other.get(denied.a,1)).controller
+    const view=await c.dispatch("open",open(denied.a),caller)
+    await assert.rejects(c.authorizeDraft(open(denied.a),caller,true))
+    assert.equal((await c.dispatch("answer",{session:denied.a,handle:view.handle,choice:"reject",reason:"No authority",comments:[]},caller)).ok,false)
+    assert.equal(denied.sends(),0)
+  }finally{await other.close()}
+})
 
 test("automatic clients are chat/project bound; exact handles and unknown answers never cross chats",async()=>{
   const f=await fixture(),clients=f.clients()
@@ -146,12 +173,16 @@ test("model-free exact intent -> bound controller -> readable panel -> rendered 
     const bridge:any={state:()=>undefined,on:()=>()=>{}}
     for(const method of ["status","pending","open","answer","dismiss","reconcile"])
       bridge[method]=(input:any)=>target.controller.dispatch(method as keyof typeof Inputs,input,caller)
+    // Explicit declaration of the synthetic fixture's source language, not language inference.
+    bridge.open=async(input:any)=>({...await target.controller.dispatch("open",input,caller),
+      pageJSON:JSON.stringify({formatVersion:1,language:"en",scope:{storeId:id(1),projectId:ref.project,
+        sessionID:f.a.id,requestId:ref.requestId,requestDigest:ref.requestDigest,packetDigest:ref.packetDigest}})})
     for(const method of ["connect","setup","rotate"])bridge[method]=async()=>reply("FORBIDDEN")
     createRoot(d=>{
       dispose=d
       root=nativePanel(()=>f.a,bridge,()=>ref,async(session,exact)=>{
         await f.delivery.acknowledge(session.id,exact);acknowledged++
-      });document.body.append(root)
+      },undefined,()=>"en");document.body.append(root)
     })
     const deadline=Date.now()+5000
     while(acknowledged===0&&Date.now()<deadline)await new Promise(resolve=>setImmediate(resolve))

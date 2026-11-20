@@ -33,6 +33,7 @@ test("planner instructions preserve the original product across bounded qualific
   assert.match(primaryInstructions,/do not erase the parent objective or grant execution authority/)
 })
 import { ApprovalDelivery } from "../src/approval-delivery.js"
+import {ReviewDisplayCustody} from "../src/review-display-custody.js"
 
 const id="00000000-0000-0000-0000-000000000001"
 test("native UI persists ordinary sessions and recovers an uncertain creation without a second create",async()=>{
@@ -609,7 +610,7 @@ test("package server entrypoint refuses absent trusted bootstrap instead of pres
   try{await assert.rejects(Promise.resolve().then(()=>primaryServer.setup({app:{version:"2.2.5"}} as unknown as Plugin.Context)))}
   finally{if(previous!==undefined)process.env.WRITHELM_PRIMARY_ROOT=previous}
 })
-async function fixture(withApproval=false) {
+async function fixture(withApproval=false,strictDisplay=false) {
   const base=process.env.WRITHELM_NATIVE_TEST_ROOT;assert.ok(base)
   const root=await fs.mkdtemp(path.join(base,"primary-")),work=path.join(root,"work")
   await fs.mkdir(work);await fs.writeFile(path.join(work,"README.md"),"existing project, read-only")
@@ -640,11 +641,12 @@ async function fixture(withApproval=false) {
       transform:async(callback:(editor:any)=>void)=>{callback({add:(t:any)=>tools.set(t.name,t)});return {dispose:async()=>tools.clear()}}}} as unknown as Plugin.Context
   const custody=new LinuxNativeCustody(path.join(root,"private"),[work]);await custody.initialize()
   const delivery=new ApprovalDelivery(custody)
+  const display=new ReviewDisplayCustody(custody)
   const governor=await registerPrimaryGovernor(ctx,registry,custody,
     {workRoot:work,controllerId:id,controllerCredentialId:id,projectId:id,schemas:{"work-command3":"synthetic schema fixture"},
-      ...(withApproval?{approvalDelivery:delivery}:{})})
+       ...(withApproval?{approvalDelivery:delivery}:{}),...(strictDisplay?{reviewDisplay:{storeId:id,custody:display}}:{})})
   const invoke=(name:string,event:any)=>hooks.get(name)!(event)
-  return {root,work,hooks,tools,sessions,governor,invoke,delivery,reply:(raw:string)=>{knowledgeReply=raw},
+  return {root,work,hooks,tools,sessions,governor,invoke,delivery,display,reply:(raw:string)=>{knowledgeReply=raw},
     respond:(callback:(route:string,raw:string)=>string)=>{responder=callback},
     binds:()=>binds,knowledgeReads:()=>knowledgeReads,revoke:()=>{readable=false},assignment:()=>{scope="assignment"}}
 }
@@ -660,24 +662,81 @@ test("typed review uses a single submit command and delivers the exact native pa
     const observed=await f.tools.get("writhelm_knowledge_read").execute({operation:"read_revision",subject:{
       revisionKey:revision.revisionKey,revisionDigest:revision.revisionDigest},format:"canonical"},actual)
     let commands=0,reads=0,requestId=""
+    const bundleFixture=JSON.parse(await fs.readFile(new URL("../../tests/fixtures/bundle.json",import.meta.url),"utf8"))
     f.respond((route,raw)=>{
       const value=JSON.parse(raw)
       if(route==="commands"){
         commands++;assert.equal(value.operation,"submit_review");requestId=value.payload.requestId
         return contextJSON({kind:"settled",outcome:{kind:"success",operation:"submit_review",result:requestId}})
       }
-      reads++;assert.equal(value.operation,"read_request");assert.equal(value.subject.id,requestId)
+      reads++;assert.equal(value.subject.id,requestId)
+      if(value.operation==="read_review_bundle"){
+        const bundle=JSON.parse(JSON.stringify(bundleFixture).replaceAll(bundleFixture.data.request.payload.projectId,id))
+        bundle.data.request.key=requestId;bundle.data.request.payload.requestDigest="a".repeat(64)
+        bundle.data.request.payload.packetDigest="b".repeat(64)
+        bundle.data.actionable=false;bundle.data.blockers=["FORBIDDEN"]
+        bundle.data.feedbackAllowed=false;bundle.data.approvalBlockers=["UNAPPROVED_INPUT"]
+        return JSON.stringify(bundle)
+      }
+      assert.equal(value.operation,"read_request")
       return contextJSON({kind:"read",operation:"read_request",data:{record:{family:"requests",key:requestId,payload:{
         projectId:id,requestDigest:"a".repeat(64),packetDigest:"b".repeat(64)}}}})
     })
-    const result=await f.tools.get("writhelm_request_review").execute({intentId:"atomic-native-review",
+    const result=await f.tools.get("writhelm_request_review").execute({intentId:"atomic-native-review",reviewLanguage:"ru",
       items:[{key:"TECH-01",target:{reference:observed.metadata.writhelmReadReference,clauseId:"TECH-01"},before:null}],
       question:"Review?",scope:"Proposal only.",rationale:"Exact synthetic input.",consequences:["Named point."],
-      alternatives:["Request changes."],uncertainties:[],contexts:[],dependencies:[],informationGaps:[]},actual)
-    assert.equal(commands,1);assert.equal(reads,1) // only post-success delivery, no source preparation calls
+      alternatives:[],uncertainties:[],contexts:[],dependencies:[],informationGaps:[],
+      presentations:[{language:"ru",sourceLanguage:"en",items:[{itemKey:"TECH-01",title:"Предложение",text:"Точный текст."}]}]},actual)
+    assert.equal(commands,1);assert.equal(reads,2) // only post-success readiness/delivery, no source preparation calls
     assert.match(result.content,/Native approval panel: requested/)
+    assert.match(result.content,/UNAPPROVED_INPUT/);assert.match(result.content,/Do not claim this request is ready/)
     assert.equal((await f.delivery.current("ses_primary",id))?.requestId,requestId)
   }finally{await f.governor.close()}
+})
+
+test("actual interface language gates delivery; exact same-language source needs no fake translation",async()=>{
+  const f=await fixture(true,true)
+  try{
+    await f.invoke("session:prompt",{sessionID:"ses_primary",messageID:"msg_display",prompt:{text:"Review"}})
+    const example=JSON.parse(await fs.readFile(new URL("../../tests/fixtures/bundle.json",import.meta.url),"utf8"))
+    const bundle=JSON.parse(JSON.stringify(example).replaceAll(example.data.request.payload.projectId,id))
+    bundle.data.request.key=id;bundle.data.request.payload.requestDigest="a".repeat(64)
+    bundle.data.request.payload.packetDigest="b".repeat(64);bundle.data.approvalBlockers=[]
+    f.respond((_route,raw)=>{
+      const input=JSON.parse(raw)
+      if(input.operation==="read_request")return contextJSON({kind:"read",operation:"read_request",
+        data:{record:bundle.data.request}})
+      return JSON.stringify(bundle)
+    })
+    await f.display.rememberInterface(id,id,"ses_primary","ru")
+    const actual={sessionID:"ses_primary",signal:new AbortController().signal}
+    const held=await f.tools.get("writhelm_open_approval").execute({requestId:id},actual)
+    assert.match(held.content,/preparation-held/)
+    assert.equal(await f.delivery.current("ses_primary",id),undefined)
+    await f.display.rememberInterface(id,id,"ses_primary","en")
+    await f.display.retainSourceLanguage({storeId:id,projectId:id,sessionID:"ses_primary",requestId:id,
+      requestDigest:"a".repeat(64),packetDigest:"b".repeat(64)},"en")
+    const prepared=await f.tools.get("writhelm_open_approval").execute({requestId:id},actual)
+    assert.match(prepared.content,/requested/);assert.match(prepared.content,/"displayReady":true/)
+    assert.equal((await f.delivery.current("ses_primary",id))?.requestId,id)
+  }finally{await f.governor.close()}
+})
+
+test("native server import closure never depends on renderer-only GUI SDK modules",async()=>{
+  const seen=new Set<string>()
+  async function visit(file:URL):Promise<void>{
+    if(seen.has(file.href))return
+    seen.add(file.href)
+    const source=await fs.readFile(file,"utf8")
+    for(const match of source.matchAll(/\b(?:from\s*|import\s*(?:\(\s*)?|require\s*\(\s*)(["'])([^"']+)\1/g)){
+      const spec=match[2]
+      assert.ok(!spec.startsWith("@opencode/plugin/gui")&&!spec.includes("@opencode/plugin/dist/gui/"),
+        "Renderer SDK in native server import closure: "+file.pathname.split("/").pop())
+      if(spec.startsWith(".")&&/\.(?:js|cjs)$/.test(spec))await visit(new URL(spec,file))
+    }
+  }
+  await visit(new URL("../src/primary-server.js",import.meta.url))
+  assert.ok(seen.size>20,"Inspect the actual emitted transitive server graph, not one source line")
 })
 
 test("approval tool resolves exact digests itself, retains originating chat and rechecks current access",async()=>{

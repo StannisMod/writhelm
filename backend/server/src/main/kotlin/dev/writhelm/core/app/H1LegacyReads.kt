@@ -73,7 +73,11 @@ internal class H1LegacyReads(private val navigation: H1Navigation) {
                     is WorkflowResult.Failure -> blockers.add(probe.problem.name)
                     is WorkflowResult.Success -> Unit
                 }
+                val feedback=id !in snapshot.resolutions && base.core.resolve(Actor(c.credential.principalId),project,id,
+                    request.digest,request.packet.digest,StructuredAnswer.Reject) is WorkflowResult.Success
                 val result=obj("request" to record,"resolution" to (if(id in snapshot.resolutions)record(base,key,c,snapshot,"resolutions",id,op) else JNull),
+                    "feedbackAllowed" to JBoolean(feedback),
+                    "approvalBlockers" to JArray(listOfNotNull(base.core.approvalProblem(id)?.name).map(::str)),
                     "materials" to JArray(materials),"actionable" to JBoolean(blockers.isEmpty()),"blockers" to JArray(blockers.map(::str)),"complete" to JBoolean(true))
                 val previous=reviewFollowupProjection(request.packet,snapshot,
                     {family,previousId->record(base,key,c,snapshot,family,previousId,op)},

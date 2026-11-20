@@ -1,5 +1,27 @@
 # Publication policy
 
+## P41 — Owner-requested review-panel checkpoint and push
+
+The owner's 2026-11-20 commit and subsequent push instructions authorize the accumulated
+fresh-review preparation, separate feedback/draft eligibility and mandatory exact user-language
+display source checkpoint. The owner reports the panel acceptable for an initial iteration.
+This is bounded usability feedback, not full H1, independent, production or cross-platform
+acceptance. Subsequent environment/base/profile/project-check launch blockers remain unresolved.
+
+Previously allowed source/test/contract paths remain in scope. These exact additional paths are
+Writhelm-owned AGPL-3.0-only implementation and synthetic tests:
+
+```text
+adapters/opencode/src/review-display.ts
+adapters/opencode/src/review-display-custody.ts
+adapters/opencode/tests/review-display.test.ts
+```
+
+Only source, generated structural projections, synthetic tests and public contracts/documentation
+are authorized. No application clauses, canonical owner decisions, private tasks, chat/session
+records, screenshots, credentials, stand/dependency/toolchain state or retained local evidence.
+Stage explicit files, inspect the complete staged diff, and retain upstream license notices.
+
 ## P40 — Owner-requested local implementation checkpoint
 
 The owner's 2026-11-19 instruction to commit the current state authorizes a local source checkpoint

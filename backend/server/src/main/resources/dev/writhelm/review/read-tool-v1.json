@@ -384,24 +384,10 @@
           "$ref": "#/$defs/text"
         },
         "consequences": {
-          "allOf": [
-            {
-              "$ref": "#/$defs/texts"
-            },
-            {
-              "minItems": 1
-            }
-          ]
+          "$ref": "#/$defs/texts"
         },
         "alternatives": {
-          "allOf": [
-            {
-              "$ref": "#/$defs/texts"
-            },
-            {
-              "minItems": 1
-            }
-          ]
+          "$ref": "#/$defs/texts"
         },
         "uncertainties": {
           "$ref": "#/$defs/texts"
@@ -458,6 +444,11 @@
                     "text": {
                       "type": "string",
                       "maxLength": 65536,
+                      "pattern": "\\S"
+                    },
+                    "explanation": {
+                      "type": "string",
+                      "maxLength": 4096,
                       "pattern": "\\S"
                     }
                   }
@@ -2787,6 +2778,15 @@
         },
         "complete": {
           "const": true
+        },
+        "feedbackAllowed": {
+          "type": "boolean"
+        },
+        "approvalBlockers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -3410,7 +3410,7 @@
             "type": "string"
           },
           "maxItems": 64,
-          "minItems": 1,
+          "minItems": 0,
           "type": "array"
         },
         "consequences": {
@@ -3419,7 +3419,7 @@
             "type": "string"
           },
           "maxItems": 64,
-          "minItems": 1,
+          "minItems": 0,
           "type": "array"
         },
         "contexts": {
@@ -3512,6 +3512,11 @@
                 "items": {
                   "additionalProperties": false,
                   "properties": {
+                    "explanation": {
+                      "maxLength": 4096,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
                     "itemId": {
                       "maxLength": 36,
                       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",

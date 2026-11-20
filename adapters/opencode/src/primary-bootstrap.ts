@@ -16,6 +16,8 @@ import { pathToFileURL } from "node:url"
 import type { OpenCodeClient } from "@opencode/client"
 import { assertNativeContextPolicy } from "./native-context-policy.js"
 import {selectedContractSchemas,selectContractRelease,type ContractReleaseInput} from "./contract-release.js"
+import {ReviewDisplayCustody} from "./review-display-custody.js"
+import type {ReviewDisplayScope} from "./review-display.js"
 
 /** Native registry is the source of execution settings and credentials remain native-owned.
  * Canonical task/profile identity is still authoritative: inheritance cannot rewrite it. */
@@ -199,6 +201,21 @@ export async function provisionAutomaticContractRelease(config:ContractReleaseIn
   return selectContractRelease(storage,original!,config)
 }
 
+/** Trusted declaration for exact legacy same-language source, not a translation/owner decision.
+ * No source bodies, credentials, request mutation or native/model effects are written. */
+export async function provisionReviewSourceLanguage(config:Readonly<{root:string;forbiddenAreas:readonly string[];
+  expectedBootstrapDigest:string;scope:ReviewDisplayScope;language:string}>){
+  if(process.platform!=="linux"||!path.isAbsolute(config.root)||!Array.isArray(config.forbiddenAreas)||
+    !config.forbiddenAreas.length||config.forbiddenAreas.some(x=>typeof x!=="string"||!path.isAbsolute(x)))nativeUnavailable()
+  const bootstrap=new LinuxNativeCustody(path.join(config.root,"bootstrap"),config.forbiddenAreas);await bootstrap.initialize()
+  const original=await bootstrap.read("automatic-bootstrap","current")
+  if(original===undefined||createHash("sha256").update(original).digest("hex")!==config.expectedBootstrapDigest||
+    exactJSON(original,nativeUnavailable).storeId!==config.scope.storeId)nativeUnavailable()
+  const storage=new LinuxNativeCustody(path.join(config.root,"review-display"),config.forbiddenAreas);await storage.initialize()
+  const raw=await new ReviewDisplayCustody(storage).retainSourceLanguage(config.scope,config.language)
+  return {kind:"exact-source-language-retained",digest:createHash("sha256").update(raw).digest("hex")}
+}
+
 export type PrimaryBootstrap = Readonly<{
   root:string;workRoot:string;storeId:string;projectId:string;controllerId:string;hostId:string
   serviceOrigin:string;nativeOrigin:string;nativeRegistrationFile:string;transportOrigin:string
@@ -318,7 +335,7 @@ export class AutomaticEnrollmentClient {
  * Existing imports have no CLI side effects; no service/native discovery or model API is used. */
 async function executionProvisioningCLI(){
   const operation=process.argv[2]
-  if(process.argv.length!==3||!["provision-execution","provision-contract-release"].includes(operation!))nativeUnavailable()
+  if(process.argv.length!==3||!["provision-execution","provision-contract-release","provision-review-source-language"].includes(operation!))nativeUnavailable()
   const parts:Buffer[]=[];let size=0
   for await(const chunk of process.stdin){
     const bytes=Buffer.from(chunk);size+=bytes.length
@@ -328,17 +345,23 @@ async function executionProvisioningCLI(){
   const config=closedObject(exactJSON(new TextDecoder("utf-8",{fatal:true}).decode(Buffer.concat(parts)),nativeUnavailable),
     operation==="provision-contract-release"?
       ["root","forbiddenAreas","expectedBootstrapDigest","previousBundleDigest","previousReleaseDigest","schemas"]:
+    operation==="provision-review-source-language"?
+      ["root","forbiddenAreas","expectedBootstrapDigest","scope","language"]:
       ["root","projectId","forbiddenAreas","profileRecordJSON","executionJSON","contextPolicyJSON"])
   if(!Array.isArray(config.forbiddenAreas)||config.forbiddenAreas.length<1||config.forbiddenAreas.length>256||
     config.forbiddenAreas.some(value=>typeof value!=="string"||!path.isAbsolute(value)))nativeUnavailable()
   const result=operation==="provision-contract-release"?
     await provisionAutomaticContractRelease(config as Parameters<typeof provisionAutomaticContractRelease>[0]):
+    operation==="provision-review-source-language"?
+      await provisionReviewSourceLanguage(config as Parameters<typeof provisionReviewSourceLanguage>[0]):
     await provisionExecutionDeployment(config as Parameters<typeof provisionExecutionDeployment>[0])
   process.stdout.write(JSON.stringify(result)+"\n")
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href)
   void executionProvisioningCLI().catch(()=>{
-    process.stderr.write(process.argv[2]==="provision-contract-release"?
+    process.stderr.write(process.argv[2]==="provision-review-source-language"?
+      "Writhelm exact source-language declaration held; no request, approval, translation or model effect.\n":
+      process.argv[2]==="provision-contract-release"?
       "Writhelm contract release held; no bootstrap replacement, model or native host was started.\n":
       "Writhelm execution deployment held; no model or native host was started.\n")
     process.exitCode=2

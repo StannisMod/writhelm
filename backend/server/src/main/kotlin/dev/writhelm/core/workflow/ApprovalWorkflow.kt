@@ -93,18 +93,7 @@ class ApprovalWorkflow private constructor(
             }) return failure(WorkflowProblem.UNKNOWN_COMMENT_ITEM)
 
         val targets = request.packet.items.map { it.target }
-        if (answer == StructuredAnswer.Approve) {
-            if (request.packet.informationGaps.isNotEmpty()) return failure(WorkflowProblem.INCOMPLETE_PACKET)
-            if (request.packet.items.any {
-                    request.generations[it.target.subject()] != generation(it.target) || it.before != heads[it.target.subject()]
-                }) return failure(WorkflowProblem.STALE_SUBJECT)
-            if (request.packet.references.any { blockedThroughProvenance(it) }) return failure(WorkflowProblem.BLOCKED_INPUT)
-            val needed = request.packet.contexts + request.packet.dependencies
-            for (ref in needed.filter { it !in targets }) {
-                val authority = authority(ref)
-                if (authority is WorkflowResult.Failure) return authority
-            }
-        }
+        if (answer == StructuredAnswer.Approve) approvalProblem(requestId)?.let { return failure(it) }
         val approved = if (answer == StructuredAnswer.Approve) targets else emptyList()
         if (!canAdvanceGenerations(approved.map { generation(it) })) return failure(WorkflowProblem.GENERATION_EXHAUSTED)
         val resolution = ApprovalResolution(requestId, actor, answer, approved)
@@ -123,6 +112,25 @@ class ApprovalWorkflow private constructor(
             ),
             resolution,
         )
+    }
+
+    /** Packet readiness only; callers must authorize the complete request/source closure before
+     * projecting this observation. It grants neither APPROVE nor permission to execute a command. */
+    internal fun approvalProblem(requestId: UUID): WorkflowProblem? {
+        val request=requests[requestId] ?: return WorkflowProblem.NOT_FOUND
+        if(requestId in resolutions)return WorkflowProblem.ALREADY_RESOLVED
+        if(request.packet.informationGaps.isNotEmpty())return WorkflowProblem.INCOMPLETE_PACKET
+        if(request.packet.items.any {
+                request.generations[it.target.subject()]!=generation(it.target) || it.before!=heads[it.target.subject()]
+            })return WorkflowProblem.STALE_SUBJECT
+        if(request.packet.references.any {blockedThroughProvenance(it)})return WorkflowProblem.BLOCKED_INPUT
+        val targets=request.packet.items.map {it.target}
+        for(ref in (request.packet.contexts+request.packet.dependencies).filter {it !in targets}) {
+            val authority=authority(ref)
+            if(authority is WorkflowResult.Failure)return authority.problem
+        }
+        if(!canAdvanceGenerations(targets.map {generation(it)}))return WorkflowProblem.GENERATION_EXHAUSTED
+        return null
     }
 
     fun assess(actor: Actor, assessment: ConsistencyAssessment): WorkflowResult<Transition<RecordedAssessment>> {

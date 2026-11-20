@@ -45,7 +45,7 @@ export default Plugin.define({ main, stores:{
       try{
         const bound:Session={key:session.key,id:session.id,server:session.server.id,directory:session.directory,
           projectRoot:session.project?.worktree??session.directory}
-        const result=await ctx.main(ApprovalPresentation).requested({session:bound})
+         const result=await ctx.main(ApprovalPresentation).requested({session:bound,language:ctx.locale?.locale()||"ru"})
         if(closed||ctx.sessions.current()?.key!==session.key||!result.ok||!result.pageJSON)return
         const ref=exactLink(approvalReference(JSON.parse(result.pageJSON)))
         if(!ref||approvalReference(ref)===last)return
@@ -76,8 +76,8 @@ export default Plugin.define({ main, stores:{
   },
     async(session,ref)=>{
       ctx.stores?.reviewLink(props.session).set({reference:approvalReference(ref)})
-      const result=await ctx.main(ApprovalPresentation).shown({session,requestId:ref.requestId,requestDigest:ref.requestDigest,packetDigest:ref.packetDigest});if(!result.ok)throw Error("approval rendering acknowledgement held")
-    },ctx.main(ReviewDrafts),()=>ctx.locale?.locale()??"",async(session,ref,message)=>{
+       const result=await ctx.main(ApprovalPresentation).shown({session,requestId:ref.requestId,requestDigest:ref.requestDigest,packetDigest:ref.packetDigest,language:ctx.locale?.locale()||"ru"});if(!result.ok)throw Error("approval rendering acknowledgement held")
+     },ctx.main(ReviewDrafts),()=>ctx.locale?.locale()||"ru",async(session,ref,message)=>{
       const mounted=props.session
       if(mounted.key!==session.key||mounted.id!==session.id)return
       ctx.layout.close(`${ctx.id}:review`,mounted)

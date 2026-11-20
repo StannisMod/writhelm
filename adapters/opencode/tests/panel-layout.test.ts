@@ -19,20 +19,23 @@ const reference = (value = original): ExactLink => ({ project: value.request.pay
 const session: Session = { key: "sidecar\nlayout-A", id: "layout-A", server: "sidecar", directory: "/synthetic/project-A", projectRoot: "/synthetic/project-A" }
 const drain = async () => { for (let n = 0; n < 6; n++) await new Promise(r => setImmediate(r)) }
 
-function mount(bundleRaw = raw, width = 800, height = 699, drafts?:IpcClient<typeof ReviewDrafts.spec>,language?:()=>string,answerReply:Reply=reply(),statusFailures=0) {
+function mount(bundleRaw = raw, width = 800, height = 699, drafts?:IpcClient<typeof ReviewDrafts.spec>,language:()=>string=()=>"en",answerReply:Reply=reply(),statusFailures=0,sourceLanguage:string|undefined="en") {
   const { document, window } = parseHTML("<html><body><div id='host'></div></body></html>")
   Object.assign(globalThis, { document, window })
   const host = document.getElementById("host")! as HTMLElement
   // Reproduce the documented INPUT constraint, NOT fabricated computed geometry.
   Object.assign(host.style, { width: width + "px", height: height + "px", overflow: "hidden" })
-  const calls: { method: string; input: any }[] = [], bundles = new Map<string, string>(),handles:string[]=[],resolved:any[]=[]
+  const calls: { method: string; input: any }[] = [], bundles = new Map<string, string>(),handles:string[]=[],resolved:any[]=[],loaded:any[]=[]
   const value = JSON.parse(bundleRaw).data; bundles.set(value.request.key, bundleRaw)
   let setSession!: (s: Session) => void, setLink!: (link: ExactLink) => void, dispose!: () => void, root!: HTMLElement
   const bridge: IpcClient<typeof Review.spec> = {
     state: () => undefined, on: () => () => {},
     status: async input => { calls.push({ method: "status", input });if(statusFailures-->0)return reply("UNAVAILABLE");return reply("OK", { pageJSON: JSON.stringify({ formatVersion: 1, kind: "read", basis: { algorithm: "sha1", hex: "a".repeat(40) }, operation: "list_projects", data: { complete: true, nextCursor: null, snapshotId: randomUUID(), items: [{ projectId: value.request.payload.projectId }] } }) }) },
     pending: async () => reply("OK", { pageJSON: JSON.stringify({ formatVersion: 1, kind: "read", basis: { algorithm: "sha1", hex: "a".repeat(40) }, operation: "list_requests", data: { complete: true, nextCursor: null, snapshotId: randomUUID(), items: [] } }) }),
-    open: async input => { calls.push({ method: "open", input });const handle=randomUUID();handles.push(handle);return reply("OK", { handle, bundleJSON: bundles.get(input.requestId)! }) },
+    open: async input => { calls.push({ method: "open", input });const handle=randomUUID();handles.push(handle);return reply("OK", { handle, bundleJSON: bundles.get(input.requestId)!,
+      pageJSON:sourceLanguage?JSON.stringify({formatVersion:1,language:sourceLanguage,scope:{storeId:"00000000-0000-0000-0000-000000000001",
+        projectId:value.request.payload.projectId,sessionID:input.session.id,requestId:input.requestId,
+        requestDigest:input.requestDigest,packetDigest:input.packetDigest}}):"" }) },
     answer: async input => { calls.push({ method: "answer", input }); return answerReply },
     dismiss: async input => { calls.push({ method: "dismiss", input }); return reply() },
     connect: async () => reply(), setup: async () => reply(), reconcile: async () => reply(), rotate: async () => reply(),
@@ -43,11 +46,11 @@ function mount(bundleRaw = raw, width = 800, height = 699, drafts?:IpcClient<typ
     dispose = d
     const [current, changeSession] = createSignal(session), [link, changeLink] = createSignal(reference(value))
     setSession = changeSession; setLink = changeLink
-    root = nativePanel(current, bridge, link,undefined,drafts,language,(bound,ref,message)=>{resolved.push({bound,ref,message})}); host.append(root)
+    root = nativePanel(current, bridge, link,async(bound,ref)=>{loaded.push({bound,ref})},drafts,language,(bound,ref,message)=>{resolved.push({bound,ref,message})}); host.append(root)
   })
   const control = (label: string) => [...root.querySelectorAll("button")].find(b => b.textContent === label)!
   const pre = (label: string) => [...root.querySelectorAll("h3")].find(h => h.textContent === label)!.nextElementSibling as HTMLPreElement
-  return { document, window, host, root, calls, bundles,handles,resolved, setSession, setLink, dispose, control, pre }
+  return { document, window, host, root, calls, bundles,handles,resolved,loaded, setSession, setLink, dispose, control, pre }
 }
 
 test("decision transition: only confirmed success for this exact request closes; pending/refused replies retain the panel",async()=>{
@@ -157,7 +160,7 @@ test("one selectable canonical document plane: explanations collapsed, no point 
   try{
     await drain()
     assert.equal(f.root.style.userSelect,"text")
-    const explanations=[...f.root.querySelectorAll("details")].find(d=>d.querySelector("summary")?.textContent==="Обоснование и рамки решения")!
+    const explanations=[...f.root.querySelectorAll("details")].find(d=>d.querySelector("summary")?.textContent==="О решении")!
     assert.equal(explanations.hasAttribute("open"),false)
     assert.ok(explanations.textContent!.includes(request.payload.packet.scope))
     for(const point of f.root.querySelectorAll<HTMLElement>("[data-item-id]")){
@@ -190,7 +193,7 @@ test("localized document: exact item mapping, source disclosure, inline context 
       assert.ok(point.querySelector("h3")!.textContent!.includes("Русский заголовок "+index))
       assert.equal(point.style.userSelect,"text")
     }
-    const disclosure=[...f.root.querySelectorAll("details")].find(d=>d.querySelector("summary")?.textContent==="Английский оригинал · точная версия")!
+    const disclosure=[...f.root.querySelectorAll("details")].find(d=>d.querySelector("summary")?.textContent==="Исходный текст · точная версия")!
     assert.equal(disclosure.hasAttribute("open"),false)
     for(const material of value.data.materials)for(const fragment of material.fragments)assert.ok(disclosure.textContent!.includes(fragment.text))
     const point=points[0],area=point.querySelector("textarea")!
@@ -205,14 +208,71 @@ test("localized document: exact item mapping, source disclosure, inline context 
   }finally{f.dispose()}
 })
 
-test("missing user-language representation is explicit and cannot submit an English fallback",async()=>{
+test("unprepared language never publishes raw source, answer controls or a shown acknowledgement",async()=>{
   const f=mount(raw,800,699,undefined,()=>"ru")
   try{
     await drain()
-    assert.ok(f.root.textContent!.includes("Перевод этой версии отсутствует"))
-    assert.equal(f.root.querySelector("fieldset")!.disabled,true)
-    f.control("Утвердить").click();await drain()
+    assert.equal(f.root.textContent!.includes("Перевод этой версии отсутствует"),false)
+    assert.ok(f.root.textContent!.includes("Подготавливаю документ"))
+    assert.equal(f.root.querySelectorAll("[data-item-id]").length,0)
+    assert.equal(f.root.querySelectorAll("[data-canonical-text]").length,0)
+    assert.equal(f.root.querySelector("fieldset")!.hidden,true)
+    assert.equal(f.loaded.length,0)
+    assert.equal(f.calls.filter(c=>c.method==="dismiss").length,1,"invalidate the undisplayed exact handle")
     assert.equal(f.calls.filter(c=>c.method==="answer").length,0)
+  }finally{f.dispose()}
+})
+
+test("context approval hold keeps exact same-language objections and draft restoration usable",async()=>{
+  const value=JSON.parse(raw)
+  value.data.actionable=false;value.data.blockers=["UNAPPROVED_INPUT"]
+  value.data.approvalBlockers=["UNAPPROVED_INPUT"];value.data.feedbackAllowed=true
+  let stored={digest:"",reason:"",comments:[] as {itemId:string;text:string}[]},saves=0
+  const port={load:async()=>reply("OK",{pageJSON:JSON.stringify(stored)}),
+    save:async(input:any)=>{
+      assert.equal(input.expectedDigest,stored.digest);saves++
+      stored={digest:"b".repeat(64),reason:input.reason,comments:input.comments}
+      return reply("OK",{pageJSON:JSON.stringify({digest:stored.digest})})
+    }} as unknown as IpcClient<typeof ReviewDrafts.spec>
+  const f=mount(JSON.stringify(value),800,699,port,()=>"en")
+  await drain()
+  assert.ok(f.root.textContent!.includes("неутверждённая зависимость"))
+  assert.equal(f.root.textContent!.includes("Перевод этой версии отсутствует"),false)
+  assert.equal(f.control("Утвердить").disabled,true)
+  const point=f.root.querySelector("[data-item-id]")!,area=point.querySelector("textarea")!
+  assert.equal(area.disabled,false)
+  point.querySelector("[data-canonical-text]")!.dispatchEvent(new f.window.Event("contextmenu",{bubbles:true,cancelable:true}))
+  const menu=f.root.querySelector('[role="menu"]')!
+  assert.equal((menu as HTMLElement).hidden,false)
+  ;(menu.querySelector("button") as HTMLButtonElement).click();await drain()
+  assert.equal(area.hidden,false)
+  area.value="Контекст нужно включить в решение.";area.dispatchEvent(new f.window.Event("input"))
+  f.dispose();await drain()
+  assert.equal(saves,1);assert.equal(f.calls.filter(c=>c.method==="answer").length,0)
+  const g=mount(JSON.stringify(value),800,699,port,()=>"en")
+  try{
+    await drain()
+    assert.equal((g.root.querySelector("[data-item-id] textarea") as HTMLTextAreaElement).value,area.value)
+    g.control("Вернуть с замечаниями").click();await drain()
+    assert.equal(g.calls.filter(c=>c.method==="answer").length,1)
+    assert.equal(g.calls.find(c=>c.method==="answer")!.input.comments[0].itemId,point.getAttribute("data-item-id"))
+  }finally{g.dispose()}
+})
+
+test("rule explanation stays under its exact anchor, distinct from normative wording",async()=>{
+  const value=JSON.parse(raw),packet=value.data.request.payload.packet
+  packet.consequences=[];packet.alternatives=[]
+  packet.presentations=[{language:"ru",sourceLanguage:"en",items:packet.items.map((item:any)=>({
+    itemId:item.id,title:"Правило",text:"Нормативный текст.",explanation:"Содержательная причина этого правила."
+  }))}]
+  const f=mount(JSON.stringify(value),800,699,undefined,()=>"ru")
+  try{
+    await drain()
+    const point=f.root.querySelector("[data-item-id]")!
+    assert.equal(point.querySelector("[data-canonical-text]")!.textContent,"Нормативный текст.")
+    assert.ok(point.querySelector("details")!.textContent!.includes("Содержательная причина"))
+    assert.ok(point.querySelector("details")!.textContent!.includes("не формулировка требования"))
+    assert.ok(f.root.textContent!.includes("Содержательные альтернативы не заявлены."))
   }finally{f.dispose()}
 })
 
@@ -220,7 +280,7 @@ test("review actions: collapsed full source, inline exact-item comments and mand
   const f=mount()
   try{
     await drain()
-    const full=[...f.root.querySelectorAll("details")].find(d=>d.querySelector("summary")?.textContent==="Английский оригинал · точная версия")!
+    const full=[...f.root.querySelectorAll("details")].find(d=>d.querySelector("summary")?.textContent==="Исходный текст · точная версия")!
     assert.ok(full);assert.equal(full.hasAttribute("open"),false)
     assert.equal(f.root.querySelectorAll('input[type="radio"]').length,0)
     f.control("Отклонить").click();await drain()
@@ -316,7 +376,7 @@ test("preservation: actual failed-view raw bundle, all located fragments and pri
   const f = mount()
   try {
     await drain(); const packet = request.payload.packet
-    for (const [label, value] of [["Что предлагается утвердить", packet.question], ["Требования и границы", packet.scope], ["Зачем нужно решение", packet.rationale], ["Предлагаемые правила и последствия", packet.consequences.join("\n")], ["Другие варианты", packet.alternatives.join("\n")], ["Что ещё не определено", packet.uncertainties.join("\n")]]) if(value) assert.equal(f.pre(label).textContent, value)
+    for (const [label, value] of [["Вопрос", packet.question], ["Область решения", packet.scope], ["Причины предложения", packet.rationale], ["Последствия для продукта", packet.consequences.join("\n")], ["Содержательные альтернативы", packet.alternatives.join("\n")], ["Что ещё не определено", packet.uncertainties.join("\n")]]) if(value) assert.equal(f.pre(label).textContent, value)
     const pres = [...f.root.querySelectorAll("pre")]
     for (const material of original.materials) {
       assert.ok(pres.some(p => p.textContent === JSON.stringify(material.reference) + "\n" + material.observation))
@@ -324,8 +384,8 @@ test("preservation: actual failed-view raw bundle, all located fragments and pri
     }
     assert.equal(f.pre("Complete canonical packet, material and original attribution").textContent, raw)
     assert.ok(f.root.style.fontFamily.includes("system-ui"))
-    assert.equal(f.pre("Требования и границы").tagName,"DIV")
-    assert.ok(f.pre("Требования и границы").querySelector("span"))
+    assert.equal(f.pre("Область решения").tagName,"DIV")
+    assert.ok(f.pre("Область решения").querySelector("span"))
     assert.equal(f.pre("Идентификаторы и статус").parentElement?.tagName,"DETAILS")
     assert.equal(f.pre("Идентификаторы и статус").parentElement?.hasAttribute("open"),false)
     for (const p of pres) {
@@ -334,7 +394,7 @@ test("preservation: actual failed-view raw bundle, all located fragments and pri
       assert.ok(!p.style.maxHeight && !p.style.textOverflow && !p.style.overflow, "Do not crop/ellipsis individual material blocks")
     }
     const children = [...f.root.children]
-    assert.ok(children.indexOf(f.root.querySelector("fieldset")!) > children.indexOf(f.pre("Предлагаемые правила и последствия").parentElement!))
+    assert.ok(children.indexOf(f.root.querySelector("fieldset")!) > children.indexOf(f.pre("Последствия для продукта").parentElement!))
   } finally { f.dispose() }
 })
 

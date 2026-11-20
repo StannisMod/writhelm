@@ -15,6 +15,8 @@ import type { ApprovalDelivery } from "./approval-delivery.js"
 import { ModelReads, ModelReadFault, modelReadInput } from "./model-read.js"
 import type { NativePlannerActivity } from "./native-planner-progress.js"
 import {ModelKnowledge} from "./model-knowledge.js"
+import {selectReviewDisplay} from "./review-display.js"
+import type {ReviewDisplayCustody} from "./review-display-custody.js"
 import {knowledgeProtocol,operationSchema,validateModelContract,typedKnowledgeReadInput,typedReadInput,modelContractHelp} from "./model-contracts.js"
 
 export const primaryTools = new Set(["question", "read", "writhelm_request_launch_order", "writhelm_open_approval", "writhelm_work_command", "writhelm_work_read", "writhelm_knowledge_command", "writhelm_knowledge_read", "writhelm_propose_document", "writhelm_request_review", "writhelm_schema", "writhelm_prepare_worker", "writhelm_start_worker", "writhelm_activate_dispatch", "writhelm_activate_candidate", "writhelm_start_candidate_review", "writhelm_candidate_review_report", "writhelm_project_checks"])
@@ -25,6 +27,10 @@ Preserve the originating owner's project objective. Bounded diagnostic, authorin
 New product/design meaning requires an exact canonical proposal and structured owner approval through the Writhelm native review panel. Explain the decision and surface its exact review reference. Chat assent, model output, a ready flag or a passing test is NOT that approval. Do not ask the owner to approve every ordinary technical step or delegation.
 Successful request_approval automatically requests the exact native panel. For an existing request use writhelm_open_approval with its requestId; the adapter resolves exact digests, not you. A requested delivery is not a rendered panel, user review or approval. Report its actual status, not a claim the contract was shown. A raw exact reference is only a fallback when native delivery is held. Wait for the canonical owner resolution, not a chat acknowledgement.
 Author contracts with writhelm_propose_document: explicit permanent document-prefixed clause IDs, human titles and exact text, not a monolithic specification. The adapter deterministically prepares canonical text, UTF-8 spans, revision IDs and digests; never calculate these manually or read Kotlin sources to discover ordinary input fields. Use a stable intentId for each logical operation; retry the SAME intentId and identical input after uncertainty, never a new identity. Use the returned revisionReference plus clauseId with writhelm_request_review. Never renumber/reuse an existing anchor, infer canonical points by visually splitting prose, or rewrite a retained request. Changed meaning requires a new exact revision/request. Unchanged unapproved clauses do not acquire approval by omission. A rejection reason or item comment is canonical input to the next planning step, not an invitation to ask the owner to repeat it in chat.
+Each clause is ONE independently discussable norm, not a thematic section. Before submission check whether the owner could dispute one part without disputing the others; if so author separate permanent anchors. Preserve all conditions/exceptions; do not merely split sentences or impose a character cap. This is your semantic preparation obligation, not something IDs or schema validation prove.
+Store canonical contract titles/text in English. New reviews require reviewLanguage and an explicit complete matching presentation with sourceLanguage=en, in the actual native interface language reported below, not inferred from the owner's message language. Prepare it BEFORE delivery; missing representation is your internal preparation hold, never a raw-language fallback or a missing-language problem for the owner to solve. Exact same-language legacy source can be displayed only with its protected exact-scoped language declaration; do not invent or migrate one. Translations preserve the same individual norms and qualifiers. Language declarations/coverage are checked mechanically, not proof of translation equivalence. Historical original retries remain byte-identical.
+The optional propose_document context is NORMATIVE revision context, not an introduction, attribution or launch-status note. Put general decision framing in review question/scope. If normative context is needed, include its reference in contexts AND make it an item target in an initial review unless already approved. Adding contexts alone never approves them. Review readiness holds must be explained/repaired before claiming the contract can be approved; request creation or delivery is not readiness.
+Rationale explains substantive product/design choices, not the approval procedure. Consequences concern product behavior/costs/risks, not "this becomes an input". Alternatives are substantive choices, never approve/reject/comment buttons; use [] honestly if none were identified. Put rule-specific reasons in that presentation item's optional explanation, distinct from normative text and bound to the same item. General framing must apply to the whole decision; no filler, invented alternatives or hidden qualifications.
 After settled feedback use writhelm_request_review.followup with the predecessor requestId and complete previousItemId/new itemKey correspondence. The adapter resolves exact predecessor digests itself, not by latest lookup. Revised preserves subject identity; unchanged preserves the exact reference and remains a decision item if unapproved. Retained is outside the new decision only with prior approval and an explicit dependency; removed does not withdraw historical approval. Do not misuse before to refer to an unapproved draft: before still names the current direct approved head, while followup names the previous review/comment. Source code is optional diagnostics; compact operation/definition help is available via writhelm_schema.
 Create separately versioned task contracts through the service: objective, exact inputs/approved design, read/write/decision scope, constraints, dependencies, acceptance, escalation, expected output and execution/verification profiles. Keep unresolved work draft. Select work operation contracts with writhelm_work_contract to load the exact typed fields into this chat's next tool call; no Kotlin source reads required. Supply Int64 counters as decimal strings, not rounded JSON numbers. Service refusals are blockers, never permission to use shell or edit canonical Git.
 Before implementation launch, complete required exact contract approval, show a concise dependency graph, and propose the exact dispatch plan with writhelm_request_launch_order. Ask the owner to choose in the native launch-order panel. A proposal or contract approval is NOT launch authorization. Empty edges permit all independently ready work; explicit owner ordering edges wait for prior launch, not completion/acceptance. A changed exact plan/task needs a new choice. Never submit an owner choice yourself.
@@ -50,6 +56,7 @@ export type PrimaryConfiguration = Readonly<{
   clientPolicyFile?:string;admissionHooks?:boolean
   activationStage?:(stage:string)=>Promise<void>
   approvalDelivery?:ApprovalDelivery
+  reviewDisplay?:{storeId:string;custody:ReviewDisplayCustody}
   plannerActivity?:(sessionID:string)=>NativePlannerActivity
 }>
 
@@ -123,8 +130,38 @@ export async function registerPrimaryGovernor(ctx: Plugin.Context, registry: Nat
     const value=exactJSON(raw,nativeUnavailable),record=value.data?.record
     if(value.kind!=="read"||value.operation!=="read_request"||record?.family!=="requests"||record.key!==requestId||
       record.payload?.projectId!==config.projectId)nativeUnavailable()
-    return config.approvalDelivery.request(actual.sessionID,{project:config.projectId,requestId,
-      requestDigest:record.payload.requestDigest,packetDigest:record.payload.packetDigest})
+    const ref={project:config.projectId,requestId,requestDigest:record.payload.requestDigest,packetDigest:record.payload.packetDigest}
+    let readiness:{state:string;blockers:string[];languages?:string[];displayReady?:boolean}={state:"unknown",blockers:["READINESS_UNAVAILABLE"]}
+    try{
+      // Server-safe read boundary; do not import renderer wire/contracts (GUI SDK) into the
+      // native server plugin. The read tool validates exact subject/closure under current access.
+      const observed=await modelReads.read("knowledge",channel,actual.sessionID,{json:contextJSON({
+        formatVersion:1,projectId:config.projectId,operation:"read_review_bundle",
+        subject:{id:requestId,requestDigest:ref.requestDigest,packetDigest:ref.packetDigest}}),format:"canonical"},
+        planningKnowledgeReads,actual.signal)
+      const value=exactJSON(observed.content,nativeUnavailable)
+      if(value.kind!=="read"||value.operation!=="read_review_bundle")nativeUnavailable()
+      const bundle=value.data
+      const languages=(bundle.request.payload.packet.presentations??[]).map((p:any)=>p.language as string)
+      let displayReady=false
+      if(config.reviewDisplay){
+        const {storeId,custody}=config.reviewDisplay
+        const language=await custody.interfaceLanguage(storeId,config.projectId,actual.sessionID)
+        const source=await custody.sourceLanguage({storeId,projectId:config.projectId,sessionID:actual.sessionID,
+          requestId,requestDigest:ref.requestDigest,packetDigest:ref.packetDigest})
+        if(language){
+          try{selectReviewDisplay(bundle.request.payload.packet,language,source?JSON.parse(source).language:undefined);displayReady=true}
+          catch{/* internal preparation hold, never fallback source delivery */}
+        }
+      }
+      if(Array.isArray(bundle.approvalBlockers)){
+        const blockers=[...bundle.approvalBlockers,...(config.reviewDisplay?!displayReady?["DISPLAY_PREPARATION_REQUIRED"]:[]:languages.length?[]:["MISSING_PRESENTATION"])]
+        readiness={state:blockers.length?"held":"ready",blockers,languages,displayReady}
+      }
+    }catch{/* Creation is already settled; failed read-only inspection is not a command rollback. */}
+    if(config.reviewDisplay&&!readiness.displayReady)
+      return {state:"preparation-held",reference:`writhelm-review/v1/${ref.project}/${ref.requestId}/${ref.requestDigest}/${ref.packetDigest}`,readiness}
+    return {...await config.approvalDelivery.request(actual.sessionID,ref),readiness}
   }
   const sendKnowledge=async(raw:string,actual:Parameters<NativeCredentialRegistry["planningKnowledgeChannel"]>[0])=>{
     const command=exactJSON(raw,nativeUnavailable)
@@ -140,7 +177,9 @@ export async function registerPrimaryGovernor(ctx: Plugin.Context, registry: Nat
       const outcome=exactJSON(result,nativeUnavailable)
       if(outcome.kind==="settled"&&outcome.outcome?.kind==="success"){
         try{const presentation=await openApproval(command.payload.requestId,actual)
-          return result+"\n\nNative approval panel: "+presentation.state+". This is not an owner decision."
+           return result+"\n\nNative approval panel: "+presentation.state+". This is not an owner decision."+
+             "\nReview readiness (not approval authority or semantic certification): "+JSON.stringify(presentation.readiness)+
+             (presentation.readiness.state!=="ready"?" Do not claim this request is ready for approval; explain the hold. Preserve the settled original.":"")
         }catch{return result+"\n\nNative approval delivery held. The canonical command is not rolled back. Use writhelm_open_approval with the SAME requestId; do not create another request."}
       }
     }
@@ -151,7 +190,10 @@ export async function registerPrimaryGovernor(ctx: Plugin.Context, registry: Nat
     registrations.push(await ctx.session.hook("prompt",async event=>{if(await applies(event.sessionID))await selected(event.sessionID,true)}))
     registrations.push(await ctx.session.hook("context",async event=>{
       if(!await applies(event.sessionID)||await selected(event.sessionID)!=="controller")return
-      event.system.push({type:"text",text:primaryInstructions+"\nCanonical projectId: "+config.projectId})
+      const displayLanguage=config.reviewDisplay?await config.reviewDisplay.custody.interfaceLanguage(
+        config.reviewDisplay.storeId,config.projectId,event.sessionID):undefined
+      event.system.push({type:"text",text:primaryInstructions+"\nCanonical projectId: "+config.projectId+
+        (config.reviewDisplay?"\nNative interface review language: "+(displayLanguage??"awaiting interface preparation; do not publish a review yet"):"")})
       for(const name of Object.keys(event.tools))if(!primaryTools.has(name))delete event.tools[name]
     }))
     registrations.push(await ctx.session.hook("model.request",async event=>{
@@ -231,8 +273,8 @@ export async function registerPrimaryGovernor(ctx: Plugin.Context, registry: Nat
          },options:{codemode:false}})
       for(const [name,operation]of [["writhelm_propose_document","propose_document"],["writhelm_request_review","request_review"]] as const)
         editor.add({name,description:operation==="propose_document"
-          ?"Propose a document from explicit stable clause IDs, human titles and exact text. Adapter prepares canonical bytes, UTF-8 spans, hashes and identities. Stable intentId reconciles the SAME operation after uncertainty. Returns revisionReference for review; not approval."
-          :"Request native human review of exact sources: target/reference wr1_ + clauseId from propose_document. Adapter resolves current-authorized exact refs and predecessor digests. before is the approved head, not an unapproved draft. Stable intentId; never approves.",
+           ?"Propose English contract clauses: one independently discussable norm per permanent ID, not one topic section. context is a normative dependency, NOT introductory prose. Adapter prepares exact bytes/spans/digests. Stable intentId retries the SAME proposal; not approval."
+           :"Request review of exact sources. New requests need reviewLanguage + complete presentations with sourceLanguage=en. Initial unapproved normative context must be both a context reference and a decision item. Substantive alternatives/consequences may be empty; no answer-button or workflow filler. Stable intentId; never approves.",
            input:operationSchema("authoring",operation),execute:async(input,actual)=>{
              let phase="controller-selection"
              try{
@@ -243,7 +285,9 @@ export async function registerPrimaryGovernor(ctx: Plugin.Context, registry: Nat
                const send=async(raw:string)=>{phase="command-admission";return sendKnowledge(raw,actual)}
                return await (operation==="propose_document"
                  ?modelKnowledge.propose(input,channel,actual.sessionID,actual.signal,send)
-                 :modelKnowledge.review(input,channel,actual.sessionID,actual.signal,send))
+                  :modelKnowledge.review(input,channel,actual.sessionID,actual.signal,send,
+                    config.reviewDisplay?await config.reviewDisplay.custody.interfaceLanguage(
+                      config.reviewDisplay.storeId,config.projectId,actual.sessionID)??null:undefined))
              }catch(error){
                // Do not dump authored input, source material, credentials or raw requests. The
                // previous generic hold hid which boundary failed even before command custody.
@@ -265,7 +309,7 @@ export async function registerPrimaryGovernor(ctx: Plugin.Context, registry: Nat
         execute:async(input,actual)=>{
           if(!input||typeof input!=="object"||Object.keys(input).join(",")!=="requestId")nativeUnavailable()
           const value=await openApproval((input as {requestId:string}).requestId,actual)
-          return {content:`Native approval panel: ${value.state} for request ${(input as {requestId:string}).requestId}.\nAwait the canonical owner resolution; panel delivery is not approval.`,
+           return {content:`Native approval panel: ${value.state} for request ${(input as {requestId:string}).requestId}.\nReview readiness: ${JSON.stringify(value.readiness)}.\nAwait the canonical owner resolution; panel delivery is not approval.`,
             metadata:{writhelmReviewReference:value.reference}}
         },options:{codemode:false}})
       editor.add({name:"writhelm_schema",description:"Compact operation/definition help. Default is an index, never a source dump. Optional diagnostic source pages use file and offset. No external filesystem read or source-code knowledge required for typed authoring.",

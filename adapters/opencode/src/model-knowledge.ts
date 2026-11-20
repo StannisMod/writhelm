@@ -8,6 +8,7 @@ import {exactJSON} from "./strict-json.js"
 import {nativeUnavailable} from "./native-runtime-client.js"
 import {operationSchema,validateModelContract} from "./model-contracts.js"
 import {prepareKnowledgeDocument,knowledgeIntentIdentity} from "./knowledge-preparation.js"
+import {languageMatches} from "./review-display.js"
 type Source={reference:string;clauseId?:string}
 type Send=(raw:string)=>Promise<string>
 const plain=(v:unknown)=>JSON.parse(contextJSON(v,4*1024*1024))
@@ -15,6 +16,11 @@ const plain=(v:unknown)=>JSON.parse(contextJSON(v,4*1024*1024))
 export class ReviewSourceReadHold extends Error{
   constructor(readonly reference:string,readonly code:string){
     super(`Review preparation source ${reference} returned ${code}. No canonical command was submitted by this attempt. Preserve the original intentId; do not create a replacement request.`)
+  }
+}
+export class ReviewPreparationHold extends Error{
+  constructor(readonly code:string,detail:string){
+    super(`Review preparation held: ${code}. ${detail} No canonical command was submitted; preserve this intentId.`)
   }
 }
 /** Friendly authoring prepares scoped service commands; source-closure resolution belongs to submit_review.
@@ -41,13 +47,15 @@ export class ModelKnowledge {
       return {content:JSON.stringify({receipt:plain(result),revisionReference:read.metadata?.writhelmReadReference,
         documentId:prepared.revisionKey.document.documentId,revisionId:prepared.revisionKey.revisionId,
         clauses:input.clauses.map((c:any)=>({id:c.id,title:c.title})),
-        next:"Use revisionReference plus clauseId in writhelm_request_review items. No manual spans or hashes. This is a proposal, not approval."}),
+        context:input.context?{normative:true,reviewTarget:{reference:read.metadata?.writhelmReadReference},
+          obligation:"Include this exact context in contexts AND as a decision item unless it already has applicable approval."}:null,
+        next:"Review one independently discussable norm per stable clause, not topic sections. Use revisionReference plus clauseId. Source must be English; author the requested reviewLanguage presentation. context is a normative dependency, not an introduction. This is a proposal, not approval."}),
         metadata:read.metadata}
     }catch{
       return {content:receipt+"\nProposal is canonically settled; reference delivery held. Retry the SAME intentId and identical authored content to recover. Do not create a replacement intent."}
     }
   }
-  async review(input:any,channel:BoundWorkChannel,sessionID:string,signal:AbortSignal,send:Send){
+  async review(input:any,channel:BoundWorkChannel,sessionID:string,signal:AbortSignal,send:Send,interfaceLanguage?:string|null){
     validateModelContract(operationSchema("authoring","request_review"),input)
     if(new Set(input.items.map((item:any)=>item.key)).size!==input.items.length)nativeUnavailable()
     const identity=(purpose:string)=>knowledgeIntentIdentity(channel.readBinding!,input.intentId,purpose)
@@ -59,6 +67,20 @@ export class ModelKnowledge {
         !["request_approval","submit_review"].includes(command.operation))nativeUnavailable()
       // Old operations stay on their byte-identical legacy preparation/recovery route.
       if(command.operation==="request_approval")return this.legacyReview(input,channel,sessionID,signal,send)
+    }
+    if(original===undefined){
+      if(interfaceLanguage===null)throw new ReviewPreparationHold("INTERFACE_LANGUAGE_PENDING",
+        "Wait for the native interface language; do not publish an unprepared review.")
+      if(interfaceLanguage&&(!input.reviewLanguage||!languageMatches(interfaceLanguage,input.reviewLanguage)))
+        throw new ReviewPreparationHold("REVIEW_LANGUAGE_MISMATCH","Prepare the complete representation in interface language "+interfaceLanguage+".")
+      const chosen=input.presentations?.find((p:any)=>p.language===input.reviewLanguage)
+      if(!input.reviewLanguage||!chosen)throw new ReviewPreparationHold("MISSING_PRESENTATION",
+        "Supply reviewLanguage and an explicit matching presentation; canonical source language is en.")
+      const keys=JSON.stringify(input.items.map((item:any)=>item.key).sort())
+      if(new Set(input.presentations.map((p:any)=>p.language)).size!==input.presentations.length||
+        input.presentations.some((p:any)=>p.sourceLanguage!=="en"||
+        JSON.stringify(p.items.map((item:any)=>item.itemKey).sort())!==keys))
+        throw new ReviewPreparationHold("INCOMPLETE_PRESENTATION","Every language must cover each exact item once and declare sourceLanguage=en.")
     }
     const selectors=new Map<string,Promise<any>>()
     const resolve=async(source:Source)=>{
@@ -79,7 +101,8 @@ export class ModelKnowledge {
     if(input.presentations?.length)draft.presentations=input.presentations.map((presentation:any)=>({
       language:presentation.language,sourceLanguage:presentation.sourceLanguage,items:presentation.items.map((item:any)=>{
         if(!input.items.some((candidate:any)=>candidate.key===item.itemKey))nativeUnavailable()
-        return {itemId:identity("item:"+item.itemKey),title:item.title,text:item.text}
+        return {itemId:identity("item:"+item.itemKey),title:item.title,text:item.text,
+          ...(item.explanation!==undefined?{explanation:item.explanation}:{})}
       })
     }))
     if(input.followup)draft.followup={requestId:input.followup.requestId,items:input.followup.items.map((change:any)=>{
@@ -132,7 +155,8 @@ export class ModelKnowledge {
       language:presentation.language,sourceLanguage:presentation.sourceLanguage,
       items:presentation.items.map((item:any)=>{
         if(!input.items.some((candidate:any)=>candidate.key===item.itemKey))nativeUnavailable()
-        return {itemId:identity("item:"+item.itemKey),title:item.title,text:item.text}
+        return {itemId:identity("item:"+item.itemKey),title:item.title,text:item.text,
+          ...(item.explanation!==undefined?{explanation:item.explanation}:{})}
       })
     }))
     if(input.followup){

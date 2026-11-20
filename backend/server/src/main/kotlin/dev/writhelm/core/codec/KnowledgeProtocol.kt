@@ -55,8 +55,9 @@ internal object KnowledgeProtocol {
     private val digest=text(64,"^[0-9a-f]{64}$")
     private val language=text(12,"^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-[A-Z]{2}|-[0-9]{3})?$")
     private fun presentations(itemField:String,itemIdentity:ProtocolShape)=list(record(
-        "language" to language,"sourceLanguage" to language,"items" to list(record(
-            itemField to itemIdentity,"title" to text(200,"\\S"),"text" to text(65536,"\\S")),1)),0,8)
+        "language" to language,"sourceLanguage" to language,"items" to list(ProtocolShape.Record(linkedMapOf(
+            itemField to itemIdentity,"title" to text(200,"\\S"),"text" to text(65536,"\\S")),
+            mapOf("explanation" to text(4096,"\\S"))),1)),0,8)
     val definitions:Map<String,ProtocolShape> = linkedMapOf(
         "uuid" to uuid,"digest" to digest,
         "documentKey" to record("projectId" to uuid,"documentId" to uuid),
@@ -74,7 +75,7 @@ internal object KnowledgeProtocol {
         "followup" to record("requestId" to uuid,"requestDigest" to digest,"packetDigest" to digest,
             "items" to list(ref("followupItem"),1,256)),
         "packet" to ProtocolShape.Record(linkedMapOf("items" to list(ref("item"),1),"question" to text(),"scope" to text(),"rationale" to text(),
-            "consequences" to list(text(),1),"alternatives" to list(text(),1),"uncertainties" to list(text()),
+            "consequences" to list(text()),"alternatives" to list(text()),"uncertainties" to list(text()),
             "contexts" to list(ref("context")),"dependencies" to list(ref("reference")),"informationGaps" to list(text())),
             mapOf("followup" to ref("followup"),"presentations" to presentations("itemId",uuid))),
         "answer" to ProtocolShape.Choice(record("kind" to literal("approve")),record("kind" to literal("reject")),
@@ -87,7 +88,7 @@ internal object KnowledgeProtocol {
         "reviewDraft" to ProtocolShape.Record(linkedMapOf(
             "items" to list(record("id" to uuid,"target" to ref("reviewSource"),"before" to nullable(ref("reviewSource"))),1,256),
             "question" to text(4096,"\\S"),"scope" to text(8192,"\\S"),"rationale" to text(8192,"\\S"),
-            "consequences" to list(text(4096),1,64),"alternatives" to list(text(4096),1,64),
+            "consequences" to list(text(4096),0,64),"alternatives" to list(text(4096),0,64),
             "uncertainties" to list(text(4096),0,64),"contexts" to list(ref("reviewSource"),0,256),
             "dependencies" to list(ref("reviewSource"),0,256),"informationGaps" to list(text(4096),0,64)),
             mapOf("presentations" to presentations("itemId",uuid),
@@ -130,19 +131,19 @@ internal object KnowledgeProtocol {
         "request_review" to ProtocolShape.Record(linkedMapOf("intentId" to intent,
             "items" to list(record("key" to text(128,"\\S"),"target" to ref("modelSource"),"before" to nullable(ref("modelSource"))),1,256),
             "question" to text(4096,"\\S"),"scope" to text(8192,"\\S"),"rationale" to text(8192,"\\S"),
-            "consequences" to list(text(4096),1,64),"alternatives" to list(text(4096),1,64),
+            "consequences" to list(text(4096),0,64),"alternatives" to list(text(4096),0,64),
             "uncertainties" to list(text(4096),0,64),"contexts" to list(ref("modelSource"),0,256),
             "dependencies" to list(ref("modelSource"),0,256),"informationGaps" to list(text(4096),0,64)),
-            mapOf("presentations" to presentations("itemKey",text(128,"\\S")),"followup" to record("requestId" to uuid,"items" to list(record(
+            mapOf("reviewLanguage" to language,"presentations" to presentations("itemKey",text(128,"\\S")),"followup" to record("requestId" to uuid,"items" to list(record(
                 "previousItemId" to nullable(uuid),"itemKey" to nullable(text(128)),
                 "disposition" to ProtocolShape.Choice(*listOf("revised","unchanged","added","removed","retained").map(::literal).toTypedArray()),
                 "explanation" to text(4096,"\\S")),1,256)))),
     )
     val help:Map<String,String> = mapOf(
-        "propose_document" to "Author explicit stable clause ids, human titles and exact text. Rendering: optional context + two LF; each clause id + ' — ' + title + LF + text + two LF. Adapter prepares UTF-8 spans and digests, then verifies actual service bytes. Reuse the same intentId and identical input after uncertainty. Changing content requires a new intentId; existing documentId preserves document identity. Proposal is not approval.",
-        "request_review" to "Each item has an explicit stable key and exact source reference wr1_ with clauseId for a revision. Omit clauseId to select revision context. before is null or an already approved head, never an unapproved draft. Both consequences and alternatives must be nonempty. Unapproved unchanged points remain decision items. Service submit_review resolves all sources and a settled followup predecessor on one validation state. Historical retained commands keep their original recovery route. Native delivery is not approval.",
+        "propose_document" to "Author English titles/text: one independently discussable norm per permanent clause id, not a thematic section. Could the owner dispute one part without the others? If yes, prepare separate anchors, retaining conditions/exceptions. No automatic prose splitting. context is a normative revision dependency, NOT introductory/process text; use review question/scope for framing. Rendering: optional normative context + two LF; each clause id + ' — ' + title + LF + text + two LF. Adapter prepares exact UTF-8 spans/digests. Reuse identical intentId/input after uncertainty. Changing content needs a new intentId; existing documentId preserves identity. Proposal is not approval.",
+        "request_review" to "Each item has a stable key and exact source wr1_ + clauseId. Omit clauseId to select normative context. Initial unapproved context must be in contexts AND a decision item, unless already approved. before is an approved head, never an unapproved draft. New friendly reviews require reviewLanguage and a complete matching presentation with sourceLanguage=en; optional per-item explanation gives substantive reasons distinct from normative wording. Alternatives are product/design choices, not answer buttons; consequences concern product/cost/risk, not workflow. Use empty arrays honestly when none identified. Historical exact originals retain their route. Creation/delivery is not approval readiness; inspect reported blockers.",
         "propose_revision" to "Low-level existing wire payload. Prefer propose_document to avoid calculating hashes/spans. Exact immutable revision; no approved flag. Content/structure domain validation remains authoritative.",
-        "request_approval" to "Low-level existing review packet. Prefer request_review for exact read references and predecessor resolution. Packet needs nonempty items, consequences and alternatives. before is the direct approved head; followup is review/comment history. Owner decision is separate.",
+        "request_approval" to "Low-level existing review packet. Prefer request_review for exact references and preparation checks. Packet needs nonempty items; substantive alternatives/consequences may be empty. before is the direct approved head; followup is review/comment history. Owner decision is separate.",
         "submit_review" to "Submit a bounded review draft with exact immutable source selectors. Service resolves every source and predecessor on validation state H and publishes the complete packet atomically. Retry identical original command and key; no latest lookup, arbitrary batching or owner approval.",
         "record_assessment" to "Records an attributed consistency assessment of exact references. It is not approval or proof of semantic completeness; service authority and graph checks remain required.",
         "pin_consumer" to "Pins exact approved clause/context/dependency inputs with a declared assessment. Service independently checks current authority, approval, contexts and dependency closure.",

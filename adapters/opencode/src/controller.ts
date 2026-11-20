@@ -4,7 +4,7 @@ import { isLosslessNumber } from "lossless-json"
 import { Schema } from "effect"
 import type { Caller } from "@opencode/plugin/gui"
 import { Inputs, reply, Fault, requireThat, type Session, type Reply, type Input, type Code } from "./contracts.js"
-import { completeBundle, http, loopback, referenceKey, type Json } from "./wire.js"
+import { completeBundle, feedbackAllowed, http, loopback, referenceKey, type Json } from "./wire.js"
 import type { ProtectedFiles } from "./protected.js"
 import { credential, validateRetained, type PublicSetupRunner } from "./helper.js"
 import { mutableWorkFamilies, workRead } from "./work-read.js"
@@ -163,7 +163,7 @@ export class Controller {
           const i = input as Input<"answer">; const v = this.views.get(i.handle)
           requireThat(v && v.window === caller.window && sameSession(v.session, i.session), "STALE_VIEW")
           requireThat(this.now() - v.born < 300000, "EXPIRED_VIEW")
-          requireThat(v.bundle.actionable === true, "INCOMPLETE")
+          requireThat(i.choice==="approve"?v.bundle.actionable===true:feedbackAllowed(v.bundle), "INCOMPLETE")
           requireThat(i.choice === "changes-required" ? i.comments.length > 0 : i.comments.length === 0)
           requireThat(new Set(i.comments.map(x => x.itemId)).size === i.comments.length)
           for (const c of i.comments) requireThat(c.text.isWellFormed() && c.text.trim() && Buffer.byteLength(c.text) <= 4096 && v.bundle.request.payload.packet.items.some((x: Json) => x.id === c.itemId))
@@ -187,6 +187,12 @@ export class Controller {
   }
   /** Native-main draft gate: current exact source authorization without invalidating open handles. */
   async authorizeDraft(input:Input<"open">,caller:Caller,writing=false){
+    const b=await this.authorizeDisplay(input,caller)
+    if(writing)requireThat(!this.profile?.pending&&feedbackAllowed(b),"STALE_VIEW")
+    return new Set<string>(b.request.payload.packet.items.map((item:Json)=>item.id))
+  }
+  /** Current source read for native display/delivery acknowledgement, never a new view/answer. */
+  async authorizeDisplay(input:Input<"open">,caller:Caller){
     Schema.decodeUnknownSync(Inputs.open)(input)
     this.live();const epoch=this.epoch
     await this.context(input.session,caller)
@@ -194,8 +200,7 @@ export class Controller {
     const r=await this.read("read_review_bundle",{id:input.requestId,requestDigest:input.requestDigest,packetDigest:input.packetDigest})
     this.live(epoch)
     const b=completeBundle(r.raw,input.requestId,input.requestDigest,input.packetDigest,this.profile.projectId)
-    if(writing)requireThat(!this.profile.pending&&b.actionable,"STALE_VIEW")
-    return new Set<string>(b.request.payload.packet.items.map((item:Json)=>item.id))
+    return b
   }
   private async read(operation: string, subject: Json) {
     const epoch = this.epoch

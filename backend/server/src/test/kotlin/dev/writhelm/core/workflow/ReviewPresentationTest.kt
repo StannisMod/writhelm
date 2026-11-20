@@ -24,6 +24,20 @@ import java.util.UUID
 import kotlin.test.*
 
 class ReviewPresentationTest {
+    @Test fun substantiveAbsenceAndAnchoredExplanationPreserveOldEncodingAndBindNewMeaning() {
+        val ref=ReviewItem(f.id(),f.a.x())
+        fun explained(text:String?)=ReviewPacket(listOf(ref),"Question","Scope","Product reason",
+            emptyList(),emptyList(),emptyList(),emptyList(),presentations=listOf(
+                ReviewPresentation("ru","en",listOf(ReviewPresentationItem(ref.id,"Правило","Точное правило.",text)))))
+        val plain=explained(null);val next=explained("Причина конкретного правила.")
+        assertNotEquals(plain.digest,next.digest)
+        assertNotEquals(next.digest,explained("Иная причина.").digest)
+        val encoded=packet(next)
+        assertEquals(next.digest,packet(encoded).digest)
+        assertContentEquals(StrictJson.encode(encoded),StrictJson.encode(packet(packet(encoded))))
+        assertFalse(StrictJson.encode(packet(plain)).decodeToString().contains("\"explanation\""))
+        assertFails { explained(" ") }
+    }
     private val f=WorkflowFixture(a=doc(70,context=""))
     private val item=ReviewItem(f.id(),f.a.x())
     private val base=packet(listOf(item),emptyList())

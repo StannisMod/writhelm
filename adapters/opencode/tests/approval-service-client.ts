@@ -25,6 +25,7 @@ import type { Session } from "../src/contracts.js"
 import { exactJSON } from "../src/strict-json.js"
 import { contextJSON } from "../src/native-context-codec.js"
 import { ModelReads } from "../src/model-read.js"
+import {ReviewDisplayCustody} from "../src/review-display-custody.js"
 
 let text="";for await(const chunk of process.stdin)text+=chunk
 const input=JSON.parse(text) as {root:string;work:string;sessionID:string;controllerId:string;projectId:string;requestId:string;
@@ -32,6 +33,8 @@ const input=JSON.parse(text) as {root:string;work:string;sessionID:string;contro
 const session:Session={key:`sidecar\n${input.sessionID}`,id:input.sessionID,server:"sidecar",directory:input.work,projectRoot:input.work}
 const files=await LinuxProtectedFiles.open(approvalClientDirectory(input.root,input.sessionID),[input.work])
 const profile=await files.read();await files.close()
+const displayStorage=new LinuxNativeCustody(path.join(input.root,"review-display"),[input.work]);await displayStorage.initialize()
+const displayCustody=new ReviewDisplayCustody(displayStorage)
 assert.equal(profile.projectId,input.projectId)
 await installFreshPrimaryPolicy(input.work)
 const custody=new LinuxNativeCustody(path.join(input.root,"approval-tool-test"),[input.work]);await custody.initialize()
@@ -87,7 +90,7 @@ try{
     provide:(token:any,implementation:any)=>provided.set(token,implementation),
   })
   let ownerBundleRaw="",loaded=false,answerResult:undefined|{code:string;pending:boolean},answerRaw:any
-  let displayLanguage=""
+  let displayLanguage="en"
   const mounted={...session,server:{id:"sidecar"},project:{worktree:input.work}}
   createRoot(d=>{
     disposeGUI=d
@@ -95,10 +98,21 @@ try{
       locale:{locale:()=>displayLanguage},
       sessions:{current:()=>mounted},add:(token:any,item:any)=>{if(token===sdk.Panel)panels.push(item)},
       main:(token:any)=>new Proxy({},{get:(_target,method)=>{
-        if(method==="state")return()=>undefined
+          if(method==="state")return()=>undefined
         if(method==="on")return()=>()=>{}
-        return async(value:any)=>{
-          const result=await provided.get(token)[method](value,caller)
+         return async(value:any)=>{
+           if(method==="requested"&&displayLanguage==="en"){
+             const selected=await delivery.selected(session.id,input.projectId)
+             if(selected)await displayCustody.retainSourceLanguage({storeId:profile.storeId,projectId:input.projectId,
+               sessionID:session.id,requestId:selected.requestId,requestDigest:selected.requestDigest,packetDigest:selected.packetDigest},"en")
+           }
+           if(method==="open"&&displayLanguage==="en"){
+             // These legacy synthetic source revisions were authored in English. Provision their
+             // exact declaration, exercising the actual main custody path rather than raw fallback.
+             await displayCustody.retainSourceLanguage({storeId:profile.storeId,projectId:input.projectId,
+               sessionID:session.id,requestId:value.requestId,requestDigest:value.requestDigest,packetDigest:value.packetDigest},"en")
+           }
+           const result=await provided.get(token)[method](value,caller)
           if(method==="open")ownerBundleRaw=result.bundleJSON
           if(method==="shown"&&result.ok)loaded=true
           if(method==="answer"){answerResult={code:result.code,pending:result.pending};answerRaw=result}
@@ -292,7 +306,7 @@ try{
   assert.ok(typedRevision.body.includes("CHECK-01 — Exact deadline 🧭"))
   assert.ok(typedRevision.body.includes("Preserve the deadline.\r\n"))
   loaded=false;answerResult=undefined
-  const reviewInput={intentId:"synthetic-typed-review-v1",items:authored.clauses.map(clause=>({
+  const reviewInput={intentId:"synthetic-typed-review-v1",reviewLanguage:"ru",items:authored.clauses.map(clause=>({
     key:clause.id,target:{reference:proposal.revisionReference,clauseId:clause.id},before:null})),
     question:"Согласовать синтетический договор?",scope:"Два точных пункта.",rationale:"Проверка типизированного пути без чтения исходников.",
     consequences:["Только рассмотрение."],alternatives:["Вернуть с возражениями."],uncertainties:[],

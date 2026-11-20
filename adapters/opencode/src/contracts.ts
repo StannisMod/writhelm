@@ -53,9 +53,13 @@ export const Review = Ipc.define({ id: "writhelm-opencode.review", methods: {
   workBody: { input: Inputs.workBody, output: Reply },
 } })
 /** Native GUI/main only. A rendered acknowledgement does not submit an owner decision. */
+export const PresentationRequest=closed(Schema.Struct({session:Session,
+  language:Schema.optional(text(12).check(Schema.isPattern(/^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-[A-Z]{2}|-[0-9]{3})?$/)))}))
+export const PresentationShown=closed(Schema.Struct({session:Session,requestId:uuid,requestDigest:digest,packetDigest:digest,
+  language:text(12).check(Schema.isPattern(/^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-[A-Z]{2}|-[0-9]{3})?$/))}))
 export const ApprovalPresentation=Ipc.define({id:"writhelm-opencode.approval-presentation",methods:{
-  requested:{input:Inputs.status,output:Reply},
-  shown:{input:Inputs.open,output:Reply},
+  requested:{input:PresentationRequest,output:Reply},
+  shown:{input:PresentationShown,output:Reply},
 }})
 const draftComments=Schema.Array(Schema.Struct({itemId:uuid,text:text(4096)})).check(Schema.isMaxLength(16))
 const draftRef={session:Session,requestId:uuid,requestDigest:digest,packetDigest:digest}

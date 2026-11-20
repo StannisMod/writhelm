@@ -39,7 +39,9 @@ function fixture(delayed=false,journal?:ApprovalDelivery,retained=new Map<string
       return reply(ackFails?"UNAVAILABLE":"OK")},
     status:async()=>reply("OK",{pageJSON:JSON.stringify({formatVersion:1,kind:"read",basis:{algorithm:"sha1",hex:"a".repeat(40)},
       operation:"list_projects",data:{complete:true,nextCursor:null,snapshotId:"00000000-0000-0000-0000-000000000777",items:[{projectId:ref.project}]}})}),
-    open:async(input:any)=>{reads.push(input);return reply("OK",{handle:"00000000-0000-0000-0000-000000000899",bundleJSON:raw})},
+    open:async(input:any)=>{reads.push(input);return reply("OK",{handle:"00000000-0000-0000-0000-000000000899",bundleJSON:raw,
+      pageJSON:JSON.stringify({formatVersion:1,language:"en",scope:{storeId:"00000000-0000-0000-0000-000000000001",
+        projectId:ref.project,sessionID:input.session.id,requestId:ref.requestId,requestDigest:ref.requestDigest,packetDigest:ref.packetDigest}})})},
     pending:async()=>reply(),answer:async()=>{answers++;return reply()},dismiss:async()=>reply(),
     reconcile:async()=>reply(),rotate:async()=>reply(),setup:async()=>reply(),connect:async()=>reply(),
     load:async()=>reply("OK",{pageJSON:JSON.stringify({digest:"",comments:[],reason:""})}),
@@ -60,7 +62,7 @@ function fixture(delayed=false,journal?:ApprovalDelivery,retained=new Map<string
         get value(){return retained.get(session.key)??{reference:""}},
         set(value:{reference:string}){retained.set(session.key,value)}
       })},
-      sessions:{current},add:(token:any,item:any)=>contributions.push({token,item}),main:()=>bridge,
+      locale:{locale:()=>"en"},sessions:{current},add:(token:any,item:any)=>contributions.push({token,item}),main:()=>bridge,
       layout:{open:(key:any,session:any)=>opens.push({key,session}),
         close:(key:any,session:any)=>closes.push({key,session}),toggle:(key:any,session:any)=>toggles.push({key,session})},toast:{show:()=>({dismiss(){}})}})
   })

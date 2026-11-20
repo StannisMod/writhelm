@@ -17,6 +17,31 @@ import kotlin.test.*
 
 @Timeout(60)
 class ReviewSubmissionTest {
+    @Test fun initialContextHoldIsVisibleToPlannerButOwnerCanReturnFeedbackWithoutApproval()=AppFixture().use { f->
+        val r=revision(100);f.propose(r)
+        val request=f.request(packet(listOf(ReviewItem(id(880),r.x())),listOf(r.contextReference())))
+        val bytes=StrictJson.encode(obj("formatVersion" to num(1),"projectId" to uuid(project),
+            "operation" to str("read_review_bundle"),"subject" to obj("id" to uuid(request.id),
+                "requestDigest" to digest(request.digest),"packetDigest" to digest(request.packet.digest))))
+        val service=WrithelmService(f.app)
+        fun bundle(token:String)=(result(service.read(token,bytes)).getValue("data") as JObject).entries
+        val owner=bundle(ownerToken)
+        assertEquals(JBoolean(false),owner.getValue("actionable"))
+        assertEquals(JBoolean(true),owner.getValue("feedbackAllowed"))
+        assertEquals(listOf(str("UNAPPROVED_INPUT")),(owner.getValue("approvalBlockers") as JArray).values)
+        val plannerView=bundle(plannerToken)
+        assertEquals(JBoolean(false),plannerView.getValue("feedbackAllowed"))
+        assertEquals((owner.getValue("approvalBlockers") as JArray).values,
+            (plannerView.getValue("approvalBlockers") as JArray).values)
+        val rejected=settled(f.core(CommandPayload.Resolve(request.id,request.digest,request.packet.digest,
+            StructuredAnswer.Approve),ownerToken))
+        assertEquals("UNAPPROVED_INPUT",(rejected.receipt.outcome as LogicalOutcome.Rejected).code)
+        val feedback=settled(f.core(CommandPayload.Resolve(request.id,request.digest,request.packet.digest,
+            StructuredAnswer.ChangesRequired(mapOf(id(880) to "Include the normative context in this decision."))),ownerToken))
+        assertIs<LogicalOutcome.Success>(feedback.receipt.outcome)
+        assertEquals(JBoolean(false),bundle(ownerToken).getValue("feedbackAllowed"))
+        Unit
+    }
     private fun source(r:DocumentRevision,clause:String?="X")=obj("kind" to str("revision"),
         "revisionKey" to revisionKey(r.key),"revisionDigest" to digest(r.digest),"clauseId" to (clause?.let(::str) ?: JNull))
     private fun draft(r:DocumentRevision,dependencies:List<JsonValue> = emptyList()):JsonValue=obj(
@@ -104,6 +129,17 @@ class ReviewSubmissionTest {
                 packet(listOf(ReviewItem(id(814),r.y())),listOf(r.contextReference())))))
             assertEquals(200,service.command(plannerToken,legacy).status)
             assertEquals(JBoolean(true),result(service.command(plannerToken,legacy)).getValue("commandReplayed"))
+            val requestRead=StrictJson.encode(obj("formatVersion" to num(1),"projectId" to uuid(project),
+                "operation" to str("read_request"),"subject" to obj("id" to uuid(id(813)))))
+            val saved=((((result(service.read(ownerToken,requestRead)).getValue("data") as JObject)
+                .entries.getValue("record") as JObject).entries.getValue("payload")) as JObject).entries
+            val read=StrictJson.encode(obj("formatVersion" to num(1),"projectId" to uuid(project),
+                "operation" to str("read_review_bundle"),"subject" to obj("id" to uuid(id(813)),
+                    "requestDigest" to saved.getValue("requestDigest"),"packetDigest" to saved.getValue("packetDigest"))))
+            val view=(result(service.read(ownerToken,read)).getValue("data") as JObject).entries
+            assertEquals(JBoolean(false),view.getValue("actionable"))
+            assertEquals(JBoolean(true),view.getValue("feedbackAllowed"))
+            assertEquals(listOf(str("UNAPPROVED_INPUT")),(view.getValue("approvalBlockers") as JArray).values)
         }
         H1Application.open(root,storeId,options).use { app->
             val service=WrithelmService(app)
